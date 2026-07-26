@@ -1,0 +1,24 @@
+{
+  "name": "affichage-usine",
+  "version": "1.0.0",
+  "description": "Collecte d'indicateurs depuis des fichiers Excel et affichage sur les ecrans de l'usine",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node scripts/seed.js",
+    "reset-password": "node scripts/reset-password.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.5.0",
+    "chart.js": "^4.4.6",
+    "cookie-parser": "^1.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.1"
+  }
+}

@@ -1,0 +1,87 @@
+/* Variables et primitives partagees par l'administration et l'affichage. */
+:root {
+  --fond: #0d1117;
+  --panneau: #161b22;
+  --panneau-clair: #1c2430;
+  --bordure: #2b3440;
+  --texte: #e6edf3;
+  --texte-doux: #93a1b1;
+  --accent: #3b82f6;
+  --bon: #22c55e;
+  --vigilance: #f59e0b;
+  --alerte: #ef4444;
+  --neutre: #64748b;
+  --rayon: 12px;
+  --ombre: 0 1px 3px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fond);
+  color: var(--texte);
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+}
+
+.etat-bon {
+  --etat: var(--bon);
+}
+.etat-vigilance {
+  --etat: var(--vigilance);
+}
+.etat-alerte {
+  --etat: var(--alerte);
+}
+.etat-neutre {
+  --etat: var(--neutre);
+}
+
+.pastille {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--etat, var(--neutre));
+  margin-right: 0.45em;
+  vertical-align: baseline;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--panneau-clair);
+  border: 1px solid var(--bordure);
+  color: var(--texte-doux);
+  white-space: nowrap;
+}
+.badge.ok {
+  color: var(--bon);
+  border-color: color-mix(in srgb, var(--bon) 40%, transparent);
+}
+.badge.erreur {
+  color: var(--alerte);
+  border-color: color-mix(in srgb, var(--alerte) 40%, transparent);
+}
+.badge.avertissement,
+.badge.inchange {
+  color: var(--vigilance);
+  border-color: color-mix(in srgb, var(--vigilance) 40%, transparent);
+}

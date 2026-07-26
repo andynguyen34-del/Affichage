@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Indicateurs — accueil</title>
+    <link rel="stylesheet" href="/css/base.css" />
+    <style>
+      .accueil {
+        max-width: 60rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+      }
+      h1 {
+        margin: 0 0 0.3rem;
+        font-size: 2rem;
+      }
+      .intro {
+        color: var(--texte-doux);
+        margin-bottom: 2.5rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--texte-doux);
+        border-bottom: 1px solid var(--bordure);
+        padding-bottom: 0.5rem;
+      }
+      .cartes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+        gap: 1rem;
+        margin: 1.2rem 0 2.5rem;
+      }
+      .carte {
+        display: block;
+        background: var(--panneau);
+        border: 1px solid var(--bordure);
+        border-radius: var(--rayon);
+        padding: 1.1rem 1.2rem;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 150ms ease, transform 150ms ease;
+      }
+      .carte:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+      }
+      .carte strong {
+        display: block;
+        font-size: 1.1rem;
+        margin-bottom: 0.2rem;
+      }
+      .carte span {
+        color: var(--texte-doux);
+        font-size: 0.9rem;
+      }
+      .vide {
+        color: var(--texte-doux);
+        font-style: italic;
+      }
+      code {
+        background: var(--panneau-clair);
+        padding: 0.15em 0.45em;
+        border-radius: 6px;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="accueil">
+      <h1 id="titre">Indicateurs de l'usine</h1>
+      <p class="intro">
+        Serveur d'affichage des indicateurs. Ouvrez l'ecran correspondant a votre atelier, ou
+        connectez-vous a l'administration pour configurer les sources et les vues.
+      </p>
+
+      <h2>Ecrans disponibles</h2>
+      <div class="cartes" id="ecrans"></div>
+
+      <h2>Administration</h2>
+      <div class="cartes">
+        <a class="carte" href="/admin">
+          <strong>Interface d'administration</strong>
+          <span>Sources Excel, indicateurs, vues et ecrans</span>
+        </a>
+      </div>
+
+      <h2>Mise en service d'un ecran</h2>
+      <p class="intro">
+        Sur le poste relie au televiseur, ouvrez le navigateur en plein ecran (touche
+        <code>F11</code>) a l'adresse de l'ecran ci-dessus. La page se rafraichit et bascule d'une
+        vue a l'autre toute seule ; aucune intervention n'est necessaire ensuite. Ajoutez
+        <code>?theme=clair</code> a l'adresse pour un ecran expose en pleine lumiere.
+      </p>
+    </div>
+
+    <script type="module">
+      const cible = document.getElementById('ecrans');
+      try {
+        const reponse = await fetch('/api/display/screens');
+        const donnees = await reponse.json();
+        if (donnees.title) {
+          document.getElementById('titre').textContent = donnees.title;
+          document.title = `${donnees.title} — accueil`;
+        }
+        if (!donnees.screens.length) {
+          cible.innerHTML =
+            '<p class="vide">Aucun ecran configure pour le moment. Creez-en un depuis l\'administration.</p>';
+        }
+        for (const ecran of donnees.screens) {
+          const a = document.createElement('a');
+          a.className = 'carte';
+          a.href = `/ecran/${encodeURIComponent(ecran.key)}`;
+          const strong = document.createElement('strong');
+          strong.textContent = ecran.name;
+          const span = document.createElement('span');
+          span.textContent = ecran.location || `/ecran/${ecran.key}`;
+          a.append(strong, span);
+          cible.append(a);
+        }
+      } catch {
+        cible.innerHTML = '<p class="vide">Serveur injoignable.</p>';
+      }
+    </script>
+  </body>
+</html>

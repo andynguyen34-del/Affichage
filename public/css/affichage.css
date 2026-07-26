@@ -1,0 +1,322 @@
+/* Feuille de style des ecrans de l'atelier : lisibilite a plusieurs metres. */
+
+.ecran {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.ecran-entete {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.7vh 1.6vw;
+  background: var(--panneau);
+  border-bottom: 2px solid var(--bordure);
+  flex: 0 0 auto;
+}
+
+.ecran-titre {
+  font-size: clamp(1.1rem, 2.1vh, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.ecran-sous-titre {
+  font-size: clamp(0.8rem, 1.5vh, 1.3rem);
+  color: var(--texte-doux);
+}
+
+.ecran-entete .droite {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  font-size: clamp(0.85rem, 1.7vh, 1.5rem);
+  color: var(--texte-doux);
+}
+
+.horloge {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--texte);
+  font-size: clamp(1rem, 2.2vh, 2rem);
+}
+
+.ecran-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.diapo {
+  position: absolute;
+  inset: 0;
+  padding: 1vh 1vw;
+  opacity: 0;
+  transition: opacity 400ms ease;
+  pointer-events: none;
+}
+.diapo.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.grille {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1vh 1vw;
+  height: 100%;
+}
+
+.tuile {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 1.1vh 1.1vw;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.tuile.avec-etat {
+  border-left: 6px solid var(--etat, var(--neutre));
+}
+
+.tuile-titre {
+  font-size: clamp(0.8rem, 1.9vh, 1.6rem);
+  font-weight: 600;
+  color: var(--texte-doux);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4vh;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 0 auto;
+}
+
+.tuile-contenu {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* --- Indicateur chiffre --- */
+.kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+  gap: 0.4vh;
+}
+
+.kpi-valeur {
+  font-size: clamp(2.2rem, 9vh, 9rem);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--etat, var(--texte));
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-unite {
+  font-size: 0.45em;
+  font-weight: 600;
+  margin-left: 0.15em;
+  color: var(--texte-doux);
+}
+
+.kpi-objectif {
+  font-size: clamp(0.75rem, 1.8vh, 1.4rem);
+  color: var(--texte-doux);
+}
+
+.kpi-ecart {
+  font-weight: 700;
+  color: var(--etat, var(--texte-doux));
+}
+
+/* --- Jauge --- */
+.jauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+.jauge svg {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+}
+.jauge-piste {
+  stroke: var(--panneau-clair);
+}
+.jauge-valeur-arc {
+  stroke: var(--etat, var(--accent));
+  transition: stroke-dasharray 600ms ease;
+}
+.jauge-texte {
+  fill: var(--texte);
+  font-weight: 800;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+.jauge-legende {
+  fill: var(--texte-doux);
+  text-anchor: middle;
+}
+
+/* --- Graphiques --- */
+.zone-graphique {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.zone-graphique canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* --- Tableau --- */
+.tuile table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(0.7rem, 1.7vh, 1.35rem);
+}
+.tuile thead th {
+  text-align: left;
+  color: var(--texte-doux);
+  font-weight: 600;
+  border-bottom: 2px solid var(--bordure);
+  padding: 0.4vh 0.5vw;
+  position: sticky;
+  top: 0;
+  background: var(--panneau);
+}
+.tuile tbody td {
+  padding: 0.4vh 0.5vw;
+  border-bottom: 1px solid color-mix(in srgb, var(--bordure) 60%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 20vw;
+}
+.tuile tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+.tuile td.nombre {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table-defilante {
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* --- Texte libre et horloge --- */
+.texte-libre {
+  font-size: clamp(0.9rem, 2.4vh, 2rem);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.grande-horloge {
+  text-align: center;
+}
+.grande-horloge .heure {
+  font-size: clamp(2rem, 10vh, 10rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.grande-horloge .date {
+  font-size: clamp(0.9rem, 2.4vh, 2rem);
+  color: var(--texte-doux);
+}
+/* « dimanche 26 juillet » et non « Dimanche 26 Juillet » : seule l'initiale. */
+.grande-horloge .date::first-letter {
+  text-transform: uppercase;
+}
+
+/* --- Erreur dans une tuile --- */
+.tuile-erreur {
+  color: var(--alerte);
+  font-size: clamp(0.75rem, 1.7vh, 1.2rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 1rem;
+}
+
+/* --- Bandeau d'etat en bas d'ecran --- */
+.bandeau {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4vh 1.6vw;
+  background: var(--panneau);
+  border-top: 1px solid var(--bordure);
+  font-size: clamp(0.7rem, 1.4vh, 1.1rem);
+  color: var(--texte-doux);
+}
+.bandeau .alerte-connexion {
+  color: var(--vigilance);
+  font-weight: 700;
+}
+.points {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+.points span {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--bordure);
+}
+.points span.actif {
+  background: var(--accent);
+}
+
+.message-plein {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  text-align: center;
+  padding: 2rem;
+}
+.message-plein h1 {
+  font-size: clamp(1.4rem, 4vh, 3rem);
+  margin: 0;
+}
+.message-plein p {
+  color: var(--texte-doux);
+  font-size: clamp(0.9rem, 2vh, 1.4rem);
+  max-width: 40rem;
+}
+
+/* Theme clair, pour les ecrans places en pleine lumiere. */
+.theme-clair {
+  --fond: #f5f7fa;
+  --panneau: #ffffff;
+  --panneau-clair: #eef2f7;
+  --bordure: #d3dbe4;
+  --texte: #10161f;
+  --texte-doux: #52627a;
+  color-scheme: light;
+}

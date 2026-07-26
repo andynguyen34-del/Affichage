@@ -1,0 +1,535 @@
+/* Interface d'administration. */
+
+/* La barre laterale et le contenu sont enfants de #racine, pas de <body> :
+   c'est donc #racine qui porte la mise en colonnes. */
+body.admin,
+body.admin > #racine {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.barre-laterale {
+  width: 15rem;
+  flex: 0 0 auto;
+  background: var(--panneau);
+  border-right: 1px solid var(--bordure);
+  padding: 1.2rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.marque {
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0 0.6rem 1rem;
+  border-bottom: 1px solid var(--bordure);
+  margin-bottom: 0.8rem;
+}
+.marque small {
+  display: block;
+  font-weight: 400;
+  color: var(--texte-doux);
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.onglet {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--texte-doux);
+  font-size: 0.93rem;
+  border: none;
+  background: none;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.onglet:hover {
+  background: var(--panneau-clair);
+  color: var(--texte);
+}
+.onglet.actif {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--texte);
+  font-weight: 600;
+}
+.onglet .compteur {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--texte-doux);
+}
+
+.pied-laterale {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bordure);
+  font-size: 0.8rem;
+  color: var(--texte-doux);
+}
+
+.contenu {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1.6rem 2rem 4rem;
+}
+
+.entete-page {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.4rem;
+}
+.entete-page h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.entete-page p {
+  margin: 0.3rem 0 0;
+  color: var(--texte-doux);
+  font-size: 0.92rem;
+  max-width: 55rem;
+}
+.entete-page .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* --- Boutons et champs --- */
+button,
+.bouton {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--bordure);
+  background: var(--panneau-clair);
+  color: var(--texte);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+button:hover,
+.bouton:hover {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.principal {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button.danger {
+  color: var(--alerte);
+  border-color: color-mix(in srgb, var(--alerte) 40%, transparent);
+}
+button.discret {
+  background: none;
+  border-color: transparent;
+  color: var(--texte-doux);
+  padding: 0.3rem 0.5rem;
+}
+button.discret:hover {
+  color: var(--texte);
+  background: var(--panneau-clair);
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--bordure);
+  background: var(--fond);
+  color: var(--texte);
+  width: 100%;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: -1px;
+}
+textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--texte-doux);
+  margin-bottom: 0.28rem;
+  font-weight: 600;
+}
+.champ {
+  margin-bottom: 0.9rem;
+}
+.champ .aide {
+  font-size: 0.78rem;
+  color: var(--texte-doux);
+  margin-top: 0.25rem;
+}
+.ligne-champs {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+.case {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.case input {
+  width: auto;
+}
+.case label {
+  margin: 0;
+  font-weight: 500;
+  color: var(--texte);
+}
+
+/* --- Cartes et tableaux --- */
+.carte {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.carte h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.05rem;
+}
+
+table.liste {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+table.liste th {
+  text-align: left;
+  color: var(--texte-doux);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--bordure);
+}
+table.liste td {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--bordure) 55%, transparent);
+  vertical-align: middle;
+}
+table.liste tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+table.liste td.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+table.liste .principal-cellule {
+  font-weight: 600;
+}
+table.liste .secondaire {
+  color: var(--texte-doux);
+  font-size: 0.82rem;
+}
+.mono {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.vide {
+  color: var(--texte-doux);
+  font-style: italic;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.grille-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.stat {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-left: 4px solid var(--etat, var(--accent));
+  border-radius: var(--rayon);
+  padding: 0.9rem 1.1rem;
+}
+.stat .valeur {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.stat .libelle {
+  color: var(--texte-doux);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+/* --- Fenetre modale --- */
+.voile {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3vh 1rem;
+  z-index: 50;
+  overflow-y: auto;
+}
+.modale {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  width: min(58rem, 100%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.modale.large {
+  width: min(80rem, 100%);
+}
+.modale header {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.3rem;
+  border-bottom: 1px solid var(--bordure);
+}
+.modale header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.modale header button {
+  margin-left: auto;
+}
+.modale .corps {
+  padding: 1.3rem;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+.modale footer {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  padding: 0.9rem 1.3rem;
+  border-top: 1px solid var(--bordure);
+}
+.modale footer .gauche {
+  margin-right: auto;
+}
+
+/* --- Notifications --- */
+.notifications {
+  position: fixed;
+  bottom: 1.2rem;
+  right: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  z-index: 100;
+}
+.notification {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-left: 4px solid var(--etat, var(--accent));
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  box-shadow: var(--ombre);
+  max-width: 26rem;
+  font-size: 0.9rem;
+  animation: entree 200ms ease;
+}
+@keyframes entree {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* --- Connexion --- */
+.page-connexion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+}
+.page-connexion .carte {
+  width: min(24rem, 100%);
+}
+
+/* --- Editeur de vue --- */
+.editeur-vue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .editeur-vue {
+    grid-template-columns: 1fr;
+  }
+}
+.liste-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.puce-widget {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--panneau-clair);
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+}
+.puce-widget .titre {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.puce-widget .meta {
+  color: var(--texte-doux);
+  font-size: 0.8rem;
+}
+.puce-widget .droite {
+  margin-left: auto;
+  display: flex;
+  gap: 0.2rem;
+}
+.apercu-vue {
+  position: sticky;
+  top: 1rem;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  overflow: hidden;
+}
+.apercu-vue .cadre {
+  aspect-ratio: 16 / 9;
+  padding: 0.6rem;
+  background: var(--fond);
+}
+.apercu-vue .cadre > .grille {
+  height: 100%;
+}
+.apercu-entete {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--bordure);
+  font-size: 0.82rem;
+  color: var(--texte-doux);
+  background: var(--panneau);
+}
+.apercu-entete .droite {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* --- Tableau d'apercu de donnees --- */
+.apercu-donnees {
+  overflow: auto;
+  max-height: 24rem;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+.apercu-donnees table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.apercu-donnees th {
+  position: sticky;
+  top: 0;
+  background: var(--panneau-clair);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--bordure);
+  font-weight: 600;
+}
+.apercu-donnees td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--bordure) 45%, transparent);
+}
+.apercu-donnees td.nombre {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Explorateur de fichiers --- */
+.explorateur {
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+.explorateur .entree {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--bordure) 45%, transparent);
+  font-size: 0.88rem;
+}
+.explorateur .entree:hover {
+  background: var(--panneau-clair);
+}
+.explorateur .entree .meta {
+  margin-left: auto;
+  color: var(--texte-doux);
+  font-size: 0.8rem;
+}
+
+/* --- Constructeur de requete --- */
+.filtre {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1.2fr) minmax(7rem, 1fr) minmax(6rem, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.sous-titre {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texte-doux);
+  font-weight: 700;
+  margin: 1.3rem 0 0.6rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--bordure);
+}
+.sous-titre:first-child {
+  margin-top: 0;
+}

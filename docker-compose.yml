@@ -1,0 +1,50 @@
+services:
+  affichage:
+    build: .
+    image: affichage-usine:latest
+    container_name: affichage-usine
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: 8080
+      DATA_DIR: /app/data
+      SOURCE_ROOT: /partage
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      SESSION_SECRET: ${SESSION_SECRET:-changez-moi}
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-60}
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      # Base de donnees et journaux : conserves entre deux redemarrages
+      - affichage-data:/app/data
+      # Partage reseau contenant les fichiers Excel (voir la definition plus bas)
+      - partage:/partage:ro
+
+volumes:
+  affichage-data:
+
+  # ---------------------------------------------------------------------------
+  # Acces au partage reseau de l'entreprise.
+  #
+  # Option A (par defaut) : Docker monte lui-meme le partage SMB/CIFS.
+  #   Renseigner SMB_SHARE / SMB_USER / SMB_PASSWORD / SMB_DOMAIN dans .env.
+  #   SMB_SHARE s'ecrit avec des slashs : serveur-fichiers/Qualite/Indicateurs
+  #
+  # Option B : le partage est deja monte sur la machine hote.
+  #   Commenter le bloc ci-dessous et le remplacer par, sous Linux :
+  #     partage:
+  #       driver: local
+  #       driver_opts:
+  #         type: none
+  #         o: bind
+  #         device: /mnt/qualite
+  #   ou, plus simplement, remplacer la ligne « - partage:/partage:ro » du
+  #   service par un bind direct : « - /mnt/qualite:/partage:ro »
+  #   (sous Windows / Docker Desktop : « - //serveur/qualite:/partage:ro »)
+  # ---------------------------------------------------------------------------
+  partage:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${SMB_SHARE}"
+      o: "username=${SMB_USER},password=${SMB_PASSWORD},domain=${SMB_DOMAIN:-WORKGROUP},ro,vers=3.0,uid=1000,gid=1000,iocharset=utf8"
