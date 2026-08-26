@@ -14,28 +14,28 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$VERSION  = '1.0.0'
-$MARQUEUR = 'gestion-lmnp'
+$script:VERSION  = '1.0.0'
+$script:MARQUEUR = 'gestion-lmnp'
 
-$dossierApplication = $PSScriptRoot
-$dossierRacine      = Split-Path -Parent $dossierApplication
-$dossierDonnees     = Join-Path $dossierRacine 'Données'
-$dossierDocuments   = Join-Path $dossierRacine 'Documents'
-$dossierFactures    = Join-Path $dossierRacine 'Factures'
-$dossierTraitees    = Join-Path $dossierFactures 'Traitées'
-$dossierSauvegardes = Join-Path $dossierRacine 'Sauvegardes'
-$dossierCorbeille   = Join-Path $dossierRacine 'Corbeille'
+$script:dossierApplication = $PSScriptRoot
+$script:dossierRacine      = Split-Path -Parent $script:dossierApplication
+$script:dossierDonnees     = Join-Path $script:dossierRacine 'Données'
+$script:dossierDocuments   = Join-Path $script:dossierRacine 'Documents'
+$script:dossierFactures    = Join-Path $script:dossierRacine 'Factures'
+$script:dossierTraitees    = Join-Path $script:dossierFactures 'Traitées'
+$script:dossierSauvegardes = Join-Path $script:dossierRacine 'Sauvegardes'
+$script:dossierCorbeille   = Join-Path $script:dossierRacine 'Corbeille'
 
-$espaces = @{ 'documents' = $dossierDocuments; 'factures' = $dossierFactures }
-$encodageUtf8 = New-Object System.Text.UTF8Encoding($false)
+$script:espaces = @{ 'documents' = $script:dossierDocuments; 'factures' = $script:dossierFactures }
+$script:encodageUtf8 = New-Object System.Text.UTF8Encoding($false)
 $script:SEPARATEUR_CHEMIN = [System.IO.Path]::DirectorySeparatorChar
 
-foreach ($d in @($dossierDonnees, $dossierDocuments, $dossierFactures, $dossierTraitees, $dossierSauvegardes)) {
+foreach ($d in @($script:dossierDonnees, $script:dossierDocuments, $script:dossierFactures, $script:dossierTraitees, $script:dossierSauvegardes)) {
     if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
 # Mode d'emploi déposé dans le dossier Factures pour qui l'ouvre depuis l'explorateur.
-$lisezMoiFactures = Join-Path $dossierFactures 'LISEZ-MOI.txt'
+$lisezMoiFactures = Join-Path $script:dossierFactures 'LISEZ-MOI.txt'
 if (-not (Test-Path -LiteralPath $lisezMoiFactures)) {
     $texteLisezMoi = @"
 Déposez ici les factures et justificatifs de dépense (PDF, photo, scan).
@@ -54,10 +54,10 @@ ainsi :
 soit : date, fournisseur, montant. Ce n'est pas obligatoire : vous pourrez
 toujours compléter à la main.
 "@
-    [System.IO.File]::WriteAllText($lisezMoiFactures, $texteLisezMoi, $encodageUtf8)
+    [System.IO.File]::WriteAllText($lisezMoiFactures, $texteLisezMoi, $script:encodageUtf8)
 }
 
-$TAILLE_MAX_ENVOI = 60MB
+$script:TAILLE_MAX_ENVOI = 60MB
 
 # --------------------------------------------------------------------------
 # Utilitaires
@@ -130,7 +130,7 @@ function Get-LibelleStatut([int]$code) {
 function Nouvelle-Reponse([int]$code, [string]$type, $corps) {
     $octets = $null
     if ($corps -is [byte[]]) { $octets = $corps }
-    elseif ($null -ne $corps) { $octets = $encodageUtf8.GetBytes([string]$corps) }
+    elseif ($null -ne $corps) { $octets = $script:encodageUtf8.GetBytes([string]$corps) }
     else { $octets = New-Object byte[] 0 }
     return @{ Code = $code; Type = $type; Corps = $octets }
 }
@@ -150,7 +150,7 @@ function Nouvelle-ReponseErreur([int]$code, [string]$message) {
 function Archiver-Version([string]$chemin) {
     if (-not (Test-Path -LiteralPath $chemin)) { return }
     $jour = Get-Date -Format 'yyyy-MM-dd'
-    $dossierJour = Join-Path $dossierSauvegardes $jour
+    $dossierJour = Join-Path $script:dossierSauvegardes $jour
     if (-not (Test-Path -LiteralPath $dossierJour)) { New-Item -ItemType Directory -Path $dossierJour -Force | Out-Null }
     $cible = Join-Path $dossierJour ([System.IO.Path]::GetFileName($chemin))
     if (-not (Test-Path -LiteralPath $cible)) { Copy-Item -LiteralPath $chemin -Destination $cible -Force }
@@ -158,7 +158,7 @@ function Archiver-Version([string]$chemin) {
 
 function Purger-Sauvegardes {
     $limite = (Get-Date).AddDays(-180)
-    Get-ChildItem -LiteralPath $dossierSauvegardes -Directory -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $script:dossierSauvegardes -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}$' -and $_.CreationTime -lt $limite } |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
 }
@@ -180,14 +180,14 @@ function Api-Etat {
     $inattendus = @()
     $connus = @('parametres.json','biens.json','locataires.json','baux.json','loyers.json',
                 'charges.json','immobilisations.json','emprunts.json','exercices.json')
-    Get-ChildItem -LiteralPath $dossierDonnees -Filter '*.json' -File -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $script:dossierDonnees -Filter '*.json' -File -ErrorAction SilentlyContinue |
         ForEach-Object { if ($connus -notcontains $_.Name) { $inattendus += $_.Name } }
 
     $morceaux = @()
-    $morceaux += '"marqueur":' + (ConvertTo-JsonChaine $MARQUEUR)
-    $morceaux += '"version":'  + (ConvertTo-JsonChaine $VERSION)
-    $morceaux += '"dossier":'  + (ConvertTo-JsonChaine $dossierRacine)
-    $morceaux += '"dossierFactures":' + (ConvertTo-JsonChaine $dossierFactures)
+    $morceaux += '"marqueur":' + (ConvertTo-JsonChaine $script:MARQUEUR)
+    $morceaux += '"version":'  + (ConvertTo-JsonChaine $script:VERSION)
+    $morceaux += '"dossier":'  + (ConvertTo-JsonChaine $script:dossierRacine)
+    $morceaux += '"dossierFactures":' + (ConvertTo-JsonChaine $script:dossierFactures)
     $morceaux += '"poste":'    + (ConvertTo-JsonChaine $env:COMPUTERNAME)
     $morceaux += '"utilisateur":' + (ConvertTo-JsonChaine $env:USERNAME)
     $listeInattendus = ($inattendus | ForEach-Object { ConvertTo-JsonChaine $_ }) -join ','
@@ -197,12 +197,12 @@ function Api-Etat {
 
 function Api-LireDonnees([string]$nom) {
     if ($nom -notmatch '^[a-z0-9\-]+$') { return Nouvelle-ReponseErreur 400 'Nom de collection invalide.' }
-    $chemin = Join-Path $dossierDonnees "$nom.json"
+    $chemin = Join-Path $script:dossierDonnees "$nom.json"
     if (-not (Test-Path -LiteralPath $chemin)) {
         return Nouvelle-ReponseJson 200 '{"version":"","contenu":null}'
     }
     $octets = [System.IO.File]::ReadAllBytes($chemin)
-    $texte = $encodageUtf8.GetString($octets).TrimStart([char]0xFEFF)
+    $texte = $script:encodageUtf8.GetString($octets).TrimStart([char]0xFEFF)
     if ([string]::IsNullOrWhiteSpace($texte)) { $texte = 'null' }
     $version = Get-Empreinte $octets
     return Nouvelle-ReponseJson 200 ('{"version":' + (ConvertTo-JsonChaine $version) + ',"contenu":' + $texte + '}')
@@ -211,13 +211,13 @@ function Api-LireDonnees([string]$nom) {
 function Api-EcrireDonnees([string]$nom, [string]$versionAttendue, [byte[]]$corps) {
     if ($nom -notmatch '^[a-z0-9\-]+$') { return Nouvelle-ReponseErreur 400 'Nom de collection invalide.' }
     if ($null -eq $corps -or $corps.Length -eq 0) { return Nouvelle-ReponseErreur 400 'Contenu vide.' }
-    $chemin = Join-Path $dossierDonnees "$nom.json"
+    $chemin = Join-Path $script:dossierDonnees "$nom.json"
 
     if (Test-Path -LiteralPath $chemin) {
         $actuels = [System.IO.File]::ReadAllBytes($chemin)
         $versionActuelle = Get-Empreinte $actuels
         if ($versionAttendue -ne $versionActuelle) {
-            $texte = $encodageUtf8.GetString($actuels).TrimStart([char]0xFEFF)
+            $texte = $script:encodageUtf8.GetString($actuels).TrimStart([char]0xFEFF)
             if ([string]::IsNullOrWhiteSpace($texte)) { $texte = 'null' }
             return Nouvelle-ReponseJson 409 ('{"erreur":"conflit","version":' + (ConvertTo-JsonChaine $versionActuelle) + ',"contenu":' + $texte + '}')
         }
@@ -228,9 +228,9 @@ function Api-EcrireDonnees([string]$nom, [string]$versionAttendue, [byte[]]$corp
 }
 
 function Resoudre-Espace([string]$nom) {
-    if ([string]::IsNullOrWhiteSpace($nom)) { return $dossierDocuments }
+    if ([string]::IsNullOrWhiteSpace($nom)) { return $script:dossierDocuments }
     $cle = $nom.ToLower()
-    if ($espaces.ContainsKey($cle)) { return $espaces[$cle] }
+    if ($script:espaces.ContainsKey($cle)) { return $script:espaces[$cle] }
     return $null
 }
 
@@ -251,7 +251,7 @@ function Api-ListerFichiers([string]$espace) {
                              ',"chemin":' + (ConvertTo-JsonChaine $relatif) +
                              ',"nom":' + (ConvertTo-JsonChaine $_.Name) +
                              ',"taille":' + $_.Length +
-                             ',"modifie":' + (ConvertTo-JsonChaine $_.LastWriteTime.ToString('yyyy-MM-ddTHH:mm:ss')) + '}'
+                             ',"modifie":' + (ConvertTo-JsonChaine $_.LastWriteTime.ToString('yyyy-MM-ddTHH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture)) + '}'
             }
     }
     return Nouvelle-ReponseJson 200 ('{"elements":[' + ($elements -join ',') + ']}')
@@ -280,7 +280,7 @@ function Api-DeposerFichier([string]$espace, [string]$chemin, [byte[]]$corps) {
     $base = Resoudre-Espace $espace
     if (-not $base) { return Nouvelle-ReponseErreur 400 'Espace de fichiers inconnu.' }
     if ($null -eq $corps -or $corps.Length -eq 0) { return Nouvelle-ReponseErreur 400 'Fichier vide.' }
-    if ($corps.Length -gt $TAILLE_MAX_ENVOI) { return Nouvelle-ReponseErreur 413 'Fichier trop volumineux (60 Mo maximum).' }
+    if ($corps.Length -gt $script:TAILLE_MAX_ENVOI) { return Nouvelle-ReponseErreur 413 'Fichier trop volumineux (60 Mo maximum).' }
     $complet = Resoudre-Chemin $base $chemin
     if (-not $complet) { return Nouvelle-ReponseErreur 400 'Chemin de fichier invalide.' }
 
@@ -320,8 +320,8 @@ function Api-SupprimerFichier([string]$espace, [string]$chemin) {
     if (-not $base) { return Nouvelle-ReponseErreur 400 'Espace de fichiers inconnu.' }
     $complet = Resoudre-Chemin $base $chemin
     if (-not $complet -or -not (Test-Path -LiteralPath $complet)) { return Nouvelle-ReponseErreur 404 'Fichier introuvable.' }
-    if (-not (Test-Path -LiteralPath $dossierCorbeille)) { New-Item -ItemType Directory -Path $dossierCorbeille -Force | Out-Null }
-    $cible = Join-Path $dossierCorbeille ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [System.IO.Path]::GetFileName($complet))
+    if (-not (Test-Path -LiteralPath $script:dossierCorbeille)) { New-Item -ItemType Directory -Path $script:dossierCorbeille -Force | Out-Null }
+    $cible = Join-Path $script:dossierCorbeille ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [System.IO.Path]::GetFileName($complet))
     Move-Item -LiteralPath $complet -Destination $cible -Force
     return Nouvelle-ReponseJson 200 '{"ok":true}'
 }
@@ -380,7 +380,7 @@ function Traiter-Requete([string]$methode, [string]$chemin, $parametres, [byte[]
     }
 
     if ($methode -ne 'GET') { return Nouvelle-ReponseErreur 405 'Méthode non autorisée.' }
-    return Servir-Fichier $dossierApplication $chemin.TrimStart('/') $null
+    return Servir-Fichier $script:dossierApplication $chemin.TrimStart('/') $null
 }
 
 # --------------------------------------------------------------------------
@@ -439,7 +439,7 @@ function Lire-Requete($client, $flux) {
 
     $longueur = 0
     if ($entetes.ContainsKey('content-length')) { [void][int]::TryParse($entetes['content-length'], [ref]$longueur) }
-    if ($longueur -gt $TAILLE_MAX_ENVOI) { return @{ Trop = $true } }
+    if ($longueur -gt $script:TAILLE_MAX_ENVOI) { return @{ Trop = $true } }
 
     $flot = New-Object System.IO.MemoryStream
     $restant = $tableau.Length - ($finEntete + 1)
@@ -499,7 +499,7 @@ function Envoyer-Reponse($flux, $reponse) {
 function Tester-InstanceExistante([int]$port) {
     try {
         $reponse = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/etat" -TimeoutSec 2 -UseBasicParsing
-        return ($reponse.Content -like "*$MARQUEUR*")
+        return ($reponse.Content -like "*$script:MARQUEUR*")
     } catch { return $false }
 }
 
@@ -556,7 +556,7 @@ try { $hote.WindowTitle = 'Gestion LMNP — serveur (ne pas fermer pendant l''ut
 Write-Host ''
 Write-Host '  Gestion LMNP' -ForegroundColor Cyan
 Write-Host '  ------------'
-Write-Host "  Dossier   : $dossierRacine"
+Write-Host "  Dossier   : $script:dossierRacine"
 Write-Host "  Adresse   : $adresse"
 Write-Host ''
 Write-Host '  L''application s''ouvre dans votre navigateur.'
@@ -573,7 +573,7 @@ if (-not $SansNavigateur) { Ouvrir-Navigateur $adresse }
 
 $script:continuer = $true
 $enAttente = New-Object System.Collections.Generic.List[object]
-$DELAI_CONNEXION_INACTIVE = 30
+$script:DELAI_CONNEXION_INACTIVE = 30
 
 function Traiter-Client($client) {
     try {
@@ -600,10 +600,10 @@ while ($script:continuer) {
     $activite = $false
 
     while ($ecouteur.Pending()) {
-        $nouveau = $ecouteur.AcceptTcpClient()
-        $nouveau.ReceiveTimeout = 15000
-        $nouveau.SendTimeout = 60000
-        $enAttente.Add([PSCustomObject]@{ Client = $nouveau; Depuis = [DateTime]::UtcNow })
+        $clientAccepte = $ecouteur.AcceptTcpClient()
+        $clientAccepte.ReceiveTimeout = 15000
+        $clientAccepte.SendTimeout = 60000
+        $enAttente.Add([PSCustomObject]@{ Client = $clientAccepte; Depuis = [DateTime]::UtcNow })
         $activite = $true
     }
 
@@ -615,7 +615,7 @@ while ($script:continuer) {
         } catch {
             $pret = $true
         }
-        $expire = ([DateTime]::UtcNow - $entree.Depuis).TotalSeconds -gt $DELAI_CONNEXION_INACTIVE
+        $expire = ([DateTime]::UtcNow - $entree.Depuis).TotalSeconds -gt $script:DELAI_CONNEXION_INACTIVE
         if (-not $pret -and -not $expire) { continue }
 
         $enAttente.RemoveAt($i)

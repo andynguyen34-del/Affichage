@@ -134,12 +134,15 @@ export async function rafraichir({ silencieux = false } = {}) {
   definirSynchro('occupe');
   try {
     for (const nom of COLLECTIONS) {
-      const resultat = await api.lireCollection(nom);
-      if (resultat.version !== magasin.versions[nom]) {
+      // eslint-disable-next-line no-await-in-loop
+      const majeur = await enFile(nom, async () => {
+        const resultat = await api.lireCollection(nom);
+        if (resultat.version === magasin.versions[nom]) return false;
         magasin.versions[nom] = resultat.version;
         magasin.donnees[nom] = normaliser(nom, resultat.contenu);
-        changement = true;
-      }
+        return true;
+      });
+      if (majeur) changement = true;
     }
     await rechargerFichiers();
     definirSynchro('ok');
@@ -153,34 +156,58 @@ export async function rafraichir({ silencieux = false } = {}) {
 }
 
 /**
+ * File d'attente par collection : deux écritures lancées en même temps depuis
+ * ce poste se suivent au lieu de se concurrencer. Sans cela, elles se
+ * déclencheraient mutuellement des conflits et finiraient par épuiser leurs
+ * tentatives.
+ */
+const filesDattente = new Map();
+
+function enFile(nom, tache) {
+  const precedent = filesDattente.get(nom) || Promise.resolve();
+  const suivant = precedent.then(tache, tache);
+  filesDattente.set(nom, suivant.catch(() => {}));
+  return suivant;
+}
+
+const patienter = (millisecondes) => new Promise((resoudre) => { setTimeout(resoudre, millisecondes); });
+
+const TENTATIVES_MAXIMUM = 8;
+
+/**
  * Applique une modification et l'enregistre.
  * Si l'autre poste a écrit entre-temps, la modification est rejouée sur la
  * version fraîche du fichier : deux personnes qui touchent des lignes
  * différentes ne s'écrasent jamais.
  */
-export async function modifier(nom, mutation) {
-  definirSynchro('occupe');
-  try {
-    for (let tentative = 0; tentative < 5; tentative += 1) {
-      const copie = structuredClone(magasin.donnees[nom] ?? contenuParDefaut(nom));
-      const retour = mutation(copie);
-      const resultat = await api.ecrireCollection(nom, magasin.versions[nom], copie);
-      if (resultat.conflit) {
+export function modifier(nom, mutation) {
+  return enFile(nom, async () => {
+    definirSynchro('occupe');
+    try {
+      for (let tentative = 0; tentative < TENTATIVES_MAXIMUM; tentative += 1) {
+        const copie = structuredClone(magasin.donnees[nom] ?? contenuParDefaut(nom));
+        const retour = mutation(copie);
+        const resultat = await api.ecrireCollection(nom, magasin.versions[nom], copie);
+        if (resultat.conflit) {
+          magasin.versions[nom] = resultat.version;
+          magasin.donnees[nom] = normaliser(nom, resultat.contenu);
+          // Petite attente irrégulière : deux postes qui réessaient ensemble
+          // finiraient sinon par se retrouver systématiquement en concurrence.
+          await patienter(20 * (tentative + 1) + Math.floor(Math.random() * 40));
+          continue;
+        }
         magasin.versions[nom] = resultat.version;
-        magasin.donnees[nom] = normaliser(nom, resultat.contenu);
-        continue;
+        magasin.donnees[nom] = copie;
+        definirSynchro('ok');
+        notifier('modification');
+        return retour;
       }
-      magasin.versions[nom] = resultat.version;
-      magasin.donnees[nom] = copie;
-      definirSynchro('ok');
-      notifier('modification');
-      return retour;
+      throw new Error('Le fichier est modifié en continu depuis l’autre poste. Réessayez dans un instant.');
+    } catch (erreur) {
+      definirSynchro('erreur');
+      throw erreur;
     }
-    throw new Error('Le fichier est modifié en continu depuis l’autre poste. Réessayez dans un instant.');
-  } catch (erreur) {
-    definirSynchro('erreur');
-    throw erreur;
-  }
+  });
 }
 
 function estampiller(element) {
