@@ -387,13 +387,28 @@ function Traiter-Requete([string]$methode, [string]$chemin, $parametres, [byte[]
 # Lecture d'une requête HTTP
 # --------------------------------------------------------------------------
 
-function Lire-Requete($flux) {
+# Attend que des données arrivent, sans bloquer indéfiniment : renvoie $false si
+# le client n'a rien envoyé dans le délai imparti.
+function Attendre-Donnees($client, $flux, [int]$limiteMs) {
+    $chrono = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($chrono.ElapsedMilliseconds -lt $limiteMs) {
+        if ($flux.DataAvailable) { return $true }
+        try {
+            if ($client.Client.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead)) { return $true }
+        } catch { return $true }
+        Start-Sleep -Milliseconds 5
+    }
+    return $false
+}
+
+function Lire-Requete($client, $flux) {
     $tampon = New-Object System.Collections.Generic.List[byte]
     $bloc = New-Object byte[] 16384
     $finEntete = -1
     $dejaExamine = 3
 
     while ($finEntete -lt 0) {
+        if (-not (Attendre-Donnees $client $flux 3000)) { return $null }
         $lu = $flux.Read($bloc, 0, $bloc.Length)
         if ($lu -le 0) { return $null }
         $morceau = New-Object byte[] $lu
@@ -430,6 +445,7 @@ function Lire-Requete($flux) {
     $restant = $tableau.Length - ($finEntete + 1)
     if ($restant -gt 0) { $flot.Write($tableau, $finEntete + 1, $restant) }
     while ($flot.Length -lt $longueur) {
+        if (-not (Attendre-Donnees $client $flux 30000)) { break }
         $aLire = [int][Math]::Min([long]$bloc.Length, [long]$longueur - $flot.Length)
         $lu = $flux.Read($bloc, 0, $aLire)
         if ($lu -le 0) { break }
@@ -550,19 +566,23 @@ Write-Host ''
 
 if (-not $SansNavigateur) { Ouvrir-Navigateur $adresse }
 
+# Boucle d'événements : les connexions acceptées sont mises en attente et ne sont
+# traitées qu'une fois qu'elles ont envoyé quelque chose. Sans cela, une connexion
+# ouverte à l'avance par le navigateur — Edge et Chrome en ouvrent systématiquement —
+# bloquerait tout le serveur jusqu'à expiration du délai de lecture.
+
 $script:continuer = $true
-while ($script:continuer) {
-    $client = $null
+$enAttente = New-Object System.Collections.Generic.List[object]
+$DELAI_CONNEXION_INACTIVE = 30
+
+function Traiter-Client($client) {
     try {
-        $client = $ecouteur.AcceptTcpClient()
-        $client.ReceiveTimeout = 20000
-        $client.SendTimeout = 60000
         $flux = $client.GetStream()
-        $requete = Lire-Requete $flux
-        if ($null -eq $requete) { continue }
+        $requete = Lire-Requete $client $flux
+        if ($null -eq $requete) { return }
         if ($requete.Trop) {
             Envoyer-Reponse $flux (Nouvelle-ReponseErreur 413 'Envoi trop volumineux (60 Mo maximum).')
-            continue
+            return
         }
         try {
             $reponse = Traiter-Requete $requete.Methode $requete.Chemin $requete.Parametres $requete.Corps
@@ -573,10 +593,41 @@ while ($script:continuer) {
         Envoyer-Reponse $flux $reponse
     } catch {
         # connexion interrompue par le navigateur : sans conséquence
-    } finally {
-        if ($client) { try { $client.Close() } catch { } }
     }
 }
+
+while ($script:continuer) {
+    $activite = $false
+
+    while ($ecouteur.Pending()) {
+        $nouveau = $ecouteur.AcceptTcpClient()
+        $nouveau.ReceiveTimeout = 15000
+        $nouveau.SendTimeout = 60000
+        $enAttente.Add([PSCustomObject]@{ Client = $nouveau; Depuis = [DateTime]::UtcNow })
+        $activite = $true
+    }
+
+    for ($i = $enAttente.Count - 1; $i -ge 0; $i--) {
+        $entree = $enAttente[$i]
+        $pret = $false
+        try {
+            $pret = $entree.Client.Client.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead)
+        } catch {
+            $pret = $true
+        }
+        $expire = ([DateTime]::UtcNow - $entree.Depuis).TotalSeconds -gt $DELAI_CONNEXION_INACTIVE
+        if (-not $pret -and -not $expire) { continue }
+
+        $enAttente.RemoveAt($i)
+        $activite = $true
+        if ($pret) { Traiter-Client $entree.Client }
+        try { $entree.Client.Close() } catch { }
+    }
+
+    if (-not $activite) { Start-Sleep -Milliseconds 5 }
+}
+
+foreach ($entree in $enAttente) { try { $entree.Client.Close() } catch { } }
 
 $ecouteur.Stop()
 Write-Host '  Application fermée. À bientôt.' -ForegroundColor Cyan
