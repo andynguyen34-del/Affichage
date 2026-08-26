@@ -1,0 +1,9 @@
+# Données personnelles et comptables : ne jamais les pousser dans ce dépôt.
+# Elles vivent dans le dossier OneDrive partagé, pas sur GitHub.
+Données/
+Documents/*
+!Documents/LISEZ-MOI.txt
+Factures/*
+!Factures/LISEZ-MOI.txt
+Sauvegardes/
+Corbeille/
