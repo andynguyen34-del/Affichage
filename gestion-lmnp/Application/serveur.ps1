@@ -555,25 +555,31 @@ function Envoyer-Reponse($flux, $reponse) {
 # --------------------------------------------------------------------------
 
 function Tester-InstanceExistante([int]$port) {
+    # Vérifie si notre application répond déjà sur ce port, par une simple
+    # connexion sur la boucle locale (127.0.0.1) — pas de client web, pas de
+    # requête vers l'extérieur.
+    $client = New-Object System.Net.Sockets.TcpClient
     try {
-        $reponse = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/etat" -TimeoutSec 2 -UseBasicParsing
-        return ($reponse.Content -like "*$script:MARQUEUR*")
-    } catch { return $false }
+        $connexion = $client.BeginConnect([System.Net.IPAddress]::Loopback, $port, $null, $null)
+        if (-not $connexion.AsyncWaitHandle.WaitOne(1000)) { return $false }
+        $client.EndConnect($connexion)
+        $flux = $client.GetStream()
+        $requete = [System.Text.Encoding]::ASCII.GetBytes("GET /api/etat HTTP/1.1`r`nHost: 127.0.0.1`r`nConnection: close`r`n`r`n")
+        $flux.Write($requete, 0, $requete.Length)
+        $flux.ReadTimeout = 1500
+        $lecteur = New-Object System.IO.StreamReader($flux)
+        $contenu = $lecteur.ReadToEnd()
+        return ($contenu -like "*$script:MARQUEUR*")
+    } catch {
+        return $false
+    } finally {
+        try { $client.Close() } catch { }
+    }
 }
 
 function Ouvrir-Navigateur([string]$url) {
-    $candidats = @(
-        (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
-        (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe')
-    )
-    foreach ($c in $candidats) {
-        if ($c -and (Test-Path -LiteralPath $c)) {
-            Start-Process -FilePath $c -ArgumentList "--app=$url" | Out-Null
-            return
-        }
-    }
+    # Ouvre l'adresse dans le navigateur par défaut du poste, comme un clic sur
+    # un lien. Aucun exécutable particulier n'est recherché ni lancé.
     Start-Process $url | Out-Null
 }
 
