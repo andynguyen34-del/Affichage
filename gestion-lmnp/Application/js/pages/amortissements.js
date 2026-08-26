@@ -182,10 +182,17 @@ export default {
       tuile({ libelle: 'Valeur nette', valeur: montant(centimes(baseTotale - cumul), { rond: true }) }),
     ]));
 
+    const dejaDecompose = donnees.immobilisations.length > 0;
     conteneur.append(barreOutils([
       bouton('+ Composant', () => ouvrirImmobilisation(donnees, null), { type: 'primaire' }),
-      bouton('Décomposer le prix de revient', () => decomposer(donnees),
-        { titre: 'Créer d’un coup les composants du bâti à partir du prix d’acquisition' }),
+      bouton('Décomposer le prix de revient', () => decomposer(donnees), {
+        // Désactivé dès qu'il existe des composants : relancer créerait un
+        // second jeu complet et doublerait la base amortissable.
+        desactive: dejaDecompose,
+        titre: dejaDecompose
+          ? 'Des composants existent déjà — utilisez « + Composant » pour en ajouter un'
+          : 'Créer d’un coup les composants du bâti à partir du prix d’acquisition',
+      }),
     ]));
 
     if (!donnees.immobilisations.length) {

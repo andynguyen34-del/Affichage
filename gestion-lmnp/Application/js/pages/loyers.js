@@ -12,22 +12,23 @@ const nomLocataire = (donnees, bail) => {
   return locataire ? `${locataire.nom} ${locataire.prenom || ''}`.trim() : 'Sans locataire';
 };
 
+const gabaritEcheance = (echeance) => ({
+  id: echeance.id,
+  bailId: echeance.bailId,
+  annee: echeance.annee,
+  mois: echeance.mois,
+  dateEcheance: echeance.dateEcheance,
+  loyerHc: echeance.loyerHc,
+  charges: echeance.charges,
+  autres: echeance.autres || 0,
+  encaissements: echeance.encaissements || [],
+  quittanceEmiseLe: echeance.quittanceEmiseLe || null,
+  notes: echeance.notes || '',
+});
+
 /** Enregistre une échéance (création si elle n'existait pas encore). */
 async function enregistrerEcheance(echeance, modifications) {
-  const base = {
-    id: echeance.id,
-    bailId: echeance.bailId,
-    annee: echeance.annee,
-    mois: echeance.mois,
-    dateEcheance: echeance.dateEcheance,
-    loyerHc: echeance.loyerHc,
-    charges: echeance.charges,
-    autres: echeance.autres || 0,
-    encaissements: echeance.encaissements || [],
-    quittanceEmiseLe: echeance.quittanceEmiseLe || null,
-    notes: echeance.notes || '',
-  };
-  return etat.enregistrer('loyers', { ...base, ...modifications });
+  return etat.enregistrer('loyers', { ...gabaritEcheance(echeance), ...modifications });
 }
 
 async function saisirEncaissement(echeance) {
@@ -43,14 +44,21 @@ async function saisirEncaissement(echeance) {
     valeurs: { date: aujourdhui(), montant: reste > 0 ? reste : echeance.total, mode: 'Virement' },
   });
   if (!saisie) return;
-  const encaissements = [...(echeance.encaissements || []), {
+  const nouvel = {
     id: crypto.randomUUID(),
     date: saisie.date,
     montant: Number(saisie.montant) || 0,
     mode: saisie.mode,
     reference: saisie.reference || '',
-  }];
-  await executer(enregistrerEcheance(echeance, { encaissements }), 'Encaissement enregistré.');
+  };
+  // Ajout additif sur la version fraîche : un encaissement saisi en même temps
+  // depuis l'autre poste n'est jamais écrasé.
+  await executer(
+    etat.modifierElement('loyers', echeance.id, (e) => {
+      e.encaissements = [...(e.encaissements || []), nouvel];
+    }, gabaritEcheance(echeance)),
+    'Encaissement enregistré.',
+  );
 }
 
 async function ajusterEcheance(echeance) {
@@ -98,9 +106,12 @@ function voirEncaissements(echeance) {
           libelleValider: 'Supprimer', danger: true,
         });
         if (!confirme) return;
-        await executer(enregistrerEcheance(echeance, {
-          encaissements: encaissements.filter((x) => x.id !== e.id),
-        }), 'Encaissement supprimé.');
+        await executer(
+          etat.modifierElement('loyers', echeance.id, (ech) => {
+            ech.encaissements = (ech.encaissements || []).filter((x) => x.id !== e.id);
+          }, gabaritEcheance(echeance)),
+          'Encaissement supprimé.',
+        );
       }, { petit: true, type: 'danger' }) },
     ],
     lignes: encaissements,
@@ -115,11 +126,11 @@ function documentsQuittance(donnees, bail, echeance, quittance) {
   const bailleur = donnees.parametres.bailleurs?.[0];
   const lieu = donnees.parametres.lieuSignature || '';
   if (!quittance) {
-    imprimerAvis({ bailleur, locataire, bien, echeance, lieu });
+    imprimerAvis({ bailleur, locataire, bien, bail, echeance, lieu });
     return;
   }
   const dernier = (echeance.encaissements || []).slice(-1)[0];
-  imprimerQuittance({ bailleur, locataire, bien, echeance, dateReglement: dernier?.date, lieu });
+  imprimerQuittance({ bailleur, locataire, bien, bail, echeance, dateReglement: dernier?.date, lieu });
   if (!echeance.quittanceEmiseLe) {
     enregistrerEcheance(echeance, { quittanceEmiseLe: aujourdhui() }).catch(() => {});
   }
@@ -201,7 +212,11 @@ export default {
         { titre: '', actions: true, valeur: (e) => h('div', { class: 'groupe-boutons' }, [
           bouton('Encaisser', () => saisirEncaissement(e), { petit: true, type: 'primaire' }),
           bouton('Quittance', () => documentsQuittance(donnees, bail, e, true), {
-            petit: true, titre: 'Imprimer la quittance', desactive: calcul.totalEncaisse(e) <= 0,
+            petit: true,
+            titre: calcul.statut(e) === 'paye'
+              ? 'Imprimer la quittance'
+              : 'Quittance possible seulement quand l’échéance est intégralement encaissée',
+            desactive: calcul.statut(e) !== 'paye',
           }),
           bouton('Avis', () => documentsQuittance(donnees, bail, e, false), { petit: true, titre: 'Imprimer l’avis d’échéance' }),
           bouton('⋯', () => ajusterEcheance(e), { petit: true, titre: 'Ajuster les montants' }),
@@ -222,17 +237,23 @@ export default {
               libelleValider: 'Encaisser',
             });
             if (!confirme) return;
+            let faits = 0;
+            let echoues = 0;
             for (const echeance of aRegler) {
               const reste = centimes(echeance.total - calcul.totalEncaisse(echeance));
               if (reste <= 0) continue;
-              /* eslint-disable no-await-in-loop */
-              await enregistrerEcheance(echeance, {
-                encaissements: [...(echeance.encaissements || []), {
-                  id: crypto.randomUUID(), date: aujourdhui(), montant: reste, mode: 'Virement', reference: '',
-                }],
-              });
+              try {
+                /* eslint-disable no-await-in-loop */
+                await etat.modifierElement('loyers', echeance.id, (e) => {
+                  e.encaissements = [...(e.encaissements || []), {
+                    id: crypto.randomUUID(), date: aujourdhui(), montant: reste, mode: 'Virement', reference: '',
+                  }];
+                }, gabaritEcheance(echeance));
+                faits += 1;
+              } catch (erreur) { echoues += 1; console.error(erreur); }
             }
-            notifier('Impayés encaissés.', 'succes');
+            if (faits) notifier(`${faits} impayé(s) encaissé(s).`, 'succes');
+            if (echoues) notifier(`${echoues} échéance(s) n’ont pas pu être enregistrées.`, 'erreur');
           }, { petit: true }),
           bouton('Relevé annuel', () => imprimerReleve({
             bailleur: donnees.parametres.bailleurs?.[0],

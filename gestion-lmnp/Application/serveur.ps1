@@ -166,10 +166,21 @@ function Purger-Sauvegardes {
 function Ecrire-Atomique([string]$chemin, [byte[]]$octets) {
     $temporaire = "$chemin.tmp"
     [System.IO.File]::WriteAllBytes($temporaire, $octets)
-    if (Test-Path -LiteralPath $chemin) {
-        Remove-Item -LiteralPath $chemin -Force
+    try {
+        if (Test-Path -LiteralPath $chemin) {
+            # Remplacement atomique : la cible n'est jamais absente, même si
+            # OneDrive ou l'antivirus verrouille le fichier une fraction de
+            # seconde. En cas d'échec, l'ancienne version reste en place.
+            # [NullString]::Value passe un vrai null (PowerShell convertirait
+            # $null en chaîne vide, refusée par File.Replace).
+            [System.IO.File]::Replace($temporaire, $chemin, [NullString]::Value)
+        } else {
+            Move-Item -LiteralPath $temporaire -Destination $chemin -Force
+        }
+    } catch {
+        if (Test-Path -LiteralPath $temporaire) { Remove-Item -LiteralPath $temporaire -Force -ErrorAction SilentlyContinue }
+        throw
     }
-    Move-Item -LiteralPath $temporaire -Destination $chemin -Force
 }
 
 # --------------------------------------------------------------------------
@@ -198,12 +209,24 @@ function Api-Etat {
 function Api-LireDonnees([string]$nom) {
     if ($nom -notmatch '^[a-z0-9\-]+$') { return Nouvelle-ReponseErreur 400 'Nom de collection invalide.' }
     $chemin = Join-Path $script:dossierDonnees "$nom.json"
+    # Fichier absent : légitime au premier lancement.
     if (-not (Test-Path -LiteralPath $chemin)) {
         return Nouvelle-ReponseJson 200 '{"version":"","contenu":null}'
     }
     $octets = [System.IO.File]::ReadAllBytes($chemin)
     $texte = $script:encodageUtf8.GetString($octets).TrimStart([char]0xFEFF)
-    if ([string]::IsNullOrWhiteSpace($texte)) { $texte = 'null' }
+    # Fichier présent mais vide : OneDrive « à la demande » non téléchargé, ou
+    # écriture interrompue. On le distingue du fichier absent.
+    if ([string]::IsNullOrWhiteSpace($texte)) {
+        return Nouvelle-ReponseJson 200 ('{"version":"","contenu":null,"abime":true,"fichier":' + (ConvertTo-JsonChaine "$nom.json") + '}')
+    }
+    # Contenu illisible (JSON tronqué) : on le signale au lieu de renvoyer une
+    # réponse HTTP invalide qui bloquerait l'application au chargement.
+    try { ConvertFrom-Json $texte -ErrorAction Stop | Out-Null }
+    catch {
+        return Nouvelle-ReponseJson 200 ('{"version":' + (ConvertTo-JsonChaine (Get-Empreinte $octets)) +
+            ',"contenu":null,"abime":true,"fichier":' + (ConvertTo-JsonChaine "$nom.json") + '}')
+    }
     $version = Get-Empreinte $octets
     return Nouvelle-ReponseJson 200 ('{"version":' + (ConvertTo-JsonChaine $version) + ',"contenu":' + $texte + '}')
 }
@@ -326,12 +349,28 @@ function Api-SupprimerFichier([string]$espace, [string]$chemin) {
     return Nouvelle-ReponseJson 200 '{"ok":true}'
 }
 
-function Servir-Fichier([string]$base, [string]$relatif, [string]$disposition) {
+# Types inertes servis tels quels depuis les dossiers de l'utilisateur.
+# Tout le reste (html, svg, js…) est forcé en téléchargement pour ne pas être
+# exécuté comme page sur l'origine de l'application.
+$script:EXTENSIONS_INERTES = @('.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt', '.csv')
+
+function Servir-Fichier([string]$base, [string]$relatif, [string]$disposition, [bool]$contenuUtilisateur = $false) {
     $complet = Resoudre-Chemin $base $relatif
     if (-not $complet -or -not (Test-Path -LiteralPath $complet -PathType Leaf)) {
         return Nouvelle-ReponseErreur 404 'Fichier introuvable.'
     }
     $octets = [System.IO.File]::ReadAllBytes($complet)
+    $extension = [System.IO.Path]::GetExtension($complet).ToLower()
+
+    if ($contenuUtilisateur -and $script:EXTENSIONS_INERTES -notcontains $extension) {
+        # Fichier déposé par l'utilisateur d'un type potentiellement actif :
+        # on ne le rend jamais en text/html ou image/svg+xml sur notre origine.
+        $nom = [System.IO.Path]::GetFileName($complet)
+        $reponse = Nouvelle-Reponse 200 'application/octet-stream' $octets
+        $reponse.Entetes = @("Content-Disposition: attachment; filename=`"$nom`"")
+        return $reponse
+    }
+
     $reponse = Nouvelle-Reponse 200 (Get-TypeMime $complet) $octets
     if ($disposition) { $reponse.Entetes = @("Content-Disposition: $disposition") }
     return $reponse
@@ -341,8 +380,26 @@ function Servir-Fichier([string]$base, [string]$relatif, [string]$disposition) {
 # Routage
 # --------------------------------------------------------------------------
 
-function Traiter-Requete([string]$methode, [string]$chemin, $parametres, [byte[]]$corps) {
+function Traiter-Requete([string]$methode, [string]$chemin, $parametres, [byte[]]$corps, $entetes) {
     if ($chemin -eq '/' -or $chemin -eq '') { $chemin = '/index.html' }
+
+    # Protection contre les pages web tierces (CSRF / DNS rebinding) : on
+    # n'accepte que les requêtes dont l'hôte est bien la boucle locale, et on
+    # refuse toute écriture portant une origine étrangère. Sans cela, un onglet
+    # publicitaire ouvert pendant l'utilisation pourrait écrire dans le dossier
+    # partagé ou arrêter le serveur.
+    if ($null -ne $entetes) {
+        $hote = [string]$entetes['host']
+        if ($hote -and $hote -notmatch '^(127\.0\.0\.1|localhost)(:\d+)?$') {
+            return Nouvelle-ReponseErreur 403 'Hôte non autorisé.'
+        }
+        if ($methode -ne 'GET' -and $entetes.ContainsKey('origin')) {
+            $origine = [string]$entetes['origin']
+            if ($origine -and $origine -notmatch '^https?://(127\.0\.0\.1|localhost)(:\d+)?$') {
+                return Nouvelle-ReponseErreur 403 'Origine non autorisée.'
+            }
+        }
+    }
 
     if ($chemin -eq '/api/etat' -and $methode -eq 'GET') { return Api-Etat }
 
@@ -376,7 +433,7 @@ function Traiter-Requete([string]$methode, [string]$chemin, $parametres, [byte[]
         if ($position -lt 1) { return Nouvelle-ReponseErreur 400 'Chemin de fichier invalide.' }
         $base = Resoudre-Espace $reste.Substring(0, $position)
         if (-not $base) { return Nouvelle-ReponseErreur 404 'Espace de fichiers inconnu.' }
-        return Servir-Fichier $base $reste.Substring($position + 1) 'inline'
+        return Servir-Fichier $base $reste.Substring($position + 1) 'inline' $true
     }
 
     if ($methode -ne 'GET') { return Nouvelle-ReponseErreur 405 'Méthode non autorisée.' }
@@ -473,6 +530,7 @@ function Lire-Requete($client, $flux) {
         Chemin     = [System.Uri]::UnescapeDataString($cheminSeul)
         Parametres = $parametres
         Corps      = $flot.ToArray()
+        Entetes    = $entetes
     }
 }
 
@@ -585,7 +643,7 @@ function Traiter-Client($client) {
             return
         }
         try {
-            $reponse = Traiter-Requete $requete.Methode $requete.Chemin $requete.Parametres $requete.Corps
+            $reponse = Traiter-Requete $requete.Methode $requete.Chemin $requete.Parametres $requete.Corps $requete.Entetes
         } catch {
             Write-Host "  Erreur sur $($requete.Chemin) : $($_.Exception.Message)" -ForegroundColor Yellow
             $reponse = Nouvelle-ReponseErreur 500 $_.Exception.Message
@@ -597,34 +655,42 @@ function Traiter-Client($client) {
 }
 
 while ($script:continuer) {
-    $activite = $false
+    # Attente bloquante dans le noyau : le processeur reste à zéro tant qu'aucun
+    # socket n'a de données. On surveille à la fois le socket d'écoute (nouvelle
+    # connexion) et les connexions en attente (données reçues).
+    $lecture = New-Object System.Collections.ArrayList
+    [void]$lecture.Add($ecouteur.Server)
+    foreach ($entree in $enAttente) { [void]$lecture.Add($entree.Client.Client) }
 
-    while ($ecouteur.Pending()) {
-        $clientAccepte = $ecouteur.AcceptTcpClient()
-        $clientAccepte.ReceiveTimeout = 15000
-        $clientAccepte.SendTimeout = 60000
-        $enAttente.Add([PSCustomObject]@{ Client = $clientAccepte; Depuis = [DateTime]::UtcNow })
-        $activite = $true
+    try {
+        # 250 ms : réveil périodique pour honorer l'arrêt et purger les
+        # connexions inactives, sans pour autant sonder en continu.
+        [System.Net.Sockets.Socket]::Select($lecture, $null, $null, 250000)
+    } catch {
+        # Un socket fermé pendant l'attente fait échouer Select : on repart au
+        # tour suivant, la purge ci-dessous retire l'entrée fautive.
+        $lecture.Clear()
+    }
+
+    if ($lecture.Contains($ecouteur.Server)) {
+        while ($ecouteur.Pending()) {
+            $clientAccepte = $ecouteur.AcceptTcpClient()
+            $clientAccepte.ReceiveTimeout = 15000
+            $clientAccepte.SendTimeout = 60000
+            $enAttente.Add([PSCustomObject]@{ Client = $clientAccepte; Depuis = [DateTime]::UtcNow })
+        }
     }
 
     for ($i = $enAttente.Count - 1; $i -ge 0; $i--) {
         $entree = $enAttente[$i]
-        $pret = $false
-        try {
-            $pret = $entree.Client.Client.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead)
-        } catch {
-            $pret = $true
-        }
+        $pret = $lecture.Contains($entree.Client.Client)
         $expire = ([DateTime]::UtcNow - $entree.Depuis).TotalSeconds -gt $script:DELAI_CONNEXION_INACTIVE
         if (-not $pret -and -not $expire) { continue }
 
         $enAttente.RemoveAt($i)
-        $activite = $true
         if ($pret) { Traiter-Client $entree.Client }
         try { $entree.Client.Close() } catch { }
     }
-
-    if (-not $activite) { Start-Sleep -Milliseconds 5 }
 }
 
 foreach ($entree in $enAttente) { try { $entree.Client.Close() } catch { } }

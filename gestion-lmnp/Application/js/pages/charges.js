@@ -59,7 +59,7 @@ async function joindreJustificatif(charge) {
     const annee = anneeDe(charge.date) || new Date().getFullYear();
     const depose = await api.deposerFichier('documents', `${annee}/${fichier.name}`, fichier);
     await etat.enregistrer('charges', { ...charge, documentEspace: 'documents', documentChemin: depose.chemin });
-    await etat.rechargerFichiers();
+    await etat.rechargerFichiers({ notifier: true });
     notifier('Justificatif rattaché.', 'succes');
   } catch (erreur) { signalerErreur(erreur); }
 }
@@ -100,7 +100,7 @@ export default {
 
     conteneur.append(barreOutils([
       bouton('+ Dépense', () => ouvrirCharge(donnees, null, annee), { type: 'primaire' }),
-      champRecherche('Rechercher un libellé, un fournisseur…', (valeur) => { filtreTexte = valeur; rafraichirTableau(); }),
+      champRecherche('Rechercher un libellé, un fournisseur…', (valeur) => { filtreTexte = valeur; rafraichirTableau(); }, filtreTexte),
       h('select', {
         style: 'max-width:280px',
         onchange: (e) => { filtreCategorie = e.target.value; rafraichirTableau(); },

@@ -49,7 +49,9 @@ function detecterDate(texte) {
 
 function detecterMontant(texte) {
   const candidats = [];
-  const regex = /(?<!\d)(\d{1,3}(?:[ .]\d{3})+|\d+)(?:[,.](\d{1,2}))?\s*(?:€|eur\b|euros?\b)?/gi;
+  // Le groupe de milliers ne doit pas être collé à une lettre ni à un chiffre :
+  // un « 3 » de « lot 3 » ne devient pas le millier de « 3 250 ».
+  const regex = /(?<![\p{L}\d])(\d{1,3}(?:[ .]\d{3})+|\d+)(?:[,.](\d{1,2}))?\s*(?:€|eur\b|euros?\b)?/giu;
   let trouve = regex.exec(texte);
   while (trouve) {
     const brut = trouve[0];
@@ -58,7 +60,9 @@ function detecterMontant(texte) {
     const valeur = Number(`${entier}.${decimales || '0'}`);
     const avecSymbole = /€|eur/i.test(brut);
     const avecDecimales = Boolean(decimales);
-    if (Number.isFinite(valeur) && valeur > 0 && valeur < 1000000) {
+    // Un groupe de 6+ chiffres accolés (horodatage 20250630) n'est pas un montant.
+    const horodatage = /^\d{6,}$/.test(entier);
+    if (Number.isFinite(valeur) && valeur > 0 && valeur < 1000000 && !horodatage) {
       candidats.push({ valeur, avecSymbole, avecDecimales, position: trouve.index, extrait: brut.trim() });
     }
     trouve = regex.exec(texte);
@@ -69,14 +73,20 @@ function detecterMontant(texte) {
     return (score(b) - score(a)) || (b.position - a.position);
   });
   const retenu = candidats[0];
-  if (!retenu.avecSymbole && !retenu.avecDecimales && retenu.valeur < 10) return null;
-  return { montant: centimes(retenu.valeur), extrait: retenu.extrait };
+  // Un montant est « fiable » seulement s'il porte € / EUR ou des décimales ;
+  // un entier nu (millésime, numéro) ne l'est pas.
+  const fiable = retenu.avecSymbole || retenu.avecDecimales;
+  return { montant: centimes(retenu.valeur), extrait: retenu.extrait, fiable };
 }
 
 function detecterCategorie(texte) {
   const normalise = sansAccent(texte);
   for (const regle of REGLES_CATEGORIE) {
-    if (regle.mots.some((mot) => normalise.includes(mot))) return regle.categorie;
+    // Comparaison sur frontières de mots : « eau » ne se déclenche pas sur
+    // « bureau », ni « box » sur « boxer ».
+    if (regle.mots.some((mot) => new RegExp(`(^|[^a-z0-9])${mot}([^a-z0-9]|$)`).test(normalise))) {
+      return regle.categorie;
+    }
   }
   return null;
 }
@@ -86,13 +96,15 @@ export function analyser(nomFichier) {
   const sansExtension = String(nomFichier).replace(/\.[a-z0-9]{1,5}$/i, '');
   const espace = sansExtension.replace(/[_]+/g, ' ').trim();
 
-  const date = detecterDate(espace);
-  let reste = date ? espace.replace(date.extrait, ' ') : espace;
-  const montant = detecterMontant(reste);
-  if (montant) reste = reste.replace(montant.extrait, ' ');
+  // Le montant est détecté AVANT la date : sinon le motif de date partielle
+  // « AAAA M » avalerait le chiffre des milliers d'un montant à espace.
+  const montant = detecterMontant(espace);
+  let reste = montant ? espace.replace(montant.extrait, ' ') : espace;
+  const date = detecterDate(reste);
+  if (date) reste = reste.replace(date.extrait, ' ');
 
   const fournisseur = reste
-    .replace(/[€]|eur\b|euros?\b/gi, ' ')
+    .replace(/(^|\s)(€|eur|euros?)\b/gi, ' ')
     .replace(/[-–—.]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -100,14 +112,17 @@ export function analyser(nomFichier) {
 
   const categorie = detecterCategorie(espace);
 
+  // Confiance « haute » réservée à un montant fiable (€ ou décimales) ET une
+  // date complète : c'est le seuil de l'intégration automatique sans confirmation.
   let confiance = 'faible';
-  if (date && montant) confiance = 'haute';
+  if (date?.complete && montant?.fiable) confiance = 'haute';
   else if (date || montant) confiance = 'moyenne';
 
   return {
     date: date?.date || null,
     dateComplete: date?.complete ?? false,
     montant: montant?.montant ?? null,
+    montantFiable: montant?.fiable ?? false,
     fournisseur: fournisseur || null,
     categorie,
     confiance,
@@ -115,14 +130,19 @@ export function analyser(nomFichier) {
   };
 }
 
+/** Clé stable d'une facture, indépendante de son emplacement. */
+export const cleFacture = (fichier) => `facture:${fichier.nom}:${fichier.taille}`;
+
 /** Fichiers du dossier Factures qui restent à intégrer. */
 export function aTraiter(fichiersFactures, charges) {
-  const dejaRattaches = new Set(charges
+  const cheminsRattaches = new Set(charges
     .filter((c) => c.documentChemin && (c.documentEspace || 'documents') === 'factures')
     .map((c) => c.documentChemin));
+  const clesRattachees = new Set(charges.map((c) => c.cleFacture).filter(Boolean));
   return fichiersFactures
     .filter((fichier) => !fichier.chemin.startsWith('Traitées/'))
-    .filter((fichier) => !dejaRattaches.has(fichier.chemin))
+    .filter((fichier) => !cheminsRattaches.has(fichier.chemin))
+    .filter((fichier) => !clesRattachees.has(cleFacture(fichier)))
     .map((fichier) => ({ fichier, analyse: analyser(fichier.nom) }));
 }
 

@@ -27,7 +27,9 @@ export function chargesAnnee(donnees, annee, methode) {
     if (charge.immobilise) continue;
     if (charge.deductible === false) continue;
     if (anneeDe(dateRetenue(charge, methode)) !== annee) continue;
-    const taux = charge.tauxDeduction === undefined || charge.tauxDeduction === null ? 100 : Number(charge.tauxDeduction);
+    const brut = charge.tauxDeduction;
+    const taux = (brut === undefined || brut === null || brut === '' || !Number.isFinite(Number(brut)))
+      ? 100 : Number(brut);
     const montant = centimes((Number(charge.montant) || 0) * (taux / 100));
     total += montant;
     const cle = charge.categorie || 'autres';
@@ -146,9 +148,15 @@ export function premiereAnnee(donnees) {
   if (donnees.parametres.debutActivite) candidats.push(anneeDe(donnees.parametres.debutActivite));
   for (const bien of donnees.biens) if (bien.dateAcquisition) candidats.push(anneeDe(bien.dateAcquisition));
   for (const bail of donnees.baux) if (bail.dateDebut) candidats.push(anneeDe(bail.dateDebut));
-  for (const charge of donnees.charges) if (charge.date) candidats.push(anneeDe(charge.date));
+  for (const charge of donnees.charges) {
+    if (charge.date) candidats.push(anneeDe(charge.date));
+    if (charge.dateReglement) candidats.push(anneeDe(charge.dateReglement));
+  }
   for (const immobilisation of donnees.immobilisations) {
     if (immobilisation.dateMiseEnService) candidats.push(anneeDe(immobilisation.dateMiseEnService));
+  }
+  for (const emprunt of donnees.emprunts) {
+    if (emprunt.datePremiereEcheance) candidats.push(anneeDe(emprunt.datePremiereEcheance));
   }
   for (const loyer of donnees.loyers) if (loyer.annee) candidats.push(Number(loyer.annee));
   const valides = candidats.filter((a) => a && a > 1990 && a < 2200);

@@ -76,9 +76,12 @@ export function syntheseAnneeTousEmprunts(emprunts, annee) {
   return cumul;
 }
 
-/** Capital restant dû à une date donnée (fin d'année). */
+/** Capital restant dû à la fin d'une année. */
 export function capitalRestantDu(emprunt, annee) {
-  const lignes = echeancier(emprunt).filter((l) => l.annee <= annee);
+  const toutes = echeancier(emprunt);
+  if (!toutes.length) return Number(emprunt.capital) || 0; // données incomplètes
+  if (annee < toutes[0].annee) return 0;                   // prêt pas encore débloqué
+  const lignes = toutes.filter((l) => l.annee <= annee);
   if (!lignes.length) return Number(emprunt.capital) || 0;
   return lignes[lignes.length - 1].restantDu;
 }

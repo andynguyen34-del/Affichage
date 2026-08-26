@@ -112,20 +112,42 @@ function normaliser(nom, contenu) {
 
 export async function chargerTout() {
   magasin.etat = await api.lireEtat();
+  const abimes = [];
   await Promise.all(COLLECTIONS.map(async (nom) => {
     const resultat = await api.lireCollection(nom);
+    if (resultat.abime) { abimes.push(resultat.fichier || `${nom}.json`); return; }
     magasin.versions[nom] = resultat.version;
     magasin.donnees[nom] = normaliser(nom, resultat.contenu);
   }));
+  if (abimes.length) {
+    // On refuse de démarrer sur un fichier illisible : le traiter comme vide
+    // écraserait des données récupérables à la première sauvegarde.
+    const erreur = new Error(
+      `Fichier(s) de données illisible(s) : ${abimes.join(', ')}. `
+      + 'Restaurez la dernière version depuis le sous-dossier « Sauvegardes » du dossier partagé, '
+      + 'puis rechargez la page.');
+    erreur.abime = true;
+    throw erreur;
+  }
   await rechargerFichiers();
   notifier('chargement');
 }
 
-export async function rechargerFichiers() {
+const empreinteFichiers = (liste) =>
+  liste.map((f) => `${f.espace}:${f.chemin}:${f.taille}:${f.modifie}`).sort().join('|');
+
+/** Relit les dossiers Documents et Factures. Renvoie true si la liste a changé. */
+export async function rechargerFichiers({ notifier: doitNotifier = false } = {}) {
+  let changement = false;
   for (const espace of ['documents', 'factures']) {
+    const avant = empreinteFichiers(magasin.fichiers[espace] || []);
+    // eslint-disable-next-line no-await-in-loop
     try { magasin.fichiers[espace] = await api.listerFichiers(espace); }
     catch { magasin.fichiers[espace] = []; }
+    if (empreinteFichiers(magasin.fichiers[espace]) !== avant) changement = true;
   }
+  if (changement && doitNotifier) notifier('fichiers');
+  return changement;
 }
 
 /** Relit le dossier partagé ; signale si le contenu a changé (modification de l'autre poste). */
@@ -144,7 +166,7 @@ export async function rafraichir({ silencieux = false } = {}) {
       });
       if (majeur) changement = true;
     }
-    await rechargerFichiers();
+    if (await rechargerFichiers()) changement = true;
     definirSynchro('ok');
   } catch (erreur) {
     definirSynchro('erreur');
@@ -218,15 +240,44 @@ function estampiller(element) {
   };
 }
 
-/** Crée ou met à jour un élément d'une collection. Renvoie l'élément enregistré. */
+/**
+ * Crée ou met à jour un élément d'une collection. Renvoie l'élément enregistré.
+ * La fusion est recalculée à chaque tentative sur la version fraîche du
+ * fichier : les champs qu'on ne soumet pas et qu'un autre poste a ajoutés
+ * entre-temps sont conservés au lieu d'être écrasés.
+ */
 export async function enregistrer(nom, element) {
-  const complet = estampiller({ ...element, id: element.id || crypto.randomUUID() });
+  const id = element.id || crypto.randomUUID();
+  let enregistre;
   await modifier(nom, (contenu) => {
-    const index = contenu.elements.findIndex((e) => e.id === complet.id);
-    if (index >= 0) contenu.elements[index] = complet;
-    else contenu.elements.push(complet);
+    const index = contenu.elements.findIndex((e) => e.id === id);
+    const base = index >= 0 ? contenu.elements[index] : {};
+    enregistre = estampiller({ ...base, ...element, id });
+    if (index >= 0) contenu.elements[index] = enregistre;
+    else contenu.elements.push(enregistre);
   });
-  return complet;
+  return enregistre;
+}
+
+/**
+ * Applique une transformation en place à UN élément, sur la version fraîche du
+ * fichier à chaque tentative. À utiliser pour les ajouts dans une sous-liste
+ * (encaissements) : deux ajouts concurrents s'additionnent au lieu de s'écraser.
+ */
+export async function modifierElement(nom, id, transformation, gabaritSiAbsent = null) {
+  let enregistre;
+  await modifier(nom, (contenu) => {
+    let index = contenu.elements.findIndex((e) => e.id === id);
+    if (index < 0) {
+      if (!gabaritSiAbsent) throw new Error('Élément introuvable.');
+      contenu.elements.push({ ...gabaritSiAbsent, id });
+      index = contenu.elements.length - 1;
+    }
+    transformation(contenu.elements[index]);
+    enregistre = estampiller(contenu.elements[index]);
+    contenu.elements[index] = enregistre;
+  });
+  return enregistre;
 }
 
 export async function supprimer(nom, id) {

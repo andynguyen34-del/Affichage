@@ -11,12 +11,21 @@ import * as lecture from '../calculs/factures.js';
 const TONS_CONFIANCE = { haute: 'succes', moyenne: 'attention', faible: 'alerte' };
 const LIBELLES_CONFIANCE = { haute: 'Complète', moyenne: 'À compléter', faible: 'À saisir' };
 
-/** Crée la charge, range la facture, relie les deux. */
+/**
+ * Crée la charge, range la facture, relie les deux — dans cet ordre, pour
+ * qu'un échec du rangement laisse une dépense correcte pointant sur le fichier
+ * encore en boîte de réception (situation rattrapable), plutôt qu'une facture
+ * rangée sans dépense (perdue).
+ */
 async function integrer(fichier, valeurs) {
   const annee = anneeDe(valeurs.date) || new Date().getFullYear();
-  const range = await api.deplacerFichier('factures', fichier.chemin, 'factures',
-    lecture.cheminRangement(fichier.nom, annee));
-  await etat.enregistrer('charges', {
+  // Clé stable indépendante du chemin : empêche qu'une même facture,
+  // intégrée en même temps depuis les deux postes, crée deux dépenses.
+  const cleFacture = `facture:${fichier.nom}:${fichier.taille}`;
+  const dejaFaite = etat.liste('charges').some((c) => c.cleFacture === cleFacture);
+  if (dejaFaite) return false;
+
+  const charge = await etat.enregistrer('charges', {
     date: valeurs.date,
     dateReglement: valeurs.dateReglement || valeurs.date,
     categorie: valeurs.categorie,
@@ -28,11 +37,24 @@ async function integrer(fichier, valeurs) {
     tauxDeduction: valeurs.tauxDeduction ?? 100,
     immobilise: !!valeurs.immobilise,
     documentEspace: 'factures',
-    documentChemin: range.chemin,
+    documentChemin: fichier.chemin,
     origine: 'facture-automatique',
+    cleFacture,
     notes: valeurs.notes || '',
   });
-  await etat.rechargerFichiers();
+
+  try {
+    const range = await api.deplacerFichier('factures', fichier.chemin, 'factures',
+      lecture.cheminRangement(fichier.nom, annee));
+    await etat.enregistrer('charges', { id: charge.id, documentChemin: range.chemin });
+  } catch (erreur) {
+    // La dépense existe et pointe sur le fichier resté en boîte : on prévient
+    // sans perdre la saisie.
+    notifier('Dépense créée, mais le rangement du fichier a échoué : il reste dans « Factures ».', 'erreur');
+    console.error(erreur);
+  }
+  await etat.rechargerFichiers({ notifier: true });
+  return true;
 }
 
 async function integrerAvecFormulaire(donnees, entree) {
@@ -69,8 +91,9 @@ async function integrerAvecFormulaire(donnees, entree) {
   });
   if (!saisie) return;
   try {
-    await integrer(fichier, saisie);
-    notifier(`Facture intégrée et rangée dans Factures\\Traitées\\${anneeDe(saisie.date)}.`, 'succes');
+    const faite = await integrer(fichier, saisie);
+    if (faite) notifier(`Facture intégrée et rangée dans Factures\\Traitées\\${anneeDe(saisie.date)}.`, 'succes');
+    else notifier('Cette facture avait déjà été intégrée.');
   } catch (erreur) { signalerErreur(erreur); }
 }
 
@@ -83,10 +106,12 @@ export async function routineIntegration(donnees, { silencieux = false } = {}) {
     .filter((entree) => entree.analyse.confiance === 'haute' && entree.analyse.categorie);
   if (!candidats.length) return 0;
 
+  let reussies = 0;
+  let echecs = 0;
   for (const entree of candidats) {
     try {
       /* eslint-disable no-await-in-loop */
-      await integrer(entree.fichier, {
+      const faite = await integrer(entree.fichier, {
         date: entree.analyse.date,
         dateReglement: entree.analyse.date,
         montant: entree.analyse.montant,
@@ -96,12 +121,17 @@ export async function routineIntegration(donnees, { silencieux = false } = {}) {
         bienId: donnees.biens[0]?.id || '',
         deductible: true,
       });
+      if (faite) reussies += 1;
     } catch (erreur) {
-      if (!silencieux) signalerErreur(erreur);
+      echecs += 1;
+      console.error(erreur);
     }
   }
-  notifier(`${candidats.length} facture(s) intégrée(s) automatiquement.`, 'succes');
-  return candidats.length;
+  if (reussies) notifier(`${reussies} facture(s) intégrée(s) automatiquement.`, 'succes');
+  // Les échecs sont exactement le cas où l'utilisateur doit être prévenu,
+  // même en démarrage silencieux.
+  if (echecs) notifier(`${echecs} facture(s) n’ont pas pu être intégrées.`, 'erreur');
+  return reussies;
 }
 
 async function deposerFactures() {
@@ -112,7 +142,7 @@ async function deposerFactures() {
       /* eslint-disable no-await-in-loop */
       await api.deposerFichier('factures', fichier.name, fichier);
     }
-    await etat.rechargerFichiers();
+    await etat.rechargerFichiers({ notifier: true });
     notifier(`${fichiers.length} facture(s) déposée(s).`, 'succes');
   } catch (erreur) { signalerErreur(erreur); }
 }
@@ -133,7 +163,7 @@ function zoneDepot() {
         /* eslint-disable no-await-in-loop */
         await api.deposerFichier('factures', fichier.name, fichier);
       }
-      await etat.rechargerFichiers();
+      await etat.rechargerFichiers({ notifier: true });
       notifier(`${fichiers.length} facture(s) déposée(s).`, 'succes');
     } catch (erreur) { signalerErreur(erreur); }
   });
@@ -233,7 +263,7 @@ export default {
           if (!confirme) return;
           try {
             await api.supprimerFichier('factures', e.fichier.chemin);
-            await etat.rechargerFichiers();
+            await etat.rechargerFichiers({ notifier: true });
             notifier('Facture écartée.');
           } catch (erreur) { signalerErreur(erreur); }
         }, { petit: true, type: 'danger' }),

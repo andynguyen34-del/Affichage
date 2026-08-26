@@ -60,6 +60,10 @@ function dessinerSelecteurAnnee() {
   const donnees = collecte();
   const debut = fiscal.premiereAnnee(donnees);
   const fin = Math.max(new Date().getFullYear() + 1, contexte.annee);
+  // On recadre l'exercice courant sur l'intervalle proposé : sans quoi une
+  // suppression qui fait remonter la première année désynchronise le sélecteur
+  // et les pages calculent sur une année sans option.
+  contexte.annee = Math.min(fin, Math.max(debut, contexte.annee));
   for (let annee = fin; annee >= debut; annee -= 1) {
     selecteur.append(h('option', { value: annee, selected: annee === contexte.annee }, String(annee)));
   }
@@ -155,8 +159,11 @@ async function demarrer() {
   } catch (erreur) {
     const ecran = document.getElementById('chargement');
     ecran.classList.add('erreur');
-    ecran.querySelector('.chargement-texte').textContent =
-      `${erreur.message} Vérifiez que la fenêtre noire « Gestion LMNP — serveur » est toujours ouverte, puis rechargez la page.`;
+    // Un fichier abîmé porte son propre message (il nomme le fichier et le
+    // dossier Sauvegardes) ; sinon c'est bien le serveur qu'il faut vérifier.
+    ecran.querySelector('.chargement-texte').textContent = erreur.abime
+      ? erreur.message
+      : `${erreur.message} Vérifiez que la fenêtre noire « Gestion LMNP — serveur » est toujours ouverte, puis rechargez la page.`;
     return;
   }
 
@@ -203,9 +210,15 @@ async function demarrer() {
   dessiner();
 
   // Routine d'intégration des factures déposées dans le dossier partagé.
+  // On relit d'abord le dossier partagé : sans ce rafraîchissement, deux postes
+  // qui démarrent ensemble intègreraient chacun la même facture avant que
+  // OneDrive n'ait propagé la charge de l'autre. La clé stable par facture
+  // (cleFacture) reste le garde-fou de dernier recours.
   if (parametresActuels.integrationAutomatiqueFactures) {
-    try { await routineIntegration(collecte(), { silencieux: true }); }
-    catch (erreur) { console.error(erreur); }
+    try {
+      await etat.rafraichir({ silencieux: true });
+      await routineIntegration(collecte(), { silencieux: true });
+    } catch (erreur) { console.error(erreur); }
   }
 
   // Reprise automatique des saisies faites sur l'autre poste.

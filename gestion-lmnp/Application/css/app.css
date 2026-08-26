@@ -293,10 +293,20 @@ textarea { min-height: 4.5rem; resize: vertical; }
 /* ---------- impression ---------- */
 .zone-impression { display: none; }
 @media print {
-  .application, .fond-modale, .notifications { display: none !important; }
-  .zone-impression { display: block; }
+  .fond-modale, .notifications { display: none !important; }
   body { background: #fff; }
   @page { size: A4; margin: 18mm; }
+
+  /* Impression d'une page (Résultat, Liasse) : on masque l'habillage mais on
+     garde le contenu, sinon la feuille sort blanche. */
+  .barre-laterale, .entete, .alertes { display: none !important; }
+  .contenu { overflow: visible !important; padding: 0 !important; }
+  .carte { box-shadow: none; border-color: #999; break-inside: avoid; }
+
+  /* Impression d'un document dédié (quittance, avis, relevé) : impression.js
+     pose data-impression="document" ; on masque alors toute l'application. */
+  body[data-impression="document"] .application { display: none !important; }
+  body[data-impression="document"] .zone-impression { display: block; }
 }
 .document-imprime { font-size: 12pt; color: #000; max-width: 180mm; }
 .document-imprime .entete-doc { display: flex; justify-content: space-between; margin-bottom: 14mm; }

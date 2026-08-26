@@ -16,7 +16,7 @@ async function deposer(espace, sousDossier) {
       /* eslint-disable no-await-in-loop */
       await api.deposerFichier(espace, sousDossier ? `${sousDossier}/${fichier.name}` : fichier.name, fichier);
     }
-    await etat.rechargerFichiers();
+    await etat.rechargerFichiers({ notifier: true });
     notifier(`${fichiers.length} fichier(s) déposé(s).`, 'succes');
   } catch (erreur) { signalerErreur(erreur); }
 }
@@ -58,7 +58,7 @@ export default {
         filtre = valeur;
         vider(zoneTableau);
         zoneTableau.append(dessinerTableau());
-      }),
+      }, filtre),
     ]));
 
     const colonnes = [
@@ -90,7 +90,7 @@ export default {
         try {
           await api.supprimerFichier(f.espace, f.chemin);
           if (charge) await etat.enregistrer('charges', { ...charge, documentChemin: '', documentEspace: '' });
-          await etat.rechargerFichiers();
+          await etat.rechargerFichiers({ notifier: true });
           notifier('Fichier déplacé dans la corbeille.');
         } catch (erreur) { signalerErreur(erreur); }
       }, { petit: true, type: 'danger' }) },

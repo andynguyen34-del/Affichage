@@ -30,17 +30,24 @@ function tableauMontants(echeance) {
   ]);
 }
 
-function periodeTexte(echeance) {
-  const debut = isoDepuis(echeance.annee, echeance.mois, 1);
-  const fin = isoDepuis(echeance.annee, echeance.mois, dernierJour(echeance.annee, echeance.mois));
+/** Période réellement couverte : bornée aux dates du bail pour un mois partiel. */
+function periodeTexte(echeance, bail) {
+  let debut = isoDepuis(echeance.annee, echeance.mois, 1);
+  let fin = isoDepuis(echeance.annee, echeance.mois, dernierJour(echeance.annee, echeance.mois));
+  const debutBail = String(bail?.dateDebut || '').slice(0, 10);
+  const finBail = String(bail?.dateFin || '').slice(0, 10);
+  if (debutBail && debutBail > debut) debut = debutBail;
+  if (finBail && finBail < fin) fin = finBail;
   return `du ${dateLongue(debut)} au ${dateLongue(fin)}`;
 }
 
 function imprimer(noeud) {
   const zone = vider(document.getElementById('zone-impression'));
   zone.append(noeud);
+  document.body.dataset.impression = 'document';
   const apres = () => {
     window.removeEventListener('afterprint', apres);
+    delete document.body.dataset.impression;
     setTimeout(() => vider(zone), 500);
   };
   window.addEventListener('afterprint', apres);
@@ -63,7 +70,7 @@ function enteteDocument({ bailleur, locataire, bien }) {
   ]);
 }
 
-export function imprimerQuittance({ bailleur, locataire, bien, echeance, dateReglement, lieu }) {
+export function imprimerQuittance({ bailleur, locataire, bien, bail, echeance, dateReglement, lieu }) {
   if (!bailleur?.nom) {
     notifier('Renseignez d’abord un bailleur dans les Paramètres.', 'erreur');
     return;
@@ -71,17 +78,18 @@ export function imprimerQuittance({ bailleur, locataire, bien, echeance, dateReg
   const adresseLogement = [bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(' ')]
     .filter(Boolean).join(', ');
   const nomLocataire = locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'le locataire';
+  const periode = periodeTexte(echeance, bail);
 
   imprimer(h('div', { class: 'document-imprime' }, [
     enteteDocument({ bailleur, locataire, bien }),
     h('h2', { texte: `Quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}` }),
     h('p', { texte: `Logement loué : ${adresseLogement || '—'}` }),
-    h('p', { texte: `Période : ${periodeTexte(echeance)}` }),
+    h('p', { texte: `Période : ${periode}` }),
     tableauMontants(echeance),
     h('p', {
       texte: `Je soussigné${bailleur.feminin ? 'e' : ''} ${bailleur.nom}, bailleur du logement désigné ci-dessus, `
         + `déclare avoir reçu de ${nomLocataire} la somme de ${montant(echeance.total || 0)} `
-        + `au titre du loyer et des charges pour la période ${periodeTexte(echeance)}, et lui en donne quittance, `
+        + `au titre du loyer et des charges pour la période ${periode}, et lui en donne quittance, `
         + 'sous réserve de tous mes droits.',
     }),
     h('div', { class: 'mentions' }, [
@@ -96,7 +104,7 @@ export function imprimerQuittance({ bailleur, locataire, bien, echeance, dateReg
   ]));
 }
 
-export function imprimerAvis({ bailleur, locataire, bien, echeance, lieu }) {
+export function imprimerAvis({ bailleur, locataire, bien, bail, echeance, lieu }) {
   if (!bailleur?.nom) {
     notifier('Renseignez d’abord un bailleur dans les Paramètres.', 'erreur');
     return;
@@ -107,7 +115,7 @@ export function imprimerAvis({ bailleur, locataire, bien, echeance, lieu }) {
     enteteDocument({ bailleur, locataire, bien }),
     h('h2', { texte: `Avis d’échéance — ${nomMois(echeance.mois)} ${echeance.annee}` }),
     h('p', { texte: `Logement loué : ${adresseLogement || '—'}` }),
-    h('p', { texte: `Période : ${periodeTexte(echeance)}` }),
+    h('p', { texte: `Période : ${periodeTexte(echeance, bail)}` }),
     tableauMontants(echeance),
     h('p', { texte: `Somme à régler avant le ${dateLongue(echeance.dateEcheance)}.` }),
     h('div', { class: 'mentions', texte: 'Le présent avis ne vaut pas quittance. '

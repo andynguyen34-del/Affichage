@@ -124,14 +124,20 @@ export const signalerErreur = (erreur) => {
 
 let fermerModaleCourante = null;
 
-export function ouvrirModale({ titre, corps, pied, large = false }) {
+export function ouvrirModale({ titre, corps, pied, large = false, surFermeture }) {
   const fond = document.getElementById('fond-modale');
   vider(fond);
-  const fermer = () => {
+  let ferme = false;
+  const fermer = ({ valide = false } = {}) => {
+    if (ferme) return;
+    ferme = true;
     fond.hidden = true;
     vider(fond);
     fermerModaleCourante = null;
     document.removeEventListener('keydown', surTouche);
+    // Fermeture par ✕, Échap ou clic hors modale : prévenir l'appelant pour
+    // qu'il résolve sa promesse (annulation), sans quoi elle resterait pendante.
+    if (!valide && surFermeture) surFermeture();
   };
   const surTouche = (evenement) => { if (evenement.key === 'Escape') fermer(); };
   fermerModaleCourante = fermer;
@@ -155,12 +161,15 @@ export function fermerModale() { if (fermerModaleCourante) fermerModaleCourante(
 
 export function confirmer({ titre, message, libelleValider = 'Confirmer', danger = false }) {
   return new Promise((resoudre) => {
+    let repondu = false;
+    const repondre = (valeur) => { if (!repondu) { repondu = true; resoudre(valeur); } };
     const fermer = ouvrirModale({
       titre,
       corps: h('p', { texte: message }),
+      surFermeture: () => repondre(false),
       pied: [
-        bouton('Annuler', () => { fermer(); resoudre(false); }),
-        bouton(libelleValider, () => { fermer(); resoudre(true); }, { type: danger ? 'danger' : 'primaire' }),
+        bouton('Annuler', () => { fermer(); repondre(false); }),
+        bouton(libelleValider, () => { fermer({ valide: true }); repondre(true); }, { type: danger ? 'danger' : 'primaire' }),
       ],
     });
   });
@@ -181,10 +190,24 @@ export function formulaire({ titre, champs, valeurs = {}, libelleValider = 'Enre
     let fermer = null;
 
     const dessiner = () => {
+      // On mémorise le champ actif et la position du curseur : le redessin
+      // recrée les contrôles, il faut rendre le focus sinon la saisie au
+      // clavier est interrompue à chaque champ « rafraichit ».
+      const actif = document.activeElement;
+      const idActif = actif && actif.id;
+      let curseur = null;
+      try { curseur = actif ? actif.selectionStart : null; } catch { curseur = null; }
       vider(conteneur);
       for (const champ of champs) {
         if (champ.quand && !champ.quand(etat)) continue;
         conteneur.append(rendreChamp(champ, etat, dessiner));
+      }
+      if (idActif) {
+        const repris = conteneur.querySelector(`#${(window.CSS && CSS.escape) ? CSS.escape(idActif) : idActif}`);
+        if (repris) {
+          repris.focus();
+          try { if (curseur !== null) repris.setSelectionRange(curseur, curseur); } catch { /* type sans sélection */ }
+        }
       }
     };
 
@@ -204,17 +227,21 @@ export function formulaire({ titre, champs, valeurs = {}, libelleValider = 'Enre
         }
       }
       if (!valide) { notifier('Complétez les champs obligatoires.', 'erreur'); return; }
-      fermer();
-      resoudre(etat);
+      fermer({ valide: true });
+      repondre(etat);
     };
+
+    let repondu = false;
+    const repondre = (valeur) => { if (!repondu) { repondu = true; resoudre(valeur); } };
 
     dessiner();
     fermer = ouvrirModale({
       titre,
       large,
       corps: [aide ? h('p', { class: 'legende', texte: aide }) : null, conteneur],
+      surFermeture: () => repondre(null),
       pied: [
-        bouton('Annuler', () => { fermer(); resoudre(null); }),
+        bouton('Annuler', () => { fermer(); repondre(null); }),
         bouton(libelleValider, valider, { type: 'primaire' }),
       ],
     });
@@ -243,15 +270,23 @@ function rendreChamp(champ, etat, redessiner) {
     case 'zone':
       controle = h('textarea', { id: identifiant, oninput: surSaisie((c) => c.value) }, valeur ?? '');
       break;
-    case 'liste':
+    case 'liste': {
+      const options = champ.options || [];
+      // Si la valeur courante ne correspond à aucune option, le navigateur
+      // affiche la première : on aligne l'état dessus, sinon un formulaire à
+      // une seule option (« change » jamais émis) reste bloqué à la validation.
+      if (options.length && !options.some((o) => String(o.valeur) === String(valeur ?? ''))) {
+        etat[champ.cle] = champ.numerique ? Number(options[0].valeur) : options[0].valeur;
+      }
       controle = h('select', {
         id: identifiant,
         onchange: surSaisie((c) => (champ.numerique ? Number(c.value) : c.value)),
-      }, (champ.options || []).map((o) => h('option', {
+      }, options.map((o) => h('option', {
         value: o.valeur,
-        selected: String(o.valeur) === String(valeur ?? ''),
+        selected: String(o.valeur) === String(etat[champ.cle] ?? ''),
       }, o.libelle)));
       break;
+    }
     case 'case':
       controle = h('input', {
         id: identifiant, type: 'checkbox', checked: !!valeur,
@@ -267,7 +302,7 @@ function rendreChamp(champ, etat, redessiner) {
         step: champ.pas ?? (champ.type === 'entier' ? '1' : '0.01'),
         min: champ.min, max: champ.max,
         value: valeur ?? '',
-        oninput: surSaisie((c) => (c.value === '' ? '' : Number(c.value))),
+        oninput: surSaisie((c) => (c.value === '' ? null : Number(c.value))),
       });
       break;
     case 'date':
@@ -301,9 +336,12 @@ export function barreOutils(elements) {
   return h('div', { class: 'barre-outils' }, elements);
 }
 
-export function champRecherche(placeholder, surChangement) {
+export function champRecherche(placeholder, surChangement, valeurInitiale = '') {
+  // La valeur courante est réappliquée : sinon, à chaque redessin, le champ
+  // réapparaît vide alors que le filtre reste actif — les lignes semblent
+  // avoir disparu.
   return h('input', {
-    class: 'recherche', type: 'search', placeholder,
+    class: 'recherche', type: 'search', placeholder, value: valeurInitiale,
     oninput: (e) => surChangement(e.target.value.toLowerCase().trim()),
   });
 }

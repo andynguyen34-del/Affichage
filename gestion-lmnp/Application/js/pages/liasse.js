@@ -67,8 +67,9 @@ export default {
     const exercice = fiscal.exercice(donnees, annee);
     const conteneur = h('div');
 
-    const brut = centimes(donnees.immobilisations.reduce((s, i) => s + (Number(i.base) || 0), 0));
-    const cumulAmortissements = amortissements.cumulGlobal(donnees.immobilisations, annee);
+    // Bilan : seuls les composants encore inscrits (cessions exclues).
+    const brut = amortissements.baseInscrite(donnees.immobilisations, annee);
+    const cumulAmortissements = amortissements.cumulInscrit(donnees.immobilisations, annee);
     const capitalRestant = centimes(donnees.emprunts.reduce((s, e) => s + calculEmprunt.capitalRestantDu(e, annee), 0));
     const depots = centimes(donnees.baux
       .filter((b) => !b.dateFin || b.dateFin >= `${annee}-12-31`)
@@ -174,10 +175,10 @@ export default {
         messageVide: 'Aucune immobilisation.',
         pied: h('tr', {}, [
           h('td', { texte: 'Total' }), h('td', {}),
-          h('td', { class: 'nombre', texte: montant(brut) }), h('td', {}),
+          h('td', { class: 'nombre', texte: montant(centimes(donnees.immobilisations.reduce((s, i) => s + (Number(i.base) || 0), 0))) }), h('td', {}),
           h('td', { class: 'nombre', texte: montant(exercice.amortissements.dotation) }),
-          h('td', { class: 'nombre', texte: montant(cumulAmortissements) }),
-          h('td', { class: 'nombre', texte: montant(centimes(brut - cumulAmortissements)) }),
+          h('td', { class: 'nombre', texte: montant(amortissements.cumulGlobal(donnees.immobilisations, annee)) }),
+          h('td', { class: 'nombre', texte: montant(centimes(donnees.immobilisations.reduce((s, i) => s + amortissements.valeurNetteComptable(i, annee), 0))) }),
         ]),
       }),
     }));

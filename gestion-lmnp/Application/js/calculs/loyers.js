@@ -30,13 +30,23 @@ export function echeancesTheoriques(bail, annee) {
     if (proportion <= 0) continue;
     const loyerHc = centimes((Number(bail.loyerHc) || 0) * proportion);
     const charges = centimes((Number(bail.provisionCharges) || 0) * proportion);
+    // La date d'échéance est bornée à la période réellement couverte par le
+    // bail dans ce mois, pour ne pas afficher une échéance hors bail.
+    let dateEcheance = isoDepuis(annee, mois, Number(bail.jourEcheance) || 1);
+    const debutBail = String(bail.dateDebut || '').slice(0, 10);
+    const finBail = String(bail.dateFin || '').slice(0, 10);
+    if (debutBail && dateEcheance < debutBail) dateEcheance = debutBail;
+    if (finBail && dateEcheance > finBail) dateEcheance = finBail;
     lignes.push({
+      // Identifiant déterministe : deux postes qui « créent » le même mois
+      // visent le même enregistrement, jamais deux doublons.
+      id: `${bail.id}-${annee}-${String(mois).padStart(2, '0')}`,
       bailId: bail.id,
       annee,
       mois,
       proportion,
       partiel: proportion < 1,
-      dateEcheance: isoDepuis(annee, mois, Number(bail.jourEcheance) || 1),
+      dateEcheance,
       loyerHc,
       charges,
       autres: 0,
@@ -132,7 +142,12 @@ export function encaissementsAnnee(loyersEnregistres, annee) {
       total.autres += recu * ((Number(loyer.autres) || 0) / attendu);
     }
   }
-  for (const cle of Object.keys(total)) total[cle] = centimes(total[cle]);
+  // Répartition au centime : on arrondit le total et deux postes, le
+  // troisième absorbe le reliquat pour que la somme des lignes égale le total.
+  total.total = centimes(total.total);
+  total.loyer = centimes(total.loyer);
+  total.charges = centimes(total.charges);
+  total.autres = centimes(total.total - total.loyer - total.charges);
   return total;
 }
 
