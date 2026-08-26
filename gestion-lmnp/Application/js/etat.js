@@ -76,7 +76,10 @@ const magasin = {
 export const donnees = () => magasin.donnees;
 export const infosServeur = () => magasin.etat;
 export const fichiers = (espace) => magasin.fichiers[espace] || [];
-export const utilisateur = () => magasin.etat?.utilisateur || 'inconnu';
+export const utilisateur = () => {
+  try { const local = localStorage.getItem('lmnp-utilisateur'); if (local) return local; } catch { /* ignore */ }
+  return magasin.etat?.utilisateur || 'inconnu';
+};
 
 export function liste(nom) {
   const valeur = magasin.donnees[nom];
@@ -102,6 +105,7 @@ function definirSynchro(valeur) {
   magasin.synchro = valeur;
   notifier('synchro');
 }
+
 
 function normaliser(nom, contenu) {
   if (contenu === null || contenu === undefined) return contenuParDefaut(nom);

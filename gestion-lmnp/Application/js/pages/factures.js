@@ -244,7 +244,7 @@ export default {
 
     const colonnes = [
       { titre: 'Fichier', valeur: (e) => h('div', {}, [
-        h('a', { class: 'lien-doc', href: api.urlFichier('factures', e.fichier.chemin), target: '_blank' }, e.fichier.nom),
+        h('a', { class: 'lien-doc', href: '#', onclick: (ev) => { ev.preventDefault(); api.ouvrirFichier('factures', e.fichier.chemin).catch(signalerErreur); } }, e.fichier.nom),
         h('div', { class: 'legende', texte: `${taille(e.fichier.taille)} — déposé le ${date(e.fichier.modifie)}` }),
       ]) },
       { titre: 'Date lue', valeur: (e) => (e.analyse.date ? date(e.analyse.date) : '—') },
@@ -294,8 +294,8 @@ export default {
             { titre: 'Montant', nombre: true, valeur: (c) => montant(c.montant) },
             { titre: 'Justificatif', valeur: (c) => h('a', {
               class: 'lien-doc',
-              href: api.urlFichier(c.documentEspace || 'documents', c.documentChemin),
-              target: '_blank',
+              href: '#',
+              onclick: (ev) => { ev.preventDefault(); api.ouvrirFichier(c.documentEspace || 'documents', c.documentChemin).catch(signalerErreur); },
             }, '📎 ouvrir') },
           ],
           lignes: [...integrees].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 25),

@@ -35,19 +35,20 @@ export default {
     }));
 
     conteneur.append(carte({
-      titre: 'Travailler à deux',
+      titre: 'Travailler à deux : un seul poste à la fois',
       corps: h('div', { class: 'aide-bloc' }, [
-        p('Chacun lance l’application depuis son propre poste. Les modifications sont écrites dans le dossier '
-          + 'partagé et reprises par l’autre poste dans la minute.'),
+        p('Pour qu’aucune saisie ne soit jamais écrasée, l’application ne s’utilise que depuis un poste à la '
+          + 'fois. Quand vous l’ouvrez, elle pose un « verrou » dans le dossier partagé.'),
         liste([
-          'Si vous modifiez tous les deux en même temps deux lignes différentes, les deux saisies sont conservées.',
-          'Si vous modifiez la même ligne, c’est la dernière enregistrée qui l’emporte.',
-          'Le bouton « Actualiser » en haut à droite force la relecture du dossier.',
-          ['Si OneDrive crée une copie de conflit dans ', h('code', { texte: 'Données\\' }),
-            ', un bandeau orange vous le signale en haut de l’écran.'],
+          'Si l’autre poste l’utilise déjà, vous voyez un écran d’attente : dès qu’il ferme l’application, '
+            + 'vous y entrez automatiquement, sans rien faire.',
+          'Si l’autre poste a été fermé brutalement (ordinateur éteint, onglet fermé sans quitter), le verrou '
+            + 'expire tout seul au bout d’une minute et demie, et vous reprenez la main.',
+          ['Pour fermer proprement et libérer tout de suite le verrou : bouton ',
+            h('strong', { texte: 'Quitter' }), ' en bas à gauche.'],
         ]),
-        p('Conseil : évitez d’ouvrir l’application sur les deux postes pendant une longue séance de saisie. '
-          + 'La synchronisation OneDrive prend parfois plusieurs minutes.'),
+        p('Le verrou passe par OneDrive, qui met quelques secondes à synchroniser : si vous ouvrez tous les '
+          + 'deux exactement au même moment, mettez-vous simplement d’accord sur qui commence.'),
       ]),
     }));
 
@@ -102,14 +103,29 @@ export default {
     }));
 
     conteneur.append(carte({
+      titre: 'Comment l’application s’ouvre',
+      corps: h('div', { class: 'aide-bloc' }, [
+        p('L’application est une simple page web autonome ('
+          , h('code', { texte: 'Gestion LMNP.html' }), '), ouverte dans Google Chrome ou Microsoft Edge. '
+          + 'Il n’y a aucun programme installé, aucune fenêtre à laisser ouverte, aucun accès à Internet : '
+          + 'la page lit et écrit directement dans le dossier que vous lui désignez au premier lancement.'),
+        p('C’est pour cela qu’un antivirus n’a rien à y signaler.'),
+      ]),
+    }));
+
+    conteneur.append(carte({
       titre: 'Dépannage',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          ['L’application ne s’ouvre pas : vérifiez que la fenêtre noire « Gestion LMNP — serveur » est ouverte. '
-            + 'Sinon, relancez ', h('code', { texte: 'Gestion LMNP.cmd' }), '.'],
-          'La page affiche « Dossier inaccessible » : OneDrive est peut-être en train de synchroniser, ou la fenêtre du serveur a été fermée.',
+          ['« Cette application a besoin de Chrome ou Edge » : vous l’avez ouverte avec Firefox ou un autre '
+            + 'navigateur. Faites un clic droit sur ', h('code', { texte: 'Gestion LMNP.html' }),
+            ' → Ouvrir avec → Google Chrome.'],
+          'L’application redemande le dossier à chaque ouverture : c’est normal si votre Chrome n’autorise pas '
+            + 'la mémorisation pour les fichiers locaux. Cliquez « Choisir le dossier », rien de plus.',
           ['Une saisie a disparu : ouvrez le dossier ', h('code', { texte: 'Sauvegardes' }),
             ', repérez la journée voulue et recopiez le fichier voulu dans ', h('code', { texte: 'Données' }), '.'],
+          'Écran d’attente qui ne se débloque pas : l’autre poste a peut-être laissé l’application ouverte. '
+            + 'Le verrou se libère de lui-même une minute et demie après sa fermeture.',
           'Pour fermer proprement : bouton « Quitter l’application » en bas à gauche.',
         ]),
       ]),

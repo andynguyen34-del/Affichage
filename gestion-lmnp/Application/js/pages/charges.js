@@ -129,8 +129,8 @@ export default {
       { titre: 'Justificatif', valeur: (c) => (c.documentChemin
         ? h('a', {
           class: 'lien-doc',
-          href: api.urlFichier(c.documentEspace || 'documents', c.documentChemin),
-          target: '_blank',
+          href: '#',
+          onclick: (ev) => { ev.preventDefault(); api.ouvrirFichier(c.documentEspace || 'documents', c.documentChemin).catch(signalerErreur); },
         }, '📎 ouvrir')
         : bouton('Joindre', () => joindreJustificatif(c), { petit: true, type: 'discret' })) },
       { titre: '', actions: true, valeur: (c) => h('div', { class: 'groupe-boutons' }, [

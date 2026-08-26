@@ -7,3 +7,6 @@ Factures/*
 !Factures/LISEZ-MOI.txt
 Sauvegardes/
 Corbeille/
+
+# Fichier applicatif construit (régénéré par Application/construire.mjs)
+/Gestion LMNP.html

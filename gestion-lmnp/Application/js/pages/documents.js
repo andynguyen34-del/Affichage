@@ -63,7 +63,7 @@ export default {
 
     const colonnes = [
       { titre: 'Fichier', valeur: (f) => h('div', {}, [
-        h('a', { class: 'lien-doc', href: api.urlFichier(f.espace, f.chemin), target: '_blank' }, f.nom),
+        h('a', { class: 'lien-doc', href: '#', onclick: (ev) => { ev.preventDefault(); api.ouvrirFichier(f.espace, f.chemin).catch(signalerErreur); } }, f.nom),
         h('div', { class: 'legende', texte: f.chemin.includes('/') ? f.chemin.slice(0, f.chemin.lastIndexOf('/')) : 'racine' }),
       ]) },
       { titre: 'Espace', valeur: (f) => badge(f.espace === 'factures' ? 'Factures' : 'Documents',

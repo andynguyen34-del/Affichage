@@ -2,7 +2,7 @@
 
 import * as etat from './etat.js';
 import * as api from './api.js';
-import { h, vider, notifier, signalerErreur, bouton, confirmer } from './ui.js';
+import { h, vider, notifier, signalerErreur, bouton, confirmer, formulaire } from './ui.js';
 import * as fiscal from './calculs/fiscal.js';
 
 import tableauDeBord from './pages/tableau-de-bord.js';
@@ -153,19 +153,147 @@ function surHachage() {
   }
 }
 
+function messageErreurConnexion(erreur) {
+  const zone = document.getElementById('connexion-erreur');
+  zone.hidden = false;
+  zone.textContent = erreur?.name === 'AbortError'
+    ? 'Choix annulé. Cliquez de nouveau pour désigner le dossier.'
+    : (erreur?.message || String(erreur));
+}
+
+/** Écran de connexion : on désigne (ou reconnecte) le dossier partagé avant tout. */
 async function demarrer() {
+  const chargement = document.getElementById('chargement');
+  const connexion = document.getElementById('connexion');
+  const bouton = document.getElementById('bouton-connexion');
+  const message = document.getElementById('connexion-message');
+
+  if (!api.apiDisponible()) {
+    chargement.hidden = true;
+    connexion.hidden = false;
+    bouton.hidden = true;
+    message.innerHTML = 'Cette application a besoin de <strong>Google Chrome</strong> ou de '
+      + '<strong>Microsoft Edge</strong> pour accéder au dossier partagé. '
+      + 'Ouvrez le fichier <code>Gestion LMNP.html</code> avec l’un de ces deux navigateurs.';
+    return;
+  }
+
+  // Reconnexion silencieuse si l'autorisation d'accès tient encore.
+  if (await api.reconnexionSilencieuse()) { await demarrerAvecDossier(); return; }
+
+  chargement.hidden = true;
+  connexion.hidden = false;
+  const memorise = await api.handleMemorise();
+  if (memorise) {
+    message.innerHTML = `Cliquez pour rouvrir le dossier <strong>${memorise.name}</strong> et en autoriser l’accès.`;
+    bouton.textContent = `Reconnecter « ${memorise.name} »`;
+    bouton.onclick = async () => {
+      try { if (await api.reconnecterDossier()) await demarrerAvecDossier(); }
+      catch (erreur) { messageErreurConnexion(erreur); }
+    };
+  } else {
+    message.innerHTML = 'Choisissez le dossier partagé <strong>Gestion LMNP ANIKA</strong> (dans OneDrive). '
+      + 'Vous ne le ferez qu’une fois : ensuite, un simple clic suffira.';
+    bouton.textContent = 'Choisir le dossier partagé';
+    bouton.onclick = async () => {
+      try { await api.choisirDossier(); await demarrerAvecDossier(); }
+      catch (erreur) { messageErreurConnexion(erreur); }
+    };
+  }
+}
+
+// --------------------------------------------------------------- verrou poste
+
+const VERROU_PERIME_MS = 90000;   // un verrou plus vieux que 90 s = poste fermé
+const VERROU_BATTEMENT_MS = 30000; // on rafraîchit notre verrou toutes les 30 s
+
+function idPoste() {
+  let id = localStorage.getItem('lmnp-poste-id');
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem('lmnp-poste-id', id); }
+  return id;
+}
+
+function verrouPerime(verrou) {
+  const age = Date.now() - new Date(verrou.battement || verrou.depuis || 0).getTime();
+  return !Number.isFinite(age) || age > VERROU_PERIME_MS;
+}
+
+async function poserVerrou() {
+  const identite = {
+    idPoste: idPoste(),
+    utilisateur: localStorage.getItem('lmnp-utilisateur') || '',
+    depuis: new Date().toISOString(),
+    battement: new Date().toISOString(),
+  };
+  await api.ecrireVerrou(identite);
+  // Battement de cœur : tant que l'onglet est ouvert, on prouve qu'on est là.
+  clearInterval(contexte._battement);
+  contexte._battement = setInterval(async () => {
+    try { await api.ecrireVerrou({ ...identite, battement: new Date().toISOString() }); }
+    catch { /* la synchro reviendra */ }
+  }, VERROU_BATTEMENT_MS);
+  // Libération à la fermeture (au mieux : l'expiration de 90 s couvre le reste).
+  window.addEventListener('pagehide', () => { api.libererVerrou(idPoste()); });
+}
+
+/**
+ * Un seul poste à la fois. Si le dossier est libre, on pose le verrou et on
+ * entre. S'il est occupé, on affiche un écran d'attente et on ré-essaie
+ * régulièrement : dès que l'autre poste ferme (ou après expiration s'il a
+ * planté), on entre automatiquement.
+ */
+function gererVerrou() {
+  return new Promise((resoudre) => {
+    const chargement = document.getElementById('chargement');
+    const connexion = document.getElementById('connexion');
+    const message = document.getElementById('connexion-message');
+    const bouton = document.getElementById('bouton-connexion');
+
+    const tenter = async () => {
+      let verrou = null;
+      try { verrou = await api.lireVerrou(); } catch { /* dossier momentanément indisponible */ }
+      const libre = !verrou || verrou.idPoste === idPoste() || verrouPerime(verrou);
+      if (libre) {
+        clearInterval(contexte._attente);
+        connexion.hidden = true;
+        chargement.hidden = false;
+        await poserVerrou();
+        resoudre(true);
+        return;
+      }
+      // Occupé : écran d'attente (pas de bouton, on entre tout seul).
+      chargement.hidden = true;
+      connexion.hidden = false;
+      bouton.hidden = true;
+      const depuis = new Date(verrou.depuis).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const qui = verrou.utilisateur ? `<strong>${verrou.utilisateur}</strong> utilise` : 'Un autre poste utilise';
+      message.innerHTML = `${qui} l’application (depuis ${depuis}).<br>`
+        + 'Un seul poste à la fois : vous y accéderez automatiquement dès qu’il l’aura fermée. '
+        + '<span class="attente-point">Patientez…</span>';
+    };
+
+    tenter();
+    contexte._attente = setInterval(tenter, 4000);
+  });
+}
+
+async function demarrerAvecDossier() {
+  document.getElementById('connexion').hidden = true;
+  const chargement = document.getElementById('chargement');
+  chargement.hidden = false;
   try {
     await etat.chargerTout();
   } catch (erreur) {
-    const ecran = document.getElementById('chargement');
-    ecran.classList.add('erreur');
-    // Un fichier abîmé porte son propre message (il nomme le fichier et le
-    // dossier Sauvegardes) ; sinon c'est bien le serveur qu'il faut vérifier.
-    ecran.querySelector('.chargement-texte').textContent = erreur.abime
+    chargement.classList.add('erreur');
+    chargement.querySelector('.chargement-texte').textContent = erreur.abime
       ? erreur.message
-      : `${erreur.message} Vérifiez que la fenêtre noire « Gestion LMNP — serveur » est toujours ouverte, puis rechargez la page.`;
+      : `${erreur.message} Vérifiez que le dossier partagé est bien accessible, puis rechargez la page.`;
     return;
   }
+
+  // Verrou « un seul poste à la fois » : si l'autre poste l'utilise, on
+  // propose de prendre la main ou de consulter en lecture seule.
+  if (!(await gererVerrou())) return;
 
   const infos = etat.infosServeur();
   const zoneDossier = document.getElementById('dossier-actuel');
@@ -182,15 +310,16 @@ async function demarrer() {
 
   document.getElementById('bouton-quitter').onclick = async () => {
     const confirme = await confirmer({
-      titre: 'Quitter l’application',
-      message: 'Le serveur local sera arrêté. Toutes vos saisies sont déjà enregistrées dans le dossier partagé.',
-      libelleValider: 'Quitter',
+      titre: 'Fermer l’application',
+      message: 'Toutes vos saisies sont déjà enregistrées dans le dossier partagé. Vous pouvez fermer cet onglet.',
+      libelleValider: 'Fermer',
     });
     if (!confirme) return;
-    await api.arreter();
+    clearInterval(contexte._battement);
+    try { await api.libererVerrou(idPoste()); } catch { /* expiration couvre */ }
     document.body.innerHTML = '<div class="chargement"><div class="chargement-boite">'
       + '<div class="chargement-titre">Gestion LMNP</div>'
-      + '<div class="chargement-texte">Application fermée. Vous pouvez fermer cette fenêtre.</div></div></div>';
+      + '<div class="chargement-texte">Vous pouvez fermer cet onglet. À bientôt.</div></div></div>';
   };
 
   const parametresActuels = etat.parametres();
@@ -208,6 +337,19 @@ async function demarrer() {
   document.getElementById('application').hidden = false;
   dessinerSelecteurAnnee();
   dessiner();
+
+  // Qui utilise ce poste ? On le demande une fois, pour tracer « modifié par ».
+  if (!localStorage.getItem('lmnp-utilisateur')) {
+    const reponse = await formulaire({
+      titre: 'Qui êtes-vous ?',
+      aide: 'Votre prénom sert à savoir qui a saisi quoi quand vous travaillez à deux. Il reste sur ce poste.',
+      champs: [{ cle: 'nom', libelle: 'Prénom', type: 'texte', requis: true }],
+    });
+    if (reponse?.nom) {
+      localStorage.setItem('lmnp-utilisateur', reponse.nom);
+      localStorage.setItem('lmnp-poste', reponse.nom);
+    }
+  }
 
   // Routine d'intégration des factures déposées dans le dossier partagé.
   // On relit d'abord le dossier partagé : sans ce rafraîchissement, deux postes

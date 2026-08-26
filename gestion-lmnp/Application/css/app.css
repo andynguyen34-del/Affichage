@@ -314,3 +314,19 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .document-imprime table { font-size: 11pt; }
 .document-imprime .mentions { font-size: 9.5pt; color: #333; margin-top: 12mm; }
 .document-imprime .signature { margin-top: 16mm; text-align: right; }
+
+/* ---------- écran de connexion au dossier ---------- */
+.connexion-boite {
+  text-align: center; max-width: 30rem; padding: 2rem; background: var(--fond-carte);
+  border: 1px solid var(--bordure); border-radius: 12px; box-shadow: var(--ombre);
+}
+.connexion-message { color: var(--encre-douce); margin: 1rem 0 1.4rem; line-height: 1.6; }
+.connexion-message code {
+  background: #eef1f4; padding: .1rem .35rem; border-radius: 4px; font-size: .9em; color: var(--encre);
+}
+.bouton-connexion { font-size: 1rem; padding: .7rem 1.4rem; }
+.connexion-erreur { color: var(--alerte); font-size: .86rem; margin-top: 1rem; }
+.connexion-note { color: var(--encre-tres-douce); font-size: .78rem; margin-top: 1.6rem; }
+
+/* ---------- point d'attente (écran « occupé ») ---------- */
+.attente-point { color: var(--accent); font-weight: 600; }
