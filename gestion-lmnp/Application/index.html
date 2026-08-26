@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestion LMNP</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+</head>
+<body>
+
+<div id="chargement" class="chargement">
+  <div class="chargement-boite">
+    <div class="chargement-titre">Gestion LMNP</div>
+    <div class="chargement-texte">Lecture du dossier partagé…</div>
+  </div>
+</div>
+
+<div class="application" id="application" hidden>
+
+  <aside class="barre-laterale">
+    <div class="marque">
+      <span class="marque-icone">🏠</span>
+      <span class="marque-texte">Gestion LMNP</span>
+    </div>
+    <nav id="navigation" class="navigation"></nav>
+    <div class="barre-pied">
+      <div class="dossier" id="dossier-actuel" title=""></div>
+      <button class="bouton-lien" id="bouton-quitter" type="button">Quitter l'application</button>
+    </div>
+  </aside>
+
+  <div class="colonne-principale">
+    <header class="entete">
+      <div class="entete-gauche">
+        <h1 id="titre-page">Tableau de bord</h1>
+        <p id="sous-titre-page" class="sous-titre"></p>
+      </div>
+      <div class="entete-droite">
+        <label class="selecteur-exercice">
+          <span>Exercice</span>
+          <select id="selecteur-annee"></select>
+        </label>
+        <button class="bouton bouton-discret" id="bouton-rafraichir" type="button" title="Relire les fichiers du dossier partagé">↻ Actualiser</button>
+        <div class="synchro" id="synchro"><span class="pastille"></span><span class="synchro-texte">À jour</span></div>
+      </div>
+    </header>
+
+    <div class="alertes" id="alertes"></div>
+    <main class="contenu" id="contenu"></main>
+  </div>
+</div>
+
+<div class="fond-modale" id="fond-modale" hidden></div>
+<div class="notifications" id="notifications"></div>
+<div id="zone-impression" class="zone-impression"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

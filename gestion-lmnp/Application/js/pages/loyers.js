@@ -1,0 +1,250 @@
+// Échéancier des loyers, encaissements et quittances.
+
+import * as etat from '../etat.js';
+import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
+  barreOutils, notifier, ouvrirModale } from '../ui.js';
+import { montant, date, nomMois, nomMoisCourt, aujourdhui, centimes, isoDepuis } from '../format.js';
+import * as calcul from '../calculs/loyers.js';
+import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
+
+const nomLocataire = (donnees, bail) => {
+  const locataire = donnees.locataires.find((l) => l.id === bail?.locataireId);
+  return locataire ? `${locataire.nom} ${locataire.prenom || ''}`.trim() : 'Sans locataire';
+};
+
+/** Enregistre une échéance (création si elle n'existait pas encore). */
+async function enregistrerEcheance(echeance, modifications) {
+  const base = {
+    id: echeance.id,
+    bailId: echeance.bailId,
+    annee: echeance.annee,
+    mois: echeance.mois,
+    dateEcheance: echeance.dateEcheance,
+    loyerHc: echeance.loyerHc,
+    charges: echeance.charges,
+    autres: echeance.autres || 0,
+    encaissements: echeance.encaissements || [],
+    quittanceEmiseLe: echeance.quittanceEmiseLe || null,
+    notes: echeance.notes || '',
+  };
+  return etat.enregistrer('loyers', { ...base, ...modifications });
+}
+
+async function saisirEncaissement(echeance) {
+  const reste = centimes((echeance.total || 0) - calcul.totalEncaisse(echeance));
+  const saisie = await formulaire({
+    titre: `Encaissement — ${nomMois(echeance.mois)} ${echeance.annee}`,
+    champs: [
+      { cle: 'date', libelle: 'Date de l’encaissement', type: 'date', requis: true },
+      { cle: 'montant', libelle: 'Montant reçu (€)', type: 'montant', requis: true },
+      { cle: 'mode', libelle: 'Mode de règlement', type: 'liste', options: etat.MODES_REGLEMENT.map((m) => ({ valeur: m, libelle: m })) },
+      { cle: 'reference', libelle: 'Référence (facultatif)', type: 'texte', largeur: 'pleine' },
+    ],
+    valeurs: { date: aujourdhui(), montant: reste > 0 ? reste : echeance.total, mode: 'Virement' },
+  });
+  if (!saisie) return;
+  const encaissements = [...(echeance.encaissements || []), {
+    id: crypto.randomUUID(),
+    date: saisie.date,
+    montant: Number(saisie.montant) || 0,
+    mode: saisie.mode,
+    reference: saisie.reference || '',
+  }];
+  await executer(enregistrerEcheance(echeance, { encaissements }), 'Encaissement enregistré.');
+}
+
+async function ajusterEcheance(echeance) {
+  const saisie = await formulaire({
+    titre: `Échéance de ${nomMois(echeance.mois)} ${echeance.annee}`,
+    aide: 'Les montants proposés viennent du bail. Modifiez-les en cas de prorata, de régularisation ou de franchise.',
+    champs: [
+      { cle: 'loyerHc', libelle: 'Loyer hors charges (€)', type: 'montant', requis: true },
+      { cle: 'charges', libelle: 'Provision pour charges (€)', type: 'montant' },
+      { cle: 'autres', libelle: 'Autres sommes dues (€)', type: 'montant', aide: 'Régularisation, indemnité…' },
+      { cle: 'dateEcheance', libelle: 'Date d’échéance', type: 'date' },
+      { cle: 'notes', libelle: 'Notes', type: 'zone' },
+    ],
+    valeurs: {
+      loyerHc: echeance.loyerHc,
+      charges: echeance.charges,
+      autres: echeance.autres || 0,
+      dateEcheance: echeance.dateEcheance,
+      notes: echeance.notes || '',
+    },
+  });
+  if (!saisie) return;
+  await executer(enregistrerEcheance(echeance, {
+    loyerHc: Number(saisie.loyerHc) || 0,
+    charges: Number(saisie.charges) || 0,
+    autres: Number(saisie.autres) || 0,
+    dateEcheance: saisie.dateEcheance,
+    notes: saisie.notes,
+  }), 'Échéance mise à jour.');
+}
+
+function voirEncaissements(echeance) {
+  const encaissements = echeance.encaissements || [];
+  if (!encaissements.length) { notifier('Aucun encaissement sur cette échéance.'); return; }
+  const corps = tableau({
+    colonnes: [
+      { titre: 'Date', valeur: (e) => date(e.date) },
+      { titre: 'Montant', nombre: true, valeur: (e) => montant(e.montant) },
+      { titre: 'Mode', valeur: (e) => e.mode || '—' },
+      { titre: 'Référence', valeur: (e) => e.reference || '—' },
+      { titre: '', actions: true, valeur: (e) => bouton('✕', async () => {
+        const confirme = await confirmer({
+          titre: 'Supprimer l’encaissement',
+          message: `Retirer l’encaissement de ${montant(e.montant)} du ${date(e.date)} ?`,
+          libelleValider: 'Supprimer', danger: true,
+        });
+        if (!confirme) return;
+        await executer(enregistrerEcheance(echeance, {
+          encaissements: encaissements.filter((x) => x.id !== e.id),
+        }), 'Encaissement supprimé.');
+      }, { petit: true, type: 'danger' }) },
+    ],
+    lignes: encaissements,
+    messageVide: '',
+  });
+  ouvrirModale({ titre: `Encaissements — ${nomMois(echeance.mois)} ${echeance.annee}`, corps });
+}
+
+function documentsQuittance(donnees, bail, echeance, quittance) {
+  const bien = donnees.biens.find((b) => b.id === bail?.bienId);
+  const locataire = donnees.locataires.find((l) => l.id === bail?.locataireId);
+  const bailleur = donnees.parametres.bailleurs?.[0];
+  const lieu = donnees.parametres.lieuSignature || '';
+  if (!quittance) {
+    imprimerAvis({ bailleur, locataire, bien, echeance, lieu });
+    return;
+  }
+  const dernier = (echeance.encaissements || []).slice(-1)[0];
+  imprimerQuittance({ bailleur, locataire, bien, echeance, dateReglement: dernier?.date, lieu });
+  if (!echeance.quittanceEmiseLe) {
+    enregistrerEcheance(echeance, { quittanceEmiseLe: aujourdhui() }).catch(() => {});
+  }
+}
+
+function ligneStatut(echeance) {
+  const info = calcul.LIBELLES_STATUT[calcul.statut(echeance)];
+  return badge(info.texte, info.ton);
+}
+
+export default {
+  cle: 'loyers',
+  libelle: 'Loyers',
+  icone: '📅',
+  titre: 'Loyers et quittances',
+  sousTitre: (contexte) => `Échéances, encaissements et quittances de l’exercice ${contexte.annee}.`,
+  compteur(contexte) {
+    const donnees = contexte.donnees || {};
+    if (!donnees.baux) return null;
+    const retards = calcul.echeancesGlobales(donnees.baux, contexte.annee, donnees.loyers)
+      .filter((e) => calcul.statut(e) === 'retard' || calcul.statut(e) === 'partiel').length;
+    return retards || null;
+  },
+  rendre(contexte) {
+    const donnees = contexte.donnees;
+    const annee = contexte.annee;
+    const conteneur = h('div');
+
+    if (!donnees.baux.length) {
+      return carte({
+        titre: 'Aucun bail',
+        corps: vide('Rien à quittancer pour l’instant',
+          'Enregistrez d’abord un bail dans « Bien & baux » : les échéances mensuelles en découlent automatiquement.'),
+      });
+    }
+
+    const toutes = calcul.echeancesGlobales(donnees.baux, annee, donnees.loyers);
+    const attendu = centimes(toutes.reduce((s, e) => s + (e.total || 0), 0));
+    const encaisse = centimes(toutes.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+    const impayes = toutes.filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
+    const resteDu = centimes(impayes.reduce((s, e) => s + (e.total - calcul.totalEncaisse(e)), 0));
+
+    conteneur.append(h('div', { class: 'grille grille-4', style: 'margin-bottom:1rem' }, [
+      tuile({ libelle: `Attendu ${annee}`, valeur: montant(attendu, { rond: true }), detail: `${toutes.length} échéances` }),
+      tuile({ libelle: 'Encaissé', valeur: montant(encaisse, { rond: true }), ton: 'positif' }),
+      tuile({ libelle: 'Reste dû', valeur: montant(resteDu, { rond: true }), ton: resteDu > 0 ? 'negatif' : 'neutre', detail: `${impayes.length} échéance(s)` }),
+      tuile({
+        libelle: 'Taux de recouvrement',
+        valeur: attendu ? `${Math.round((encaisse / attendu) * 100)} %` : '—',
+      }),
+    ]));
+
+    for (const bail of donnees.baux) {
+      const echeances = calcul.echeancesAnnee(bail, annee, donnees.loyers);
+      if (!echeances.length) continue;
+      const bien = donnees.biens.find((b) => b.id === bail.bienId);
+      const totalBail = centimes(echeances.reduce((s, e) => s + (e.total || 0), 0));
+      const recuBail = centimes(echeances.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+
+      const colonnes = [
+        { titre: 'Mois', valeur: (e) => h('div', {}, [
+          h('div', { texte: nomMois(e.mois) }),
+          e.partiel ? h('div', { class: 'legende', texte: 'mois partiel' }) : null,
+          e.horsBail ? h('div', { class: 'legende', texte: 'hors période du bail' }) : null,
+        ]) },
+        { titre: 'Échéance', valeur: (e) => date(e.dateEcheance) },
+        { titre: 'Loyer', nombre: true, valeur: (e) => montant(e.loyerHc) },
+        { titre: 'Charges', nombre: true, valeur: (e) => montant(e.charges) },
+        { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
+        { titre: 'Encaissé', nombre: true, valeur: (e) => {
+          const recu = calcul.totalEncaisse(e);
+          return recu ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(e) }, montant(recu)) : '—';
+        } },
+        { titre: 'Reste', nombre: true, valeur: (e) => {
+          const reste = centimes(e.total - calcul.totalEncaisse(e));
+          return reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—';
+        } },
+        { titre: 'État', valeur: ligneStatut },
+        { titre: '', actions: true, valeur: (e) => h('div', { class: 'groupe-boutons' }, [
+          bouton('Encaisser', () => saisirEncaissement(e), { petit: true, type: 'primaire' }),
+          bouton('Quittance', () => documentsQuittance(donnees, bail, e, true), {
+            petit: true, titre: 'Imprimer la quittance', desactive: calcul.totalEncaisse(e) <= 0,
+          }),
+          bouton('Avis', () => documentsQuittance(donnees, bail, e, false), { petit: true, titre: 'Imprimer l’avis d’échéance' }),
+          bouton('⋯', () => ajusterEcheance(e), { petit: true, titre: 'Ajuster les montants' }),
+        ]) },
+      ];
+
+      conteneur.append(carte({
+        titre: `${nomLocataire(donnees, bail)} — ${bien?.nom || 'logement inconnu'}`,
+        aide: `${montant(recuBail)} encaissés sur ${montant(totalBail)} attendus en ${annee}`,
+        actions: [
+          bouton('Encaisser les impayés', async () => {
+            const aRegler = echeances.filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
+            if (!aRegler.length) { notifier('Aucun impayé sur ce bail.'); return; }
+            const confirme = await confirmer({
+              titre: 'Encaisser les impayés',
+              message: `${aRegler.length} échéance(s) seront marquées encaissées à la date d’aujourd’hui, `
+                + `pour un total de ${montant(centimes(aRegler.reduce((s, e) => s + e.total - calcul.totalEncaisse(e), 0)))}.`,
+              libelleValider: 'Encaisser',
+            });
+            if (!confirme) return;
+            for (const echeance of aRegler) {
+              const reste = centimes(echeance.total - calcul.totalEncaisse(echeance));
+              if (reste <= 0) continue;
+              /* eslint-disable no-await-in-loop */
+              await enregistrerEcheance(echeance, {
+                encaissements: [...(echeance.encaissements || []), {
+                  id: crypto.randomUUID(), date: aujourdhui(), montant: reste, mode: 'Virement', reference: '',
+                }],
+              });
+            }
+            notifier('Impayés encaissés.', 'succes');
+          }, { petit: true }),
+          bouton('Relevé annuel', () => imprimerReleve({
+            bailleur: donnees.parametres.bailleurs?.[0],
+            locataire: donnees.locataires.find((l) => l.id === bail.locataireId),
+            bien, annee, echeances,
+          }), { petit: true }),
+        ],
+        serre: true,
+        corps: tableau({ colonnes, lignes: echeances, cle: (e) => `${e.bailId}-${e.mois}`, messageVide: 'Aucune échéance.' }),
+      }));
+    }
+
+    return conteneur;
+  },
+};
