@@ -154,11 +154,24 @@ function surHachage() {
 }
 
 function messageErreurConnexion(erreur) {
+  console.error('Connexion au dossier :', erreur);
   const zone = document.getElementById('connexion-erreur');
   zone.hidden = false;
-  zone.textContent = erreur?.name === 'AbortError'
-    ? 'Choix annulé. Cliquez de nouveau pour désigner le dossier.'
-    : (erreur?.message || String(erreur));
+  const nom = erreur?.name || '';
+  let texte;
+  if (nom === 'AbortError') {
+    texte = 'Chrome a refusé ce dossier après votre choix. Réessayez en choisissant d’abord un '
+      + 'dossier tout simple (le Bureau, par exemple) : si le refus revient même là, c’est qu’une '
+      + 'règle de sécurité de votre ordinateur interdit aux pages locales d’accéder aux fichiers '
+      + '— dites-le moi, je changerai de méthode.';
+  } else if (/refus/i.test(erreur?.message || '')) {
+    texte = 'Juste après votre choix, Chrome demande « Modifier les fichiers ? » : cliquez sur '
+      + '« Modifier les fichiers » (surtout pas « Annuler »).';
+  } else {
+    texte = erreur?.message || String(erreur);
+  }
+  // Le code technique entre crochets aide au diagnostic si le problème persiste.
+  zone.textContent = nom ? `${texte}  [${nom}]` : texte;
 }
 
 /** Écran de connexion : on désigne (ou reconnecte) le dossier partagé avant tout. */
