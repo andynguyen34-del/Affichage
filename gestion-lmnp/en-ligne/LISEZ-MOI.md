@@ -1,10 +1,16 @@
-# Gestion LMNP — version en ligne (Firebase)
+# Gestion LMNP — hébergement privé dédié (Firebase)
 
-L'application est une page web hébergée sur Firebase Hosting. Les données
-comptables vivent dans Firestore, les justificatifs (factures, documents)
-dans Firebase Storage, et l'accès est protégé par un compte e-mail + mot de
-passe. Plus aucun accès aux fichiers du poste : les blocages de sécurité
-locaux ne s'appliquent plus.
+L'application est une page web hébergée sur Firebase Hosting, dans un projet
+**dédié uniquement à la gestion personnelle** : `gestion-lmnp-anika`.
+Rien n'est partagé avec les autres outils (Planning CTTH, projet `ctth-app`…) :
+projet distinct, base distincte, adresse distincte — et le fichier
+`.firebaserc` de ce dossier épingle le projet, si bien qu'un
+`firebase deploy` lancé ici ne peut PAS toucher un autre projet.
+
+Les données comptables vivent dans Firestore, les justificatifs (factures,
+documents) dans Firebase Storage, et l'accès est protégé par un compte
+e-mail + mot de passe. Plus aucun accès aux fichiers du poste : les blocages
+de sécurité locaux ne s'appliquent plus.
 
 ## Sécurité
 
@@ -18,11 +24,29 @@ locaux ne s'appliquent plus.
 - Un seul poste à la fois : le verrou de l'application fonctionne comme
   avant (écran d'attente, expiration après une minute et demie).
 
+## Garder le personnel séparé du professionnel
+
+Créez ce projet avec votre **compte Google personnel**
+(andynguyen34@gmail.com), pas avec le compte qui porte les outils du
+travail. Si le terminal `firebase` est déjà connecté au compte du travail,
+ajoutez le compte personnel sans rien casser :
+
+```
+firebase login:add andynguyen34@gmail.com
+```
+
+puis utilisez `--account andynguyen34@gmail.com` dans les commandes
+ci-dessous. Les deux comptes cohabitent dans le même terminal, chaque
+dossier utilisant le sien.
+
 ## Mise en place (une seule fois, ~10 minutes)
 
-1. **Créer le projet** — sur https://console.firebase.google.com :
-   « Ajouter un projet », nom par exemple `gestion-lmnp-anika`
-   (Google Analytics inutile : décochez).
+1. **Créer le projet** — sur https://console.firebase.google.com, connecté
+   au compte personnel : « Ajouter un projet », nom `gestion-lmnp-anika`.
+   Sous le nom, cliquez sur l'identifiant proposé et fixez-le à
+   `gestion-lmnp-anika` (s'il est déjà pris, prenez par exemple
+   `gestion-lmnp-anika-2026` et reportez-le dans `.firebaserc`).
+   Google Analytics : inutile, décochez.
 
 2. **Activer la connexion** — menu Créer → **Authentication** →
    Commencer → onglet « Sign-in method » → activer **E-mail/Mot de passe**.
@@ -47,12 +71,14 @@ locaux ne s'appliquent plus.
 7. **Déployer** — dans un terminal, placé dans ce dossier `en-ligne` :
 
    ```
-   firebase login          (si ce n'est pas déjà fait)
-   firebase use --add      (choisir le projet créé à l'étape 1)
-   firebase deploy
+   firebase deploy --account andynguyen34@gmail.com
    ```
 
-8. **Reprendre la comptabilité** — ouvrez `https://<projet>.web.app`,
+   (le projet est déjà épinglé par `.firebaserc` ; ajoutez
+   `--project <identifiant>` seulement si vous avez dû prendre un autre
+   identifiant à l'étape 1)
+
+8. **Reprendre la comptabilité** — ouvrez `https://gestion-lmnp-anika.web.app`,
    connectez-vous, puis Paramètres → **Importer une sauvegarde…** →
    choisissez le fichier `sauvegarde-donnees.json` fourni dans la
    livraison. Toutes les écritures (loyers, charges, amortissements,
@@ -66,8 +92,8 @@ locaux ne s'appliquent plus.
 ## Mise à jour de l'application
 
 Quand une nouvelle version de `public/index.html` est livrée : remplacer le
-fichier, puis relancer `firebase deploy` dans ce dossier. L'adresse ne
-change pas.
+fichier, puis relancer `firebase deploy --account andynguyen34@gmail.com`
+dans ce dossier. L'adresse ne change pas.
 
 ## Les factures
 
