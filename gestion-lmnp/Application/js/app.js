@@ -18,6 +18,10 @@ import documents from './pages/documents.js';
 import parametres from './pages/parametres.js';
 import aide from './pages/aide.js';
 
+// Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
+// le fichier ouvert est bien la dernière version livrée.
+const VERSION_APP = '8 — 27 août';
+
 const PAGES = [tableauDeBord, bien, pageLoyers, factures, charges, pageAmortissements,
   emprunt, resultat, liasse, documents, parametres, aide];
 
@@ -198,10 +202,11 @@ async function demarrer() {
   chargement.hidden = true;
   connexion.hidden = false;
   document.getElementById('bouton-connexion-autre').hidden = true;
+  document.getElementById('connexion-version').textContent = `Version ${VERSION_APP}`;
 
-  message.innerHTML = 'Choisissez le dossier où vivront les données. Le plus sûr : '
-    + '<strong>le dossier qui contient ce fichier « Gestion LMNP.html »</strong> — Chrome '
-    + 'l’autorise alors sans difficulté.<br>'
+  message.innerHTML = '<strong>Faites glisser votre dossier partagé</strong> depuis l’explorateur '
+    + 'Windows et déposez-le n’importe où sur cette fenêtre — ou cliquez sur le bouton pour le '
+    + 'choisir dans une liste.<br>'
     + 'Prenez un dossier <strong>déjà présent sur le disque</strong> : s’il est marqué '
     + '« disponible en ligne uniquement » (nuage), faites d’abord un clic droit dessus dans '
     + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>.';
@@ -211,6 +216,32 @@ async function demarrer() {
     try { await api.choisirDossier(); await demarrerAvecDossier(); }
     catch (erreur) { messageErreurConnexion(erreur); }
   };
+
+  // Voie alternative, sans sélecteur : glisser-déposer le dossier sur la page.
+  window.addEventListener('dragover', (evenement) => { evenement.preventDefault(); });
+  window.addEventListener('drop', async (evenement) => {
+    evenement.preventDefault();
+    if (connexion.hidden) return; // l'application est déjà ouverte : ignorer
+    document.getElementById('connexion-erreur').hidden = true;
+    const element = [...(evenement.dataTransfer?.items || [])].find((i) => i.kind === 'file');
+    if (!element) return;
+    try {
+      if (typeof element.getAsFileSystemHandle !== 'function') {
+        messageErreurConnexion(new Error('Ce navigateur ne permet pas le dépôt de dossier — utilisez le bouton.'));
+        return;
+      }
+      const handle = await element.getAsFileSystemHandle();
+      if (!handle || handle.kind !== 'directory') {
+        messageErreurConnexion(new Error('Déposez un dossier (pas un fichier).'));
+        return;
+      }
+      if (!(await api.connecterHandle(handle))) {
+        messageErreurConnexion(new Error(`L’écriture dans « ${handle.name} » a été refusée.`));
+        return;
+      }
+      await demarrerAvecDossier();
+    } catch (erreur) { messageErreurConnexion(erreur); }
+  });
 }
 
 // --------------------------------------------------------------- verrou poste

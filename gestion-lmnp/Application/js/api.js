@@ -100,18 +100,21 @@ export async function choisirDossier() {
   return nomDossier();
 }
 
-/** Autorise (et connecte) un handle déjà en main — sans relire IndexedDB, pour
- *  que la demande d'autorisation suive immédiatement le clic. */
-export async function autoriserHandle(handle) {
-  if (!handle) return false;
-  if (!(await verifierPermission(handle, true))) return false;
+/** Connecte un handle obtenu autrement que par le sélecteur (glisser-déposer).
+ *  À appeler pendant le geste de l'utilisateur (l'événement drop) : la demande
+ *  d'autorisation en écriture, si elle est nécessaire, exige ce geste. */
+export async function connecterHandle(handle) {
+  if (!handle || handle.kind !== 'directory') return false;
+  try {
+    if (!(await verifierPermission(handle, true))) return false;
+  } catch { /* certains contextes refusent la question : on tentera l'écriture directement */ }
   racine = handle;
   return true;
 }
 
 /** Reconnecte le dossier déjà choisi (nécessite un clic pour redonner l'accès). */
 export async function reconnecterDossier() {
-  return autoriserHandle(await handleMemorise());
+  return connecterHandle(await handleMemorise());
 }
 
 /** Tente une reconnexion silencieuse (sans clic) — marche si l'accès est encore accordé. */

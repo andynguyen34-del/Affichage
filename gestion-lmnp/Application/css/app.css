@@ -328,6 +328,7 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .bouton-connexion-autre:not([hidden]) { display: block; margin: .9rem auto 0; font-size: .86rem; }
 .connexion-erreur { color: var(--alerte); font-size: .86rem; margin-top: 1rem; }
 .connexion-note { color: var(--encre-tres-douce); font-size: .78rem; margin-top: 1.6rem; }
+.connexion-version { color: var(--encre-tres-douce); font-size: .72rem; margin-top: .4rem; }
 
 /* ---------- point d'attente (écran « occupé ») ---------- */
 .attente-point { color: var(--accent); font-weight: 600; }
