@@ -191,55 +191,25 @@ async function demarrer() {
     return;
   }
 
-  // Reconnexion silencieuse si l'autorisation d'accès tient encore.
-  if (await api.reconnexionSilencieuse()) { await demarrerAvecDossier(); return; }
-
+  // Un seul écran, un seul geste : on désigne le dossier à chaque ouverture.
+  // Aucune « reconnexion » mémorisée : sur les postes verrouillés, rouvrir un
+  // ancien dossier mémorisé se bloquait. Choisir le dossier fonctionne, lui,
+  // à tous les coups (c'est ce que fait le fichier de diagnostic).
   chargement.hidden = true;
   connexion.hidden = false;
-  const boutonAutre = document.getElementById('bouton-connexion-autre');
+  document.getElementById('bouton-connexion-autre').hidden = true;
 
-  // Choisir un dossier depuis zéro (sélecteur complet). Sert de bouton
-  // principal quand rien n'est mémorisé, et de repli « Choisir un autre
-  // dossier » quand un ancien dossier l'est.
-  const choisir = async () => {
+  message.innerHTML = 'Choisissez, dans OneDrive, le dossier où vivent les données '
+    + '(votre <strong>Dossier partagé</strong>).<br>'
+    + 'Important : prenez un dossier <strong>déjà présent sur le disque</strong> — s’il est marqué '
+    + '« disponible en ligne uniquement » (nuage), faites d’abord un clic droit dessus dans '
+    + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>, sinon Chrome refusera d’y écrire.';
+  bouton.textContent = 'Choisir le dossier partagé';
+  bouton.onclick = async () => {
     document.getElementById('connexion-erreur').hidden = true;
     try { await api.choisirDossier(); await demarrerAvecDossier(); }
     catch (erreur) { messageErreurConnexion(erreur); }
   };
-
-  const messageChoix = 'Choisissez, dans OneDrive, le dossier où vivront les données '
-    + '(par exemple <strong>Dossier partagé</strong>).<br>'
-    + 'Important : prenez un dossier <strong>déjà présent sur le disque</strong> — s’il est marqué '
-    + '« disponible en ligne uniquement » (nuage), faites d’abord un clic droit dessus dans '
-    + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>, sinon Chrome refusera d’y écrire.';
-
-  const memorise = await api.handleMemorise();
-  if (memorise) {
-    message.innerHTML = `Cliquez pour rouvrir le dossier <strong>${memorise.name}</strong> et en autoriser l’accès.`;
-    bouton.textContent = `Reconnecter « ${memorise.name} »`;
-    boutonAutre.hidden = false;
-    boutonAutre.onclick = choisir;
-    bouton.onclick = async () => {
-      document.getElementById('connexion-erreur').hidden = true;
-      try {
-        // On réutilise le handle déjà chargé : requestPermission suit alors
-        // directement le clic (l'autorisation exige un geste de l'utilisateur).
-        if (await api.autoriserHandle(memorise)) { await demarrerAvecDossier(); return; }
-        // Autorisation refusée, ou dossier déplacé/renommé depuis : au lieu de
-        // rester bloqué sans rien dire, on invite à re-désigner le dossier.
-        message.innerHTML = `Impossible de rouvrir « ${memorise.name} » — il a peut-être été déplacé, `
-          + 'renommé, ou l’autorisation a été refusée. Choisissez le dossier ci-dessous.';
-        bouton.textContent = 'Choisir le dossier partagé';
-        boutonAutre.hidden = true;
-        bouton.onclick = choisir;
-      } catch (erreur) { messageErreurConnexion(erreur); }
-    };
-  } else {
-    message.innerHTML = messageChoix;
-    bouton.textContent = 'Choisir le dossier partagé';
-    boutonAutre.hidden = true;
-    bouton.onclick = choisir;
-  }
 }
 
 // --------------------------------------------------------------- verrou poste

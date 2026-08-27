@@ -90,7 +90,6 @@ export async function choisirDossier() {
   const handle = await window.showDirectoryPicker({ id: 'gestion-lmnp', mode: 'readwrite' });
   if (!(await verifierPermission(handle, true))) throw new Error('Accès au dossier refusé.');
   racine = handle;
-  memoriser(handle); // confort seulement : on N'ATTEND PAS, pour ne jamais figer la connexion
   return nomDossier();
 }
 
