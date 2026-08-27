@@ -21,50 +21,61 @@ export const apiDisponible = () => typeof window.showDirectoryPicker === 'functi
 
 const IDB = 'gestion-lmnp';
 const CLE_DOSSIER = 'dossier-partage';
+const DELAI_IDB = 1500;
+
+// Mémoriser le dossier n'est qu'un confort (éviter un clic au prochain
+// lancement). Sur certaines configurations — fichiers ouverts en local
+// (file://), navigateur d'entreprise — IndexedDB ne répond jamais : ni succès,
+// ni erreur. Chaque opération est donc bornée par un délai de garde et n'est
+// JAMAIS attendue dans le flux de connexion (voir choisirDossier), pour qu'un
+// IndexedDB muet ne puisse pas figer le démarrage.
+function avecDelaiIDB(promesse) {
+  return Promise.race([
+    promesse,
+    new Promise((_, rejeter) => { setTimeout(() => rejeter(new Error('IndexedDB trop lent')), DELAI_IDB); }),
+  ]);
+}
 
 function ouvrirIndexedDB() {
-  // Certaines configurations de Chrome bloquent IndexedDB pour les fichiers
-  // ouverts en local (file://) : la requête ne répond alors jamais. Un délai
-  // de garde évite que le démarrage reste figé — on se passe simplement de la
-  // mémorisation du dossier (il faudra le re-choisir, un clic de plus).
   return new Promise((resoudre, rejeter) => {
     if (typeof indexedDB === 'undefined' || !indexedDB) { rejeter(new Error('IndexedDB indisponible')); return; }
-    let regle = false;
-    const minuteur = setTimeout(() => { if (!regle) { regle = true; rejeter(new Error('IndexedDB ne répond pas')); } }, 1500);
     let requete;
     try { requete = indexedDB.open(IDB, 1); }
-    catch (erreur) { clearTimeout(minuteur); rejeter(erreur); return; }
+    catch (erreur) { rejeter(erreur); return; }
     requete.onupgradeneeded = () => requete.result.createObjectStore('handles');
-    requete.onsuccess = () => { if (!regle) { regle = true; clearTimeout(minuteur); resoudre(requete.result); } };
-    requete.onerror = () => { if (!regle) { regle = true; clearTimeout(minuteur); rejeter(requete.error); } };
+    requete.onsuccess = () => resoudre(requete.result);
+    requete.onerror = () => rejeter(requete.error);
+    requete.onblocked = () => rejeter(new Error('IndexedDB bloqué'));
   });
 }
 
-async function memoriser(handle) {
-  try {
+function memoriser(handle) {
+  return avecDelaiIDB((async () => {
     const db = await ouvrirIndexedDB();
-    await new Promise((resoudre, rejeter) => {
-      const t = db.transaction('handles', 'readwrite');
-      t.objectStore('handles').put(handle, CLE_DOSSIER);
-      t.oncomplete = resoudre;
-      t.onerror = () => rejeter(t.error);
-    });
-    db.close();
-  } catch { /* mémorisation facultative */ }
+    try {
+      await new Promise((resoudre, rejeter) => {
+        const t = db.transaction('handles', 'readwrite');
+        t.objectStore('handles').put(handle, CLE_DOSSIER);
+        t.oncomplete = resoudre;
+        t.onerror = () => rejeter(t.error);
+        t.onabort = () => rejeter(t.error || new Error('transaction abandonnée'));
+      });
+    } finally { db.close(); }
+  })()).catch(() => {});
 }
 
-export async function handleMemorise() {
-  try {
+export function handleMemorise() {
+  return avecDelaiIDB((async () => {
     const db = await ouvrirIndexedDB();
-    const handle = await new Promise((resoudre, rejeter) => {
-      const t = db.transaction('handles', 'readonly');
-      const r = t.objectStore('handles').get(CLE_DOSSIER);
-      r.onsuccess = () => resoudre(r.result || null);
-      r.onerror = () => rejeter(r.error);
-    });
-    db.close();
-    return handle;
-  } catch { return null; }
+    try {
+      return await new Promise((resoudre, rejeter) => {
+        const t = db.transaction('handles', 'readonly');
+        const r = t.objectStore('handles').get(CLE_DOSSIER);
+        r.onsuccess = () => resoudre(r.result || null);
+        r.onerror = () => rejeter(r.error);
+      });
+    } finally { db.close(); }
+  })()).catch(() => null);
 }
 
 async function verifierPermission(handle, demander) {
@@ -79,7 +90,7 @@ export async function choisirDossier() {
   const handle = await window.showDirectoryPicker({ id: 'gestion-lmnp', mode: 'readwrite' });
   if (!(await verifierPermission(handle, true))) throw new Error('Accès au dossier refusé.');
   racine = handle;
-  await memoriser(handle);
+  memoriser(handle); // confort seulement : on N'ATTEND PAS, pour ne jamais figer la connexion
   return nomDossier();
 }
 

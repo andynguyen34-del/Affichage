@@ -321,6 +321,8 @@ async function demarrerAvecDossier() {
   document.getElementById('connexion').hidden = true;
   const chargement = document.getElementById('chargement');
   chargement.hidden = false;
+  const etape = (texte) => { const z = chargement.querySelector('.chargement-texte'); if (z) z.textContent = texte; };
+  etape('Lecture des données du dossier partagé…');
   try {
     await etat.chargerTout();
   } catch (erreur) {
@@ -332,8 +334,10 @@ async function demarrerAvecDossier() {
   }
 
   // Verrou « un seul poste à la fois » : si l'autre poste l'utilise, on
-  // propose de prendre la main ou de consulter en lecture seule.
+  // affiche un écran d'attente et on entre dès qu'il ferme l'application.
+  etape('Vérification de l’accès (un seul poste à la fois)…');
   if (!(await gererVerrou())) return;
+  etape('Ouverture…');
 
   const infos = etat.infosServeur();
   const zoneDossier = document.getElementById('dossier-actuel');
