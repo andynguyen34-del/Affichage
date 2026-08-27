@@ -205,8 +205,11 @@ async function demarrer() {
       catch (erreur) { messageErreurConnexion(erreur); }
     };
   } else {
-    message.innerHTML = 'Choisissez le dossier partagé <strong>Gestion LMNP ANIKA</strong> (dans OneDrive). '
-      + 'Vous ne le ferez qu’une fois : ensuite, un simple clic suffira.';
+    message.innerHTML = 'Choisissez, dans OneDrive, le dossier où vivront les données '
+      + '(par exemple <strong>Dossier de partage</strong>).<br>'
+      + 'Important : prenez un dossier <strong>déjà présent sur le disque</strong> — s’il est marqué '
+      + '« disponible en ligne uniquement » (nuage), faites d’abord un clic droit dessus dans '
+      + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>, sinon Chrome refusera d’y écrire.';
     bouton.textContent = 'Choisir le dossier partagé';
     bouton.onclick = async () => {
       try { await api.choisirDossier(); await demarrerAvecDossier(); }
