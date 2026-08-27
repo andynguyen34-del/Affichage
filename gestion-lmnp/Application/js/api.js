@@ -83,13 +83,18 @@ export async function choisirDossier() {
   return nomDossier();
 }
 
-/** Reconnecte le dossier déjà choisi (nécessite un clic pour redonner l'accès). */
-export async function reconnecterDossier() {
-  const handle = await handleMemorise();
+/** Autorise (et connecte) un handle déjà en main — sans relire IndexedDB, pour
+ *  que la demande d'autorisation suive immédiatement le clic. */
+export async function autoriserHandle(handle) {
   if (!handle) return false;
   if (!(await verifierPermission(handle, true))) return false;
   racine = handle;
   return true;
+}
+
+/** Reconnecte le dossier déjà choisi (nécessite un clic pour redonner l'accès). */
+export async function reconnecterDossier() {
+  return autoriserHandle(await handleMemorise());
 }
 
 /** Tente une reconnexion silencieuse (sans clic) — marche si l'accès est encore accordé. */
