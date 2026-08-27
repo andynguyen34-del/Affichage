@@ -199,11 +199,12 @@ async function demarrer() {
   connexion.hidden = false;
   document.getElementById('bouton-connexion-autre').hidden = true;
 
-  message.innerHTML = 'Choisissez, dans OneDrive, le dossier où vivent les données '
-    + '(votre <strong>Dossier partagé</strong>).<br>'
-    + 'Important : prenez un dossier <strong>déjà présent sur le disque</strong> — s’il est marqué '
+  message.innerHTML = 'Choisissez le dossier où vivront les données. Le plus sûr : '
+    + '<strong>le dossier qui contient ce fichier « Gestion LMNP.html »</strong> — Chrome '
+    + 'l’autorise alors sans difficulté.<br>'
+    + 'Prenez un dossier <strong>déjà présent sur le disque</strong> : s’il est marqué '
     + '« disponible en ligne uniquement » (nuage), faites d’abord un clic droit dessus dans '
-    + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>, sinon Chrome refusera d’y écrire.';
+    + 'l’explorateur → <em>Toujours conserver sur cet appareil</em>.';
   bouton.textContent = 'Choisir le dossier partagé';
   bouton.onclick = async () => {
     document.getElementById('connexion-erreur').hidden = true;
