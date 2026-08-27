@@ -21,8 +21,10 @@ const css = fs.readFileSync(path.join(ici, 'css/app.css'), 'utf8');
 let html = fs.readFileSync(path.join(ici, 'index.html'), 'utf8');
 
 // 3. Remplacer les références externes par le contenu intégré.
-html = html.replace('<link rel="stylesheet" href="css/app.css">', `<style>\n${css}\n</style>`);
-html = html.replace('<script type="module" src="js/app.js"></script>', `<script>\n${bundle}\n</script>`);
+// Remplacement par fonction : un « $& » dans le code inséré serait sinon
+// interprété par String.replace comme motif spécial et corromprait la page.
+html = html.replace('<link rel="stylesheet" href="css/app.css">', () => `<style>\n${css}\n</style>`);
+html = html.replace('<script type="module" src="js/app.js"></script>', () => `<script>\n${bundle}\n</script>`);
 
 // 4. Écrire le fichier autonome à la racine du dossier partagé.
 const sortie = path.join(racine, 'Gestion LMNP.html');

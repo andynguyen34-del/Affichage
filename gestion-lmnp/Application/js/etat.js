@@ -293,6 +293,19 @@ export async function supprimer(nom, id) {
   });
 }
 
+/**
+ * Remplace entièrement une collection par un contenu importé (reprise d'une
+ * sauvegarde). Passe par le circuit d'écriture normal : conflit détecté,
+ * version incrémentée, sauvegarde quotidienne.
+ */
+export async function remplacerCollection(nom, contenu) {
+  const propre = normaliser(nom, structuredClone(contenu));
+  await modifier(nom, (copie) => {
+    for (const cle of Object.keys(copie)) delete copie[cle];
+    Object.assign(copie, propre);
+  });
+}
+
 export async function enregistrerParametres(modifications) {
   await modifier('parametres', (contenu) => {
     Object.assign(contenu, modifications);

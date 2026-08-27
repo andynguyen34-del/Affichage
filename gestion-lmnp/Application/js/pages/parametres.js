@@ -2,7 +2,7 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, bouton, formulaire, confirmer, executer,
-  barreOutils, notifier, signalerErreur } from '../ui.js';
+  barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
 import { montant, date, nombre, anneeDe } from '../format.js';
 
 async function modifierIdentite(parametres) {
@@ -116,6 +116,35 @@ function exporterSauvegarde(donnees) {
   lien.click();
   URL.revokeObjectURL(lien.href);
   notifier('Sauvegarde téléchargée.', 'succes');
+}
+
+async function importerSauvegarde() {
+  const fichier = await choisirFichier({ accept: '.json,application/json' });
+  if (!fichier) return;
+  let lu;
+  try { lu = JSON.parse(await fichier.text()); }
+  catch { signalerErreur(new Error('Ce fichier n’est pas une sauvegarde lisible.')); return; }
+  // Deux formats acceptés : la sauvegarde complète de l'application
+  // ({ donnees: {...} }) ou directement l'objet des collections.
+  const donnees = lu?.donnees && typeof lu.donnees === 'object' ? lu.donnees : lu;
+  const noms = etat.COLLECTIONS.filter((nom) => donnees && typeof donnees[nom] === 'object' && donnees[nom] !== null);
+  if (!noms.length) {
+    signalerErreur(new Error('Aucune donnée reconnue dans ce fichier (attendu : une sauvegarde « Gestion LMNP »).'));
+    return;
+  }
+  const confirme = await confirmer({
+    titre: 'Importer la sauvegarde',
+    message: `Ce fichier contient : ${noms.join(', ')}. Les données actuelles de ces collections `
+      + 'seront remplacées par celles du fichier. Continuer ?',
+    libelleValider: 'Importer', danger: true,
+  });
+  if (!confirme) return;
+  await executer((async () => {
+    for (const nom of noms) {
+      // eslint-disable-next-line no-await-in-loop
+      await etat.remplacerCollection(nom, donnees[nom]);
+    }
+  })(), `Sauvegarde importée (${noms.length} collection${noms.length > 1 ? 's' : ''}).`);
 }
 
 export default {
@@ -237,7 +266,10 @@ export default {
         h('p', { class: 'legende', style: 'margin-top:1rem', texte:
           'Une copie de chaque fichier de données est déposée dans le sous-dossier « Sauvegardes », '
           + 'à la première modification de chaque journée. Les sauvegardes de plus de six mois sont supprimées.' }),
-        barreOutils([bouton('Télécharger une sauvegarde complète', () => exporterSauvegarde(donnees), { type: 'primaire' })]),
+        barreOutils([
+          bouton('Télécharger une sauvegarde complète', () => exporterSauvegarde(donnees), { type: 'primaire' }),
+          bouton('Importer une sauvegarde…', () => importerSauvegarde()),
+        ]),
       ]),
     }));
 

@@ -13,6 +13,14 @@ const SOUS_DOSSIERS = {
 let racine = null;               // FileSystemDirectoryHandle du dossier partagé
 const encodeur = new TextEncoder();
 
+export const MODE = 'dossier';
+
+// Symétrie avec api-nuage.js — jamais appelées dans ce mode.
+export async function initialiser() { /* rien à préparer */ }
+export async function attendreConnexion() { return null; }
+export async function seConnecter() { throw new Error('Sans objet en version dossier.'); }
+export async function seDeconnecter() { /* rien */ }
+
 export const dossierConnecte = () => racine !== null;
 export const nomDossier = () => racine?.name || '';
 export const apiDisponible = () => typeof window.showDirectoryPicker === 'function';

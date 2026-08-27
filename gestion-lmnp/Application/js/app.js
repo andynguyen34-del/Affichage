@@ -20,7 +20,7 @@ import aide from './pages/aide.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '8 — 27 août';
+const VERSION_APP = '9 — 27 août';
 
 const PAGES = [tableauDeBord, bien, pageLoyers, factures, charges, pageAmortissements,
   emprunt, resultat, liasse, documents, parametres, aide];
@@ -178,8 +178,58 @@ function messageErreurConnexion(erreur) {
   zone.textContent = nom ? `${texte}  [${nom}]` : texte;
 }
 
+/** Version en ligne : connexion par e-mail et mot de passe (Firebase). */
+async function demarrerNuage() {
+  const chargement = document.getElementById('chargement');
+  const connexion = document.getElementById('connexion');
+  const message = document.getElementById('connexion-message');
+  const formulaireConnexion = document.getElementById('connexion-formulaire');
+  const erreur = document.getElementById('connexion-erreur');
+
+  document.getElementById('bouton-connexion').hidden = true;
+  document.getElementById('bouton-connexion-autre').hidden = true;
+  document.getElementById('connexion-version').textContent = `Version ${VERSION_APP}`;
+
+  try {
+    await api.initialiser();
+  } catch (e) {
+    chargement.hidden = true;
+    connexion.hidden = false;
+    message.textContent = e.message;
+    return;
+  }
+
+  // Déjà connecté (session mémorisée) : on entre directement.
+  if (await api.attendreConnexion()) { await demarrerAvecDossier(); return; }
+
+  chargement.hidden = true;
+  connexion.hidden = false;
+  formulaireConnexion.hidden = false;
+  message.innerHTML = 'Connectez-vous avec votre adresse e-mail et votre mot de passe.';
+
+  formulaireConnexion.onsubmit = async (evenement) => {
+    evenement.preventDefault();
+    erreur.hidden = true;
+    const boutonEnvoi = formulaireConnexion.querySelector('button');
+    boutonEnvoi.disabled = true;
+    try {
+      await api.seConnecter(
+        document.getElementById('connexion-email').value,
+        document.getElementById('connexion-mdp').value,
+      );
+      formulaireConnexion.hidden = true;
+      await demarrerAvecDossier();
+    } catch (e) {
+      erreur.hidden = false;
+      erreur.textContent = e.message;
+    } finally { boutonEnvoi.disabled = false; }
+  };
+}
+
 /** Écran de connexion : on désigne (ou reconnecte) le dossier partagé avant tout. */
 async function demarrer() {
+  if (api.MODE === 'nuage') { await demarrerNuage(); return; }
+
   const chargement = document.getElementById('chargement');
   const connexion = document.getElementById('connexion');
   const bouton = document.getElementById('bouton-connexion');
@@ -391,6 +441,7 @@ async function ouvrirApplication() {
     if (!confirme) return;
     clearInterval(contexte._battement);
     try { await api.libererVerrou(idPoste()); } catch { /* expiration couvre */ }
+    if (api.MODE === 'nuage') { try { await api.seDeconnecter(); } catch { /* déjà déconnecté */ } }
     document.body.innerHTML = '<div class="chargement"><div class="chargement-boite">'
       + '<div class="chargement-titre">Gestion LMNP</div>'
       + '<div class="chargement-texte">Vous pouvez fermer cet onglet. À bientôt.</div></div></div>';

@@ -22,6 +22,11 @@
     <p id="connexion-message" class="connexion-message"></p>
     <button id="bouton-connexion" class="bouton bouton-primaire bouton-connexion" type="button"></button>
     <button id="bouton-connexion-autre" class="bouton-lien bouton-connexion-autre" type="button" hidden>Choisir un autre dossier…</button>
+    <form id="connexion-formulaire" class="connexion-formulaire" hidden>
+      <input id="connexion-email" type="email" autocomplete="username" placeholder="Adresse e-mail" required>
+      <input id="connexion-mdp" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+      <button class="bouton bouton-primaire bouton-connexion" type="submit">Se connecter</button>
+    </form>
     <p id="connexion-erreur" class="connexion-erreur" hidden></p>
     <p class="connexion-note">Vos données restent dans le dossier partagé, sur votre ordinateur. Rien n’est envoyé sur Internet.</p>
     <p class="connexion-version" id="connexion-version"></p>

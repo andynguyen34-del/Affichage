@@ -40,6 +40,11 @@ h3 { font-size: .95rem; }
 p { margin: 0 0 .6em; }
 a { color: var(--accent); }
 
+/* L'attribut hidden doit toujours gagner : sans cette règle, un élément dont
+   une classe fixe display (grid, flex…) reste affiché — et un écran masqué
+   continuerait d'intercepter les clics de toute la page. */
+[hidden] { display: none !important; }
+
 /* ---------- écran de chargement ---------- */
 .chargement {
   position: fixed; inset: 0; display: grid; place-items: center;
@@ -326,6 +331,13 @@ textarea { min-height: 4.5rem; resize: vertical; }
 }
 .bouton-connexion { font-size: 1rem; padding: .7rem 1.4rem; }
 .bouton-connexion-autre:not([hidden]) { display: block; margin: .9rem auto 0; font-size: .86rem; }
+.connexion-formulaire:not([hidden]) { display: flex; flex-direction: column; gap: .7rem; margin-top: .4rem; }
+.connexion-formulaire input {
+  font: inherit; font-size: .95rem; padding: .65rem .8rem;
+  border: 1px solid var(--bordure); border-radius: 8px;
+  background: var(--fond-carte); color: var(--encre);
+}
+.connexion-formulaire input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .connexion-erreur { color: var(--alerte); font-size: .86rem; margin-top: 1rem; }
 .connexion-note { color: var(--encre-tres-douce); font-size: .78rem; margin-top: 1.6rem; }
 .connexion-version { color: var(--encre-tres-douce); font-size: .72rem; margin-top: .4rem; }
