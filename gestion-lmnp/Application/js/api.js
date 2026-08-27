@@ -87,7 +87,11 @@ async function verifierPermission(handle, demander) {
 
 /** Ouvre le sélecteur de dossier (nécessite un clic). */
 export async function choisirDossier() {
-  const handle = await window.showDirectoryPicker({ id: 'gestion-lmnp', mode: 'readwrite' });
+  // Pas d'option « id » : Chrome mémorise, par id, le dernier dossier ouvert ;
+  // si ce dossier a été déplacé, le sélecteur peut abandonner (AbortError). On
+  // repart donc du sélecteur par défaut, comme le fichier de diagnostic qui,
+  // lui, fonctionne.
+  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
   if (!(await verifierPermission(handle, true))) throw new Error('Accès au dossier refusé.');
   racine = handle;
   return nomDossier();
