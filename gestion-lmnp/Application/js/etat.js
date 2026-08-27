@@ -114,9 +114,11 @@ function normaliser(nom, contenu) {
   return contenu;
 }
 
-export async function chargerTout() {
+export async function chargerTout(onEtape = () => {}) {
+  onEtape('Préparation du dossier…');
   magasin.etat = await api.lireEtat();
   const abimes = [];
+  onEtape('Lecture des écritures comptables…');
   await Promise.all(COLLECTIONS.map(async (nom) => {
     const resultat = await api.lireCollection(nom);
     if (resultat.abime) { abimes.push(resultat.fichier || `${nom}.json`); return; }
@@ -133,6 +135,7 @@ export async function chargerTout() {
     erreur.abime = true;
     throw erreur;
   }
+  onEtape('Lecture des dossiers Documents et Factures…');
   await rechargerFichiers();
   notifier('chargement');
 }

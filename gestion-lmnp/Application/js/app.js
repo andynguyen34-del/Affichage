@@ -216,6 +216,16 @@ async function demarrer() {
 
 const VERROU_PERIME_MS = 90000;   // un verrou plus vieux que 90 s = poste fermé
 const VERROU_BATTEMENT_MS = 30000; // on rafraîchit notre verrou toutes les 30 s
+const VERROU_DELAI_MS = 8000;      // au-delà, on considère l'opération de verrou en échec
+
+// Borne une opération : si elle ne répond pas à temps, on renvoie une valeur de
+// repli au lieu de laisser le démarrage figé indéfiniment.
+function avecDelai(promesse, millisecondes, valeurSecours) {
+  return Promise.race([
+    Promise.resolve(promesse).catch(() => valeurSecours),
+    new Promise((resoudre) => { setTimeout(() => resoudre(valeurSecours), millisecondes); }),
+  ]);
+}
 
 function idPoste() {
   let id = localStorage.getItem('lmnp-poste-id');
@@ -235,7 +245,10 @@ async function poserVerrou() {
     depuis: new Date().toISOString(),
     battement: new Date().toISOString(),
   };
-  await api.ecrireVerrou(identite);
+  // Écriture du verrou bornée et NON bloquante : si le dossier tarde à répondre,
+  // on n'empêche pas l'application de s'ouvrir (le verrou n'est qu'une sécurité
+  // contre l'écriture simultanée à deux postes, pas une condition d'accès).
+  await avecDelai(api.ecrireVerrou(identite), VERROU_DELAI_MS, null);
   // Battement de cœur : tant que l'onglet est ouvert, on prouve qu'on est là.
   clearInterval(contexte._battement);
   contexte._battement = setInterval(async () => {
@@ -260,8 +273,7 @@ function gererVerrou() {
     const bouton = document.getElementById('bouton-connexion');
 
     const tenter = async () => {
-      let verrou = null;
-      try { verrou = await api.lireVerrou(); } catch { /* dossier momentanément indisponible */ }
+      const verrou = await avecDelai(api.lireVerrou(), VERROU_DELAI_MS, null);
       const libre = !verrou || verrou.idPoste === idPoste() || verrouPerime(verrou);
       if (libre) {
         clearInterval(contexte._attente);
@@ -292,22 +304,38 @@ async function demarrerAvecDossier() {
   const chargement = document.getElementById('chargement');
   chargement.hidden = false;
   const etape = (texte) => { const z = chargement.querySelector('.chargement-texte'); if (z) z.textContent = texte; };
+  const echouer = (erreur, ou) => {
+    console.error('Démarrage —', ou, erreur);
+    chargement.classList.add('erreur');
+    const z = chargement.querySelector('.chargement-texte');
+    if (z) {
+      z.textContent = erreur?.abime
+        ? erreur.message
+        : `Blocage à l’étape « ${ou} » : ${erreur?.message || erreur}`
+          + (erreur?.name ? ` [${erreur.name}]` : '')
+          + '. Rechargez la page (F5) ; si cela persiste, envoyez-moi cet écran.';
+    }
+  };
+
   etape('Lecture des données du dossier partagé…');
   try {
-    await etat.chargerTout();
-  } catch (erreur) {
-    chargement.classList.add('erreur');
-    chargement.querySelector('.chargement-texte').textContent = erreur.abime
-      ? erreur.message
-      : `${erreur.message} Vérifiez que le dossier partagé est bien accessible, puis rechargez la page.`;
-    return;
-  }
+    await etat.chargerTout(etape);
+  } catch (erreur) { echouer(erreur, 'lecture des données'); return; }
 
   // Verrou « un seul poste à la fois » : si l'autre poste l'utilise, on
   // affiche un écran d'attente et on entre dès qu'il ferme l'application.
   etape('Vérification de l’accès (un seul poste à la fois)…');
-  if (!(await gererVerrou())) return;
+  try {
+    if (!(await gererVerrou())) return;
+  } catch (erreur) { echouer(erreur, 'pose du verrou'); return; }
   etape('Ouverture…');
+
+  try {
+    await ouvrirApplication();
+  } catch (erreur) { echouer(erreur, 'ouverture de l’application'); }
+}
+
+async function ouvrirApplication() {
 
   const infos = etat.infosServeur();
   const zoneDossier = document.getElementById('dossier-actuel');
