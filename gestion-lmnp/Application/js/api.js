@@ -89,10 +89,13 @@ async function verifierPermission(handle, demander) {
 export async function choisirDossier() {
   // Pas d'option « id » : Chrome mémorise, par id, le dernier dossier ouvert ;
   // si ce dossier a été déplacé, le sélecteur peut abandonner (AbortError). On
-  // repart donc du sélecteur par défaut, comme le fichier de diagnostic qui,
-  // lui, fonctionne.
+  // repart donc du sélecteur par défaut.
   const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-  if (!(await verifierPermission(handle, true))) throw new Error('Accès au dossier refusé.');
+  // On NE rappelle PAS requestPermission ici : un dossier choisi via le
+  // sélecteur en mode « readwrite » est déjà autorisé en lecture/écriture, et
+  // showDirectoryPicker vient de consommer l'activation utilisateur —
+  // redemander l'autorisation sans activation échoue (AbortError). On fait
+  // simplement confiance au dossier fraîchement désigné.
   racine = handle;
   return nomDossier();
 }
