@@ -23,6 +23,9 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    directement sur le **menu de choix** :
    - 🎁 **participer au tirage au sort** (une seule participation par
      personne, garantie côté serveur) ;
+   - 🛠️ **s'inscrire aux ateliers** à places limitées (salles B, C, D…) —
+     une inscription par atelier et par personne, un seul atelier par
+     créneau ; l'affectation se fait ensuite par tirage au sort équitable ;
    - 📝 **répondre aux questionnaires** ouverts qui le concernent (une seule
      réponse par personne et par questionnaire, garantie côté serveur). Les
      gagnants du tirage s'affichent sur le portail une fois le tirage fait.
@@ -46,8 +49,20 @@ traçage des connexions (première connexion, dernier accès, nombre d'accès) e
 plusieurs gagnants au hasard, annulation possible ; les gagnants s'affichent
 sur le portail des participants.
 
-**Questionnaires.** Créés par journée à partir de modèles Qualiopi :
+**Ateliers à inscription.** Pour les ateliers à places limitées (salles B, C
+et D des journées d'études), l'administration crée les ateliers (un bouton
+pré-remplit les 6 ateliers types : 3 salles × 2 créneaux), ouvre les
+inscriptions, puis lance le **tirage au sort équitable** : une seule personne
+par blanchisserie est retenue en priorité dans chaque atelier, les doublons
+d'un même établissement ne passent que s'il reste des places, les autres sont
+placés en liste d'attente ordonnée. Chaque participant voit son résultat sur
+le portail ; une **feuille d'émargement CSV** est exportable par atelier.
 
+**Questionnaires.** Créés par journée à partir de modèles :
+
+- *Évaluation stagiaire (modèle URBH)* — reprend le questionnaire officiel
+  des journées d'études : notation de 1 à 5, un bloc de cinq questions par
+  conférence, organisation, bilan et intention de revenir ;
 - *Évaluation à chaud* — organisation, contenu, intervenants, note /10,
   recommandation, remarques libres ;
 - *Évaluation à froid* — mise en pratique, utilité, besoins complémentaires ;

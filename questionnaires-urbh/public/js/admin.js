@@ -10,6 +10,7 @@
 
   const TYPES_QUESTION = {
     echelle4: 'Échelle de satisfaction (1 à 4)',
+    note5: 'Note de 1 à 5',
     note10: 'Note de 0 à 10',
     ouinon: 'Oui / Non',
     choix: 'Choix dans une liste',
@@ -258,6 +259,20 @@
     const snapT = await db.collection('tirage').where('journeeId', '==', journeeId).get();
     const participationsTirage = snapT.docs.map((d) => ({ id: d.id, ...d.data() }));
 
+    const snapA = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
+    const ateliers = snapA.docs.map((d) => ({ id: d.id, ...d.data() }));
+    ateliers.sort(
+      (a, b) =>
+        String(a.horaire || '').localeCompare(String(b.horaire || '')) ||
+        String(a.salle || '').localeCompare(String(b.salle || '')),
+    );
+    const snapV = await db.collection('voeux').where('journeeId', '==', journeeId).get();
+    const voeuxParAtelier = {};
+    snapV.docs.forEach((d) => {
+      const v = { id: d.id, ...d.data() };
+      (voeuxParAtelier[v.atelierId] = voeuxParAtelier[v.atelierId] || []).push(v);
+    });
+
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
     const base = location.origin + location.pathname.replace(/index\.html$/, '');
@@ -397,6 +412,105 @@
             : ''
         }
         <div id="resultat-tirage"></div>
+      </div>
+
+      <div class="carte">
+        <h2>🛠️ Ateliers (inscription + tirage au sort)</h2>
+        <p class="muet petit">Les inscriptions se font sur le portail ; le tirage
+        au sort retient en priorité une seule personne par blanchisserie et par
+        atelier, pour que toutes les chances soient offertes à tous. Les
+        doublons d'un même établissement ne passent que s'il reste des places ;
+        les autres sont en liste d'attente.</p>
+        ${
+          ateliers.length
+            ? ateliers
+                .map((a) => {
+                  const voeux = voeuxParAtelier[a.id] || [];
+                  const organismes = new Set(
+                    voeux.map((v) => (v.organisme || '').trim().toLowerCase()).filter(Boolean),
+                  );
+                  const badges = {
+                    ferme: '<span class="badge brouillon">Inscriptions fermées</span>',
+                    inscriptions_ouvertes: '<span class="badge ouvert">Inscriptions ouvertes</span>',
+                    tire: '<span class="badge ferme">Tirage effectué</span>',
+                  };
+                  return `<div class="q-item">
+                    <div class="q-entete">
+                      <span class="q-type">Salle ${echapper(a.salle)}</span>
+                      <span class="muet petit">${echapper(a.horaire || '')} — ${a.capacite} places</span>
+                      ${badges[a.statut] || ''}
+                      <div class="pousse">
+                        <button class="discret bouton-supprimer-atelier" data-id="${attr(a.id)}">Supprimer</button>
+                      </div>
+                    </div>
+                    <div><strong>${echapper(a.nom)}</strong></div>
+                    ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
+                    <div class="muet petit">${voeux.length} inscrit(s), ${organismes.size} établissement(s) distinct(s)</div>
+                    <div class="ligne-boutons">
+                      ${
+                        a.statut === 'inscriptions_ouvertes'
+                          ? `<button class="secondaire bouton-clore-atelier" data-id="${attr(a.id)}">Clore les inscriptions</button>`
+                          : a.statut !== 'tire'
+                            ? `<button class="bouton-ouvrir-atelier" data-id="${attr(a.id)}">Ouvrir les inscriptions</button>`
+                            : ''
+                      }
+                      ${
+                        a.statut !== 'tire'
+                          ? `<button class="bouton-tirer-atelier" data-id="${attr(a.id)}" ${voeux.length ? '' : 'disabled title="Aucun inscrit"'}>🎲 Tirer au sort</button>`
+                          : `<button class="secondaire bouton-csv-atelier" data-id="${attr(a.id)}">Feuille d'émargement (CSV)</button>
+                            <button class="secondaire bouton-refaire-atelier" data-id="${attr(a.id)}">Refaire le tirage</button>`
+                      }
+                    </div>
+                    ${
+                      a.statut === 'tire'
+                        ? `<div><strong>Retenus (${(a.retenus || []).length})</strong> :
+                            ${(a.retenus || [])
+                              .map(
+                                (r) =>
+                                  `${echapper(r.prenom)} ${echapper(r.nom)}${r.numeroInscription ? ' (n° ' + echapper(r.numeroInscription) + ')' : ''}${r.organisme ? ' — ' + echapper(r.organisme) : ''}`,
+                              )
+                              .join(' · ') || 'aucun'}
+                          </div>
+                          ${
+                            (a.listeAttente || []).length
+                              ? `<div class="muet petit"><strong>Liste d'attente</strong> :
+                                  ${(a.listeAttente || [])
+                                    .map(
+                                      (r, i) =>
+                                        `${i + 1}. ${echapper(r.prenom)} ${echapper(r.nom)}${r.organisme ? ' (' + echapper(r.organisme) + ')' : ''}`,
+                                    )
+                                    .join(' · ')}
+                                </div>`
+                              : ''
+                          }`
+                        : ''
+                    }
+                  </div>`;
+                })
+                .join('')
+            : `<p class="muet">Aucun atelier pour cette journée.</p>
+              <div class="ligne-boutons">
+                <button id="bouton-seed-ateliers" class="secondaire">
+                  Créer les 6 ateliers URBH types (salles B, C, D × 2 créneaux)
+                </button>
+              </div>`
+        }
+        <h3>Ajouter un atelier</h3>
+        <form id="form-atelier">
+          <label class="champ">Intitulé *
+            <input id="at-nom" required placeholder="Ex. : L'Intelligence Artificielle au service des blanchisseries"></label>
+          <label class="champ">Salle *
+            <input id="at-salle" required placeholder="B" style="max-width:8rem"></label>
+          <label class="champ">Créneau *
+            <input id="at-horaire" required placeholder="Jeudi 15h00 – 16h00"></label>
+          <label class="champ">Nombre de places *
+            <input id="at-capacite" type="number" min="1" step="1" value="20" required style="max-width:8rem"></label>
+          <label class="champ">Intervenants / description
+            <input id="at-intervenants"></label>
+          <div class="ligne-boutons">
+            <button type="submit">Créer l'atelier</button>
+          </div>
+        </form>
       </div>
 
       <div class="carte">
@@ -617,6 +731,185 @@
       }),
     );
 
+    // --- ateliers
+
+    async function creerAtelier(donnees) {
+      await db.collection('ateliers').add({
+        journeeId,
+        statut: 'ferme',
+        retenus: [],
+        listeAttente: [],
+        creeLe: firebase.firestore.FieldValue.serverTimestamp(),
+        ...donnees,
+      });
+    }
+
+    const boutonSeed = document.getElementById('bouton-seed-ateliers');
+    if (boutonSeed) {
+      boutonSeed.addEventListener('click', async () => {
+        const types = [
+          {
+            salle: 'B',
+            nom: "L'Intelligence Artificielle au service des blanchisseries",
+            intervenants: 'La Rochelle : Vincent Pacton — Puy-en-Velay : Denis Bonnet — Toulouse',
+          },
+          {
+            salle: 'C',
+            nom: 'Des outils pour la gestion de la maintenance',
+            intervenants: 'Tours : Jean-Pascal Testard — Poitiers : Lucas Monrousseau et Hervé Dumoulin',
+          },
+          {
+            salle: 'D',
+            nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la RABC ?",
+            intervenants: 'Mickael Gilbrin, Frédéric Jourdan, Catherine Diallo',
+          },
+        ];
+        for (const horaire of ['Jeudi 15h00 – 16h00', 'Jeudi 16h00 – 17h00']) {
+          for (const t of types) {
+            await creerAtelier({ ...t, horaire, capacite: 20 });
+          }
+        }
+        router();
+      });
+    }
+
+    document.getElementById('form-atelier').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      await creerAtelier({
+        nom: document.getElementById('at-nom').value.trim(),
+        salle: document.getElementById('at-salle').value.trim(),
+        horaire: document.getElementById('at-horaire').value.trim(),
+        capacite: Math.max(1, Number(document.getElementById('at-capacite').value) || 20),
+        intervenants: document.getElementById('at-intervenants').value.trim(),
+      });
+      router();
+    });
+
+    document.querySelectorAll('.bouton-ouvrir-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await db.collection('ateliers').doc(b.dataset.id).update({ statut: 'inscriptions_ouvertes' });
+        router();
+      }),
+    );
+    document.querySelectorAll('.bouton-clore-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await db.collection('ateliers').doc(b.dataset.id).update({ statut: 'ferme' });
+        router();
+      }),
+    );
+
+    // Tirage au sort équitable : une personne par établissement en priorité,
+    // les doublons d'un même établissement seulement s'il reste des places.
+    function tirerEquitable(voeux, capacite) {
+      const melange = [...voeux];
+      for (let i = melange.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [melange[i], melange[j]] = [melange[j], melange[i]];
+      }
+      const retenus = [];
+      const attente = [];
+      const etablissementsPris = new Set();
+      melange.forEach((v) => {
+        const cle = (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
+        if (retenus.length < capacite && !etablissementsPris.has(cle)) {
+          retenus.push(v);
+          etablissementsPris.add(cle);
+        } else {
+          attente.push(v);
+        }
+      });
+      while (retenus.length < capacite && attente.length) retenus.push(attente.shift());
+      return { retenus, attente };
+    }
+
+    function versPublic(v) {
+      return {
+        participantId: v.participantId,
+        prenom: v.prenom || '',
+        nom: v.nom || '',
+        organisme: v.organisme || '',
+        numeroInscription: v.numeroInscription || '',
+        type: v.type || '',
+      };
+    }
+
+    async function lancerTirageAtelier(atelierId) {
+      const atelier = ateliers.find((x) => x.id === atelierId);
+      const voeux = voeuxParAtelier[atelierId] || [];
+      if (!atelier || !voeux.length) return;
+      const { retenus, attente } = tirerEquitable(voeux, atelier.capacite || 20);
+      await db.collection('ateliers').doc(atelierId).update({
+        statut: 'tire',
+        retenus: retenus.map(versPublic),
+        listeAttente: attente.map(versPublic),
+        tireLe: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      router();
+    }
+
+    document.querySelectorAll('.bouton-tirer-atelier').forEach((b) =>
+      b.addEventListener('click', () => lancerTirageAtelier(b.dataset.id)),
+    );
+    document.querySelectorAll('.bouton-refaire-atelier').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (confirm('Refaire le tirage de cet atelier ? Le résultat actuel sera remplacé.')) {
+          lancerTirageAtelier(b.dataset.id);
+        }
+      }),
+    );
+
+    document.querySelectorAll('.bouton-csv-atelier').forEach((b) =>
+      b.addEventListener('click', () => {
+        const atelier = ateliers.find((x) => x.id === b.dataset.id);
+        if (!atelier) return;
+        const voeux = voeuxParAtelier[atelier.id] || [];
+        const mobiles = {};
+        voeux.forEach((v) => {
+          mobiles[v.participantId] = v.mobile || '';
+        });
+        const sep = ';';
+        const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lignes = [
+          ['Statut', 'N° inscription', 'Prénom', 'Nom', 'Établissement', 'Mobile', 'Émargement']
+            .map(cellule)
+            .join(sep),
+        ];
+        (atelier.retenus || []).forEach((r) =>
+          lignes.push(
+            ['Retenu', r.numeroInscription, r.prenom, r.nom, r.organisme, mobiles[r.participantId] || '', '']
+              .map(cellule)
+              .join(sep),
+          ),
+        );
+        (atelier.listeAttente || []).forEach((r, i) =>
+          lignes.push(
+            [`Attente ${i + 1}`, r.numeroInscription, r.prenom, r.nom, r.organisme, mobiles[r.participantId] || '', '']
+              .map(cellule)
+              .join(sep),
+          ),
+        );
+        const blob = new Blob(['\uFEFF' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download =
+          'atelier-salle-' + (atelier.salle || 'x') + '-' + (atelier.horaire || '').replace(/[^\dh]+/g, '-') + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }),
+    );
+
+    document.querySelectorAll('.bouton-supprimer-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const voeux = voeuxParAtelier[b.dataset.id] || [];
+        if (!confirm(`Supprimer cet atelier${voeux.length ? ` et ses ${voeux.length} inscriptions` : ''} ?`)) return;
+        const lot = db.batch();
+        voeux.forEach((v) => lot.delete(db.collection('voeux').doc(v.id)));
+        lot.delete(db.collection('ateliers').doc(b.dataset.id));
+        await lot.commit();
+        router();
+      }),
+    );
+
     // --- journée : modification / suppression
 
     document.getElementById('bouton-modifier-journee').addEventListener('click', () => {
@@ -660,6 +953,8 @@
       const aSupprimer = [
         ...inscriptions.map((i) => db.collection('inscriptions').doc(i.id)),
         ...participationsTirage.map((p) => db.collection('tirage').doc(p.id)),
+        ...ateliers.map((a) => db.collection('ateliers').doc(a.id)),
+        ...snapV.docs.map((d) => d.ref),
         refPortail,
         db.collection('journees').doc(journeeId),
       ];
@@ -747,6 +1042,20 @@
         satisfaits: comptes[2] + comptes[3],
       };
     }
+    if (q.type === 'note5') {
+      const comptes = [0, 0, 0, 0, 0];
+      valeurs.forEach((v) => {
+        const i = Number(v) - 1;
+        if (i >= 0 && i < 5) comptes[i] += 1;
+      });
+      const somme = valeurs.reduce((s, v) => s + Number(v), 0);
+      return {
+        n,
+        comptes,
+        moyenne: n ? somme / n : null,
+        satisfaits: comptes[3] + comptes[4],
+      };
+    }
     if (q.type === 'note10') {
       const somme = valeurs.reduce((s, v) => s + Number(v), 0);
       const comptes = Array(11).fill(0);
@@ -776,21 +1085,30 @@
     let noteMoyenne = null;
     let recommandation = null;
 
+    let noteSur = 10;
+    let noteMoyenne5 = null;
     (questionnaire.questions || []).forEach((q) => {
       const s = statsQuestion(q, reponses);
-      if (q.type === 'echelle4') {
+      if (q.type === 'echelle4' || q.type === 'note5') {
         totalEchelle += s.n;
         totalSatisfaits += s.satisfaits;
       }
       if (q.type === 'note10' && noteMoyenne === null && s.moyenne !== null) {
         noteMoyenne = s.moyenne;
       }
+      if (q.type === 'note5' && noteMoyenne5 === null && s.moyenne !== null) {
+        noteMoyenne5 = s.moyenne;
+      }
       if (q.type === 'ouinon' && recommandation === null && s.n) {
         recommandation = s.oui / s.n;
       }
     });
+    if (noteMoyenne === null && noteMoyenne5 !== null) {
+      noteMoyenne = noteMoyenne5;
+      noteSur = 5;
+    }
 
-    return { totalEchelle, totalSatisfaits, noteMoyenne, recommandation };
+    return { totalEchelle, totalSatisfaits, noteMoyenne, noteSur, recommandation };
   }
 
   function htmlBarres(lignes, total, classes) {
@@ -823,6 +1141,15 @@
         ECHELLE4.map((lib, i) => [lib, s.comptes[i]]),
         s.n,
         ['n1', 'n2', 'n3', 'n4'],
+      );
+    } else if (q.type === 'note5') {
+      resume = s.n
+        ? `moyenne ${s.moyenne.toFixed(2)} / 5 — ${pourcent(s.satisfaits, s.n)} de notes 4 et 5`
+        : 'aucune réponse';
+      corps = htmlBarres(
+        s.comptes.map((c, i) => [String(i + 1), c]),
+        s.n,
+        ['n1', 'n2', 'n2', 'n3', 'n4'],
       );
     } else if (q.type === 'note10') {
       resume = s.n ? `moyenne ${s.moyenne.toFixed(1)} / 10` : 'aucune réponse';
@@ -998,8 +1325,8 @@
           <div class="tuile"><div class="valeur">${nbAttendus ? pourcent(reponses.length, nbAttendus) : '—'}</div>
             <div class="legende">taux de réponse${nbAttendus ? ` (${nbAttendus} attendus)` : ''}</div></div>
           <div class="tuile"><div class="valeur">${g.totalEchelle ? pourcent(g.totalSatisfaits, g.totalEchelle) : '—'}</div>
-            <div class="legende">satisfaction globale (réponses « satisfaisant » et plus)</div></div>
-          <div class="tuile"><div class="valeur">${g.noteMoyenne !== null ? g.noteMoyenne.toFixed(1) + ' / 10' : '—'}</div>
+            <div class="legende">satisfaction globale (« satisfaisant » et plus, notes 4 et 5)</div></div>
+          <div class="tuile"><div class="valeur">${g.noteMoyenne !== null ? g.noteMoyenne.toFixed(1) + ' / ' + g.noteSur : '—'}</div>
             <div class="legende">note moyenne</div></div>
           <div class="tuile"><div class="valeur">${g.recommandation !== null ? Math.round(g.recommandation * 100) + ' %' : '—'}</div>
             <div class="legende">recommanderaient la journée</div></div>

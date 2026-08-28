@@ -97,6 +97,37 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Ateliers soumis à inscription puis tirage au sort (salles B, C, D…).
+    // Le document porte le résultat du tirage (retenus, liste d'attente),
+    // affiché aux participants — comme à la porte de la salle.
+    match /ateliers/{atelierId} {
+      allow get, list: if connecte();
+      allow write: if isAdmin();
+    }
+
+    // Vœu d'inscription à un atelier. Identifiant imposé
+    // « <atelierId>_<uid> » : une inscription par personne et par atelier,
+    // uniquement quand les inscriptions de l'atelier sont ouvertes.
+    // Le participant peut se désinscrire tant qu'elles le sont.
+    match /voeux/{voeuId} {
+      allow create: if connecte()
+        && voeuId == request.resource.data.atelierId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['atelierId', 'journeeId', 'participantId', 'type', 'nom',
+              'prenom', 'organisme', 'mobile', 'numeroInscription', 'creeLe'])
+        && get(/databases/$(database)/documents/ateliers/$(request.resource.data.atelierId))
+             .data.statut == 'inscriptions_ouvertes';
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow delete: if isAdmin()
+        || (connecte()
+            && resource.data.participantId == request.auth.uid
+            && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
+                 .data.statut == 'inscriptions_ouvertes');
+      allow list: if isAdmin();
+      allow update: if false;
+    }
+
     match /questionnaires/{questionnaireId} {
       // Un participant ne voit que les questionnaires ouverts (le portail ne
       // demande d'ailleurs que ceux-là dans sa requête).

@@ -60,6 +60,14 @@
             `<label><input type="radio" name="${nom}" value="${i + 1}">${echapper(lib)}</label>`,
         ).join('') +
         '</div>';
+    } else if (q.type === 'note5') {
+      corps =
+        '<div class="note10">' +
+        Array.from({ length: 5 }, (_, i) =>
+          `<label><input type="radio" name="${nom}" value="${i + 1}">${i + 1}</label>`,
+        ).join('') +
+        '</div>' +
+        '<div class="muet petit">1 = note la plus basse, 5 = la meilleure</div>';
     } else if (q.type === 'note10') {
       corps =
         '<div class="note10">' +
@@ -138,7 +146,9 @@
         const coche = bloc.querySelector('input:checked');
         if (coche) {
           valeur =
-            type === 'echelle4' || type === 'note10' ? Number(coche.value) : coche.value;
+            type === 'echelle4' || type === 'note5' || type === 'note10'
+              ? Number(coche.value)
+              : coche.value;
         }
       }
 

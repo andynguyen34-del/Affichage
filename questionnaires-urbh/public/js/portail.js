@@ -160,6 +160,79 @@
       }
     }
 
+    // Ateliers soumis à inscription puis tirage au sort.
+    let ateliers = [];
+    try {
+      const snapA = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
+      ateliers = snapA.docs.map((d) => ({ id: d.id, ...d.data() }));
+      ateliers.sort(
+        (a, b) =>
+          String(a.horaire || '').localeCompare(String(b.horaire || '')) ||
+          String(a.salle || '').localeCompare(String(b.salle || '')),
+      );
+    } catch (_) {
+      ateliers = [];
+    }
+
+    const mesVoeux = {};
+    await Promise.all(
+      ateliers.map(async (a) => {
+        try {
+          const d = await db.collection('voeux').doc(a.id + '_' + uid).get();
+          mesVoeux[a.id] = d.exists;
+        } catch (_) {
+          mesVoeux[a.id] = false;
+        }
+      }),
+    );
+    const horairesInscrits = new Set(
+      ateliers.filter((a) => mesVoeux[a.id]).map((a) => a.horaire || ''),
+    );
+
+    function htmlAtelier(a) {
+      const inscrit = mesVoeux[a.id];
+      let etat = '';
+      let action = '';
+
+      if (a.statut === 'tire') {
+        const retenu = (a.retenus || []).some((r) => r.participantId === uid);
+        const posAttente = (a.listeAttente || []).findIndex((r) => r.participantId === uid);
+        if (retenu) {
+          etat = `<div class="info">🎉 Vous êtes retenu pour cet atelier — rendez-vous salle ${echapper(a.salle)}, ${echapper(a.horaire || '')}.</div>`;
+        } else if (posAttente >= 0) {
+          etat = `<div class="info">Vous êtes en liste d'attente (position ${posAttente + 1}) : présentez-vous à la salle, une place peut se libérer.</div>`;
+        } else if (inscrit) {
+          etat = `<div class="muet petit">Le tirage au sort n'a pas pu vous retenir cette fois-ci.</div>`;
+        } else {
+          etat = `<div class="muet petit">Tirage au sort effectué.</div>`;
+        }
+      } else if (a.statut === 'inscriptions_ouvertes') {
+        if (inscrit) {
+          etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera les inscrits.</div>`;
+          action = `<button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Me désinscrire</button>`;
+        } else if (horairesInscrits.has(a.horaire || '')) {
+          etat = `<div class="muet petit">Vous êtes déjà inscrit à un autre atelier sur ce créneau.</div>`;
+        } else {
+          action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
+        }
+      } else {
+        etat = inscrit
+          ? `<div class="muet petit">Inscriptions closes — le tirage au sort aura lieu prochainement.</div>`
+          : `<div class="muet petit">Les inscriptions ne sont pas ouvertes.</div>`;
+      }
+
+      return `<div class="q-item">
+        <div class="q-entete">
+          <span class="q-type">Salle ${echapper(a.salle)}</span>
+          <span class="muet petit">${echapper(a.horaire || '')}</span>
+        </div>
+        <div><strong>${echapper(a.nom)}</strong></div>
+        ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
+        ${etat}
+        ${action ? `<div class="ligne-boutons">${action}</div>` : ''}
+      </div>`;
+    }
+
     let questionnaires = [];
     try {
       const snap = await db
@@ -223,6 +296,19 @@
         <div id="erreur-tirage" class="erreur" hidden></div>
       </div>
 
+      ${
+        ateliers.length
+          ? `<div class="carte">
+              <h2>🛠️ Ateliers</h2>
+              <p class="muet petit">Les places étant limitées, les inscriptions
+              sont départagées par tirage au sort, en donnant leur chance à
+              toutes les blanchisseries.</p>
+              <div id="erreur-atelier" class="erreur" hidden></div>
+              ${ateliers.map(htmlAtelier).join('')}
+            </div>`
+          : ''
+      }
+
       <div class="carte">
         <h2>📝 Questionnaires</h2>
         ${
@@ -257,6 +343,56 @@
       document.getElementById('p-mobile').value = profil.mobile || '';
       document.getElementById('p-email').value = profil.email || '';
     });
+
+    function erreurAtelier(texte) {
+      const zone = document.getElementById('erreur-atelier');
+      if (zone) {
+        zone.textContent = texte;
+        zone.hidden = false;
+      }
+    }
+
+    document.querySelectorAll('.bouton-voeu-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await db
+            .collection('voeux')
+            .doc(b.dataset.id + '_' + uid)
+            .set({
+              atelierId: b.dataset.id,
+              journeeId,
+              participantId: uid,
+              type: profil.type,
+              nom: profil.nom,
+              prenom: profil.prenom,
+              organisme: profil.organisme || '',
+              mobile: profil.mobile || '',
+              numeroInscription: profil.numeroInscription || '',
+              creeLe: new Date().toISOString(),
+            });
+          vueMenu();
+        } catch (_) {
+          erreurAtelier(
+            "L'inscription n'a pas pu être enregistrée (inscriptions closes ou connexion instable). Réessayez.",
+          );
+          b.disabled = false;
+        }
+      }),
+    );
+
+    document.querySelectorAll('.bouton-retrait-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await db.collection('voeux').doc(b.dataset.id + '_' + uid).delete();
+          vueMenu();
+        } catch (_) {
+          erreurAtelier('La désinscription a échoué (inscriptions closes ?).');
+          b.disabled = false;
+        }
+      }),
+    );
 
     const boutonTirage = document.getElementById('bouton-tirage');
     if (boutonTirage) {
