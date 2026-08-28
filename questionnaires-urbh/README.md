@@ -60,11 +60,15 @@ sur le portail des participants.
 **Ateliers à inscription.** Pour les ateliers à places limitées (salles B, C
 et D des journées d'études), l'administration crée les ateliers (un bouton
 pré-remplit les 6 ateliers types : 3 salles × 2 créneaux), ouvre les
-inscriptions, puis lance le **tirage au sort équitable** : une seule personne
-par blanchisserie est retenue en priorité dans chaque atelier, les doublons
-d'un même établissement ne passent que s'il reste des places, les autres sont
-placés en liste d'attente ordonnée. Chaque participant voit son résultat sur
-le portail ; une **feuille d'émargement CSV** est exportable par atelier.
+inscriptions, puis lance le **tirage au sort équitable**, atelier par
+atelier : sont retenues en priorité 1) les personnes n'ayant encore gagné
+aucun atelier de la journée et dont la blanchisserie n'est pas déjà
+représentée dans cet atelier, 2) puis les autres personnes sans atelier, 3)
+et seulement s'il reste des places, celles déjà retenues ailleurs (une
+personne ne cumule donc plusieurs ateliers que sur des places restantes,
+gérées atelier par atelier). Les autres sont en liste d'attente ordonnée
+selon les mêmes priorités. Chaque participant voit son résultat sur le
+portail ; une **feuille d'émargement CSV** est exportable par atelier.
 
 **Questionnaires.** Créés par journée à partir de modèles :
 

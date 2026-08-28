@@ -354,7 +354,8 @@
               <h2>🛠️ Ateliers</h2>
               <p class="muet petit">Les places étant limitées, les inscriptions
               sont départagées par tirage au sort, en donnant leur chance à
-              toutes les blanchisseries.</p>
+              toutes les blanchisseries et à chacun : on ne peut être retenu
+              dans plusieurs ateliers que s'il reste des places.</p>
               <div id="erreur-atelier" class="erreur" hidden></div>
               ${ateliers.map(htmlAtelier).join('')}
             </div>`

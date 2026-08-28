@@ -492,6 +492,14 @@
       const v = { id: d.id, ...d.data() };
       (voeuxParAtelier[v.atelierId] = voeuxParAtelier[v.atelierId] || []).push(v);
     });
+    // Nombre d'ateliers gagnés par personne (pour signaler les cumuls,
+    // possibles uniquement sur des places restantes).
+    const nbAteliersGagnes = {};
+    ateliers.forEach((a) =>
+      (a.retenus || []).forEach((r) => {
+        nbAteliersGagnes[r.participantId] = (nbAteliersGagnes[r.participantId] || 0) + 1;
+      }),
+    );
 
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
@@ -639,11 +647,14 @@
 
       <div class="carte">
         <h2>🛠️ Ateliers (inscription + tirage au sort)</h2>
-        <p class="muet petit">Les inscriptions se font sur le portail ; le tirage
-        au sort retient en priorité une seule personne par blanchisserie et par
-        atelier, pour que toutes les chances soient offertes à tous. Les
-        doublons d'un même établissement ne passent que s'il reste des places ;
-        les autres sont en liste d'attente.</p>
+        <p class="muet petit">Les inscriptions se font sur le portail. Le tirage
+        au sort de chaque atelier retient en priorité : 1) les personnes qui
+        n'ont encore gagné aucun atelier ET dont la blanchisserie n'est pas
+        déjà représentée ici, 2) puis les autres personnes sans atelier, 3) et
+        seulement s'il reste des places, celles déjà retenues dans un autre
+        atelier (signalées ⚠️). Les autres sont en liste d'attente dans le même
+        ordre de priorité. Tirez les ateliers un par un pour garder la main sur
+        les places restantes.</p>
         ${
           ateliers.length
             ? ateliers
@@ -690,7 +701,7 @@
                             ${(a.retenus || [])
                               .map(
                                 (r) =>
-                                  `${echapper(r.prenom)} ${echapper(r.nom)}${r.numeroInscription ? ' (n° ' + echapper(r.numeroInscription) + ')' : ''}${r.organisme ? ' — ' + echapper(r.organisme) : ''}`,
+                                  `${nbAteliersGagnes[r.participantId] > 1 ? '⚠️ ' : ''}${echapper(r.prenom)} ${echapper(r.nom)}${r.numeroInscription ? ' (n° ' + echapper(r.numeroInscription) + ')' : ''}${r.organisme ? ' — ' + echapper(r.organisme) : ''}`,
                               )
                               .join(' · ') || 'aucun'}
                           </div>
@@ -1022,27 +1033,45 @@
       }),
     );
 
-    // Tirage au sort équitable : une personne par établissement en priorité,
-    // les doublons d'un même établissement seulement s'il reste des places.
-    function tirerEquitable(voeux, capacite) {
+    // Tirage au sort équitable, atelier par atelier, dans l'ordre aléatoire :
+    //  1. priorité aux personnes non retenues dans un AUTRE atelier de la
+    //     journée ET dont l'établissement n'est pas encore représenté ici ;
+    //  2. puis, s'il reste des places, aux autres personnes non retenues
+    //     ailleurs (même si leur établissement est déjà représenté) ;
+    //  3. enfin, s'il reste encore des places, aux personnes déjà retenues
+    //     dans un autre atelier (une personne ne cumule donc plusieurs
+    //     ateliers que sur des places restantes).
+    // La liste d'attente reprend le même ordre de priorité.
+    function tirerEquitable(voeux, capacite, retenusAilleurs) {
       const melange = [...voeux];
       for (let i = melange.length - 1; i > 0; i -= 1) {
         const j = Math.floor(Math.random() * (i + 1));
         [melange[i], melange[j]] = [melange[j], melange[i]];
       }
       const retenus = [];
-      const attente = [];
+      const pris = new Set();
       const etablissementsPris = new Set();
-      melange.forEach((v) => {
-        const cle = (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
-        if (retenus.length < capacite && !etablissementsPris.has(cle)) {
+      const cleEtab = (v) =>
+        (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
+
+      function passe(condition) {
+        melange.forEach((v) => {
+          if (retenus.length >= capacite || pris.has(v.participantId)) return;
+          if (!condition(v)) return;
           retenus.push(v);
-          etablissementsPris.add(cle);
-        } else {
-          attente.push(v);
-        }
-      });
-      while (retenus.length < capacite && attente.length) retenus.push(attente.shift());
+          pris.add(v.participantId);
+          etablissementsPris.add(cleEtab(v));
+        });
+      }
+      passe((v) => !retenusAilleurs.has(v.participantId) && !etablissementsPris.has(cleEtab(v)));
+      passe((v) => !retenusAilleurs.has(v.participantId));
+      passe(() => true);
+
+      const restants = melange.filter((v) => !pris.has(v.participantId));
+      const attente = [
+        ...restants.filter((v) => !retenusAilleurs.has(v.participantId)),
+        ...restants.filter((v) => retenusAilleurs.has(v.participantId)),
+      ];
       return { retenus, attente };
     }
 
@@ -1061,7 +1090,15 @@
       const atelier = ateliers.find((x) => x.id === atelierId);
       const voeux = voeuxParAtelier[atelierId] || [];
       if (!atelier || !voeux.length) return;
-      const { retenus, attente } = tirerEquitable(voeux, atelier.capacite || 20);
+      // Personnes déjà retenues dans un autre atelier de la journée : elles
+      // ne repassent ici que sur des places restantes.
+      const retenusAilleurs = new Set();
+      ateliers.forEach((x) => {
+        if (x.id !== atelierId) {
+          (x.retenus || []).forEach((r) => retenusAilleurs.add(r.participantId));
+        }
+      });
+      const { retenus, attente } = tirerEquitable(voeux, atelier.capacite || 20, retenusAilleurs);
       await db.collection('ateliers').doc(atelierId).update({
         statut: 'tire',
         retenus: retenus.map(versPublic),
