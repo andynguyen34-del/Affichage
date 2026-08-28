@@ -1820,12 +1820,16 @@
 
   // ------------------------------------------------------------------ démarrage
 
-  if (!window.firebaseConfigEstRenseignee()) {
-    vueConfigManquante();
-    return;
+  // Sur Firebase Hosting, /__/firebase/init.js a déjà initialisé l'application
+  // avec la configuration du projet ; en dehors (poste local), on se rabat sur
+  // la configuration recopiée dans firebase-config.js.
+  if (!firebase.apps.length) {
+    if (!window.firebaseConfigEstRenseignee()) {
+      vueConfigManquante();
+      return;
+    }
+    firebase.initializeApp(window.FIREBASE_CONFIG);
   }
-
-  firebase.initializeApp(window.FIREBASE_CONFIG);
   auth = firebase.auth();
   db = firebase.firestore();
 

@@ -34,12 +34,20 @@
   const params = new URLSearchParams(location.search);
   const questionnaireId = params.get('id');
 
-  if (!questionnaireId || !/^[A-Za-z0-9_-]+$/.test(questionnaireId) || !window.firebaseConfigEstRenseignee()) {
+  if (!questionnaireId || !/^[A-Za-z0-9_-]+$/.test(questionnaireId)) {
     montrer('indisponible');
     return;
   }
 
-  firebase.initializeApp(window.FIREBASE_CONFIG);
+  // Sur Firebase Hosting, /__/firebase/init.js a déjà initialisé l'application
+  // avec la configuration du projet ; sinon, repli sur firebase-config.js.
+  if (!firebase.apps.length) {
+    if (!window.firebaseConfigEstRenseignee()) {
+      montrer('indisponible');
+      return;
+    }
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+  }
   const auth = firebase.auth();
   const db = firebase.firestore();
 

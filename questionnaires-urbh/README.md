@@ -117,9 +117,11 @@ imprimable** (papier ou PDF).
    `config`, document `admins`, champ `emails` de type **tableau** contenant
    votre adresse e-mail. Cette liste n'est modifiable que depuis la console.
 5. **Paramètres du projet → Vos applications → Ajouter une application →
-   Web** ; recopier les valeurs de `firebaseConfig` dans
-   `public/js/firebase-config.js`. (Ces valeurs identifient le projet et ne
-   sont pas des secrets : la sécurité repose sur les règles Firestore.)
+   Web** (un simple enregistrement suffit, inutile de cocher Hosting).
+   **Rien à recopier** : hébergée sur Firebase Hosting, l'application
+   récupère sa configuration toute seule (`/__/firebase/init.js`). Le
+   fichier `public/js/firebase-config.js` ne sert que de secours hors de
+   cet hébergement.
 
 ### 2. Déployer
 
@@ -127,8 +129,7 @@ imprimable** (papier ou PDF).
 npm install -g firebase-tools     # si nécessaire
 cd questionnaires-urbh
 firebase login
-firebase use --add                # choisir le projet créé, alias "default"
-firebase deploy --only hosting,firestore
+firebase deploy --only hosting,firestore --project questionnaires-urbh
 ```
 
 `firestore` déploie les règles de sécurité (`firestore.rules`) — **ne pas

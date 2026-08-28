@@ -1,8 +1,11 @@
-// Configuration du projet Firebase de l'application.
+// Configuration de SECOURS du projet Firebase.
 //
-// À renseigner une seule fois, lors de la mise en service :
-// console Firebase → Paramètres du projet → Vos applications → Application Web,
-// puis recopier ici les valeurs de « firebaseConfig ».
+// En temps normal, il n'y a RIEN à renseigner ici : hébergée sur Firebase
+// Hosting (questionnaires-urbh.web.app), l'application récupère sa
+// configuration toute seule via l'adresse réservée /__/firebase/init.js.
+// Ce fichier ne sert que si le site est ouvert en dehors de cet hébergement ;
+// on peut alors y recopier le bloc « firebaseConfig » (console Firebase →
+// Paramètres du projet → Vos applications → Application Web).
 //
 // Ces valeurs ne sont pas des secrets : elles identifient le projet, et la
 // sécurité repose sur les règles Firestore (fichier firestore.rules).

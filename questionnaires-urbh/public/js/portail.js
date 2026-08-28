@@ -36,14 +36,17 @@
       .replace(/\//g, '-');
   }
 
-  if (!window.firebaseConfigEstRenseignee()) {
-    message(
-      "<h2>Portail en préparation</h2><p>Le site n'est pas encore configuré. Revenez un peu plus tard !</p>",
-    );
-    return;
+  // Sur Firebase Hosting, /__/firebase/init.js a déjà initialisé l'application
+  // avec la configuration du projet ; sinon, repli sur firebase-config.js.
+  if (!firebase.apps.length) {
+    if (!window.firebaseConfigEstRenseignee()) {
+      message(
+        "<h2>Portail en préparation</h2><p>Le site n'est pas encore configuré. Revenez un peu plus tard !</p>",
+      );
+      return;
+    }
+    firebase.initializeApp(window.FIREBASE_CONFIG);
   }
-
-  firebase.initializeApp(window.FIREBASE_CONFIG);
   const auth = firebase.auth();
   const db = firebase.firestore();
 
