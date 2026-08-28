@@ -91,6 +91,9 @@
               pattern="[0-9+][0-9 .-]{8,16}"></label>
           <label class="champ">E-mail (facultatif)
             <input id="p-email" type="email" autocomplete="email"></label>
+          <label class="champ" style="font-weight:normal">
+            <input type="checkbox" id="p-handicap" style="display:inline;width:auto">
+            ♿ Je souhaite être accompagné(e) par le référent handicap URBH</label>
           <div class="ligne-boutons">
             <button type="submit" id="p-valider">C'est parti !</button>
           </div>
@@ -147,6 +150,7 @@
         numeroInscription: normaliserNumero(document.getElementById('p-numero').value),
         mobile: document.getElementById('p-mobile').value.trim(),
         email: document.getElementById('p-email').value.trim(),
+        accompagnementHandicap: document.getElementById('p-handicap').checked,
         creeLe: profil && profil.creeLe ? profil.creeLe : new Date().toISOString(),
         majLe: new Date().toISOString(),
       };
@@ -184,6 +188,7 @@
       email: profil.email || '',
       mobile: profil.mobile || '',
       numeroInscription: profil.numeroInscription || '',
+      accompagnementHandicap: !!profil.accompagnementHandicap,
       creeLe,
       dernierAccesLe: new Date().toISOString(),
       nbAcces: firebase.firestore.FieldValue.increment(1),
@@ -389,6 +394,7 @@
       document.getElementById('p-numero').value = profil.numeroInscription || '';
       document.getElementById('p-mobile').value = profil.mobile || '';
       document.getElementById('p-email').value = profil.email || '';
+      document.getElementById('p-handicap').checked = !!profil.accompagnementHandicap;
     });
 
     function erreurAtelier(texte) {

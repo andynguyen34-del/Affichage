@@ -41,6 +41,14 @@
     return `${j}/${m}/${a}`;
   }
 
+  // Période d'une journée d'études : « 07/10/2026 » ou « du 07/10/2026 au 09/10/2026 ».
+  function fmtPeriode(j) {
+    if (j.dateFin && j.dateFin !== j.date) {
+      return `du ${fmtDate(j.date)} au ${fmtDate(j.dateFin)}`;
+    }
+    return fmtDate(j.date);
+  }
+
   function fmtHorodatage(ts) {
     const d = ts && ts.toDate ? ts.toDate() : ts instanceof Date ? ts : null;
     if (!d) return '';
@@ -167,7 +175,7 @@
                 <li>
                   <div>
                     <a class="titre-item" href="#/journee/${j.id}">${echapper(j.titre)}</a>
-                    <div class="muet">${fmtDate(j.date)}${j.lieu ? ' — ' + echapper(j.lieu) : ''}</div>
+                    <div class="muet">${fmtPeriode(j)}${j.lieu ? ' — ' + echapper(j.lieu) : ''}</div>
                   </div>
                   <div class="pousse">
                     <a class="btn secondaire" href="#/journee/${j.id}">Ouvrir</a>
@@ -183,10 +191,13 @@
         <h2>Nouvelle journée d'études</h2>
         <form id="form-journee">
           <label class="champ">Titre *
-            <input id="j-titre" required placeholder="Ex. : 34es Journées d'études de l'URBH">
+            <input id="j-titre" required placeholder="Ex. : 41es Journées d'études de l'URBH — Nantes">
           </label>
-          <label class="champ">Date *
+          <label class="champ">Date de début *
             <input id="j-date" type="date" required>
+          </label>
+          <label class="champ">Date de fin (si l'événement dure plusieurs jours)
+            <input id="j-date-fin" type="date">
           </label>
           <label class="champ">Lieu
             <input id="j-lieu" placeholder="Ville, établissement…">
@@ -239,10 +250,12 @@
       evt.preventDefault();
       const titre = document.getElementById('j-titre').value.trim();
       const date = document.getElementById('j-date').value;
+      const dateFin = document.getElementById('j-date-fin').value;
       const lieu = document.getElementById('j-lieu').value.trim();
       const doc = await db.collection('journees').add({
         titre,
         date,
+        dateFin,
         lieu,
         nbParticipants: Number(document.getElementById('j-participants').value) || 0,
         description: document.getElementById('j-description').value.trim(),
@@ -252,7 +265,7 @@
       // Vitrine publique de la journée (portail + tirage), inactive par défaut.
       await db.collection('portails').doc(doc.id).set({
         titre,
-        date: fmtDate(date),
+        date: fmtPeriode({ date, dateFin }),
         lieu,
         actif: false,
         tirage: { ouvert: false, gagnants: [] },
@@ -491,7 +504,7 @@
 
       <div class="carte">
         <h2>${echapper(journee.titre)}</h2>
-        <p class="muet">${fmtDate(journee.date)}${journee.lieu ? ' — ' + echapper(journee.lieu) : ''}
+        <p class="muet">${fmtPeriode(journee)}${journee.lieu ? ' — ' + echapper(journee.lieu) : ''}
           ${journee.nbParticipants ? ` — ${journee.nbParticipants} participants attendus` : ''}</p>
         ${journee.description ? `<p>${echapper(journee.description)}</p>` : ''}
         <div class="ligne-boutons">
@@ -504,8 +517,10 @@
         <form id="form-modif-journee" hidden style="margin-top:1rem">
           <label class="champ">Titre *
             <input id="jm-titre" required value="${attr(journee.titre)}"></label>
-          <label class="champ">Date *
+          <label class="champ">Date de début *
             <input id="jm-date" type="date" required value="${attr(journee.date)}"></label>
+          <label class="champ">Date de fin (si plusieurs jours)
+            <input id="jm-date-fin" type="date" value="${attr(journee.dateFin || '')}"></label>
           <label class="champ">Lieu
             <input id="jm-lieu" value="${attr(journee.lieu || '')}"></label>
           <label class="champ">Nombre de participants attendus
@@ -575,6 +590,7 @@
                     <span class="badge ${i.type === 'exposant' ? 'brouillon' : 'ouvert'}">${
                       i.type === 'exposant' ? 'Exposant' : 'Visiteur'
                     }</span>
+                    ${i.accompagnementHandicap ? '<span class="badge ferme" title="Souhaite être accompagné(e) par le référent handicap URBH">♿ référent handicap</span>' : ''}
                     <div class="muet petit">${i.numeroInscription ? 'Carte n° ' + echapper(i.numeroInscription) + ' — ' : ''}${echapper(i.organisme || '')}
                       ${i.mobile ? ' — 📱 ' + echapper(i.mobile) : ''}
                       ${i.dernierAccesLe ? ' — dernier accès ' + new Date(i.dernierAccesLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
@@ -867,7 +883,7 @@
         const sep = ';';
         const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
         const lignes = [
-          ['N° inscription', 'Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Première connexion', 'Dernier accès', 'Nb connexions']
+          ['N° inscription', 'Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Accompagnement handicap', 'Première connexion', 'Dernier accès', 'Nb connexions']
             .map(cellule)
             .join(sep),
         ];
@@ -881,6 +897,7 @@
               i.organisme || '',
               i.mobile || '',
               i.email || '',
+              i.accompagnementHandicap ? 'Oui' : '',
               i.creeLe ? new Date(i.creeLe).toLocaleString('fr-FR') : '',
               i.dernierAccesLe ? new Date(i.dernierAccesLe).toLocaleString('fr-FR') : '',
               i.nbAcces || '',
@@ -1131,6 +1148,7 @@
       const maj = {
         titre: document.getElementById('jm-titre').value.trim(),
         date: document.getElementById('jm-date').value,
+        dateFin: document.getElementById('jm-date-fin').value,
         lieu: document.getElementById('jm-lieu').value.trim(),
         nbParticipants: Number(document.getElementById('jm-participants').value) || 0,
         description: document.getElementById('jm-description').value.trim(),
@@ -1138,7 +1156,7 @@
       await db.collection('journees').doc(journeeId).update(maj);
       await refPortail.update({
         titre: maj.titre,
-        date: fmtDate(maj.date),
+        date: fmtPeriode(maj),
         lieu: maj.lieu,
       });
       // Répercute le contexte affiché en tête des questionnaires publics.
@@ -1146,7 +1164,7 @@
       questionnaires.forEach((q) => {
         lot.update(db.collection('questionnaires').doc(q.id), {
           journeeTitre: maj.titre,
-          journeeDate: fmtDate(maj.date),
+          journeeDate: fmtPeriode(maj),
           journeeLieu: maj.lieu,
         });
       });
@@ -1181,7 +1199,7 @@
       const doc2 = await db.collection('questionnaires').add({
         journeeId,
         journeeTitre: journee.titre,
-        journeeDate: fmtDate(journee.date),
+        journeeDate: fmtPeriode(journee),
         journeeLieu: journee.lieu || '',
         titre: modele.titre + ' — ' + journee.titre,
         statut: 'brouillon',
