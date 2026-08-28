@@ -41,6 +41,14 @@ stable du portail, un aperçu du QR et un bouton **« Télécharger le QR pour
 impression »** (PNG 2048 × 2048, correction d'erreur élevée) à remettre à
 l'imprimeur du flyer.
 
+**Annuaire des inscrits attendus.** Avant l'événement, importez les fichiers
+Excel des inscrits : celui des adhérents (visiteurs blanchisseurs) puis celui
+des représentants fournisseurs (exposants). La correspondance des colonnes
+(N°, nom, prénom, établissement) est détectée automatiquement et se corrige
+d'un clic. Au portail, la saisie du N° d'inscription reconnaît alors la
+personne et pré-remplit son identité et son profil. Seules les colonnes
+numéro / nom / prénom / établissement sont importées — jamais l'e-mail.
+
 **Inscrits.** Compteurs visiteurs/exposants, liste nominative avec mobile,
 traçage des connexions (première connexion, dernier accès, nombre d'accès) et
 **export CSV** prêt pour une campagne SMS.

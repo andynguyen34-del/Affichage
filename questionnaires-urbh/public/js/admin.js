@@ -61,6 +61,14 @@
     return `<span class="badge ${attr(statut)}">${libelles[statut] || statut}</span>`;
   }
 
+  function normaliserNumero(brut) {
+    return String(brut == null ? '' : brut)
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '')
+      .replace(/\//g, '-');
+  }
+
   function urlPublique(questionnaireId) {
     return `${location.origin}${location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')}/repondre.html?id=${questionnaireId}`;
   }
@@ -143,6 +151,10 @@
 
   async function vueListeJournees() {
     const journees = await chargerJournees();
+    const snapAnnuaire = await db.collection('annuaire').get();
+    const annuaire = snapAnnuaire.docs.map((d) => d.data());
+    const nbAnnuaireVisiteurs = annuaire.filter((a) => a.type === 'visiteur').length;
+    const nbAnnuaireExposants = annuaire.filter((a) => a.type === 'exposant').length;
 
     $app.innerHTML = `
       <div class="carte">
@@ -190,6 +202,37 @@
             <button type="submit">Créer la journée</button>
           </div>
         </form>
+      </div>
+
+      <div class="carte">
+        <h2>Annuaire des inscrits attendus</h2>
+        <p class="muet">Importez le fichier Excel des adhérents inscrits
+        (visiteurs blanchisseurs), puis celui des représentants fournisseurs
+        (exposants). Au portail, la saisie du N° d'inscription reconnaît alors
+        automatiquement la personne et pré-remplit son identité.</p>
+        <div class="tuiles">
+          <div class="tuile"><div class="valeur">${nbAnnuaireVisiteurs}</div>
+            <div class="legende">visiteurs attendus</div></div>
+          <div class="tuile"><div class="valeur">${nbAnnuaireExposants}</div>
+            <div class="legende">exposants attendus</div></div>
+        </div>
+        <label class="champ">Ces personnes sont des…
+          <select id="an-type">
+            <option value="visiteur">Visiteurs blanchisseurs (fichier des adhérents)</option>
+            <option value="exposant">Exposants fournisseurs (fichier des représentants)</option>
+          </select>
+        </label>
+        <label class="champ">Fichier Excel (.xlsx) ou CSV
+          <input type="file" id="an-fichier" accept=".xlsx,.xls,.csv">
+        </label>
+        <div id="an-zone-mapping"></div>
+        ${
+          annuaire.length
+            ? `<div class="ligne-boutons">
+                <button id="an-vider" class="danger">Vider l'annuaire (${annuaire.length} fiches)</button>
+              </div>`
+            : ''
+        }
       </div>`;
 
     document.getElementById('form-journee').addEventListener('submit', async (evt) => {
@@ -216,6 +259,170 @@
       });
       location.hash = '#/journee/' + doc.id;
     });
+
+    // --- import de l'annuaire (fichiers Excel des inscrits)
+
+    let lignesFichier = [];
+
+    function lettreColonne(i) {
+      return String.fromCharCode(65 + (i % 26));
+    }
+
+    function detecterColonnes(lignes) {
+      const nbCols = Math.max(...lignes.map((l) => l.length), 0);
+      const stats = [];
+      for (let c = 0; c < nbCols; c += 1) {
+        const valeurs = lignes.map((l) => l[c]).filter((v) => v !== undefined && v !== null && String(v).trim() !== '');
+        const textes = valeurs.map(String);
+        stats.push({
+          index: c,
+          remplissage: valeurs.length / Math.max(lignes.length, 1),
+          numeros: textes.filter((t) => /^[A-Za-z]{1,6}\s?\d{2,4}\s?[-_]?\s?\d{1,4}$/.test(t.trim())).length / Math.max(textes.length, 1),
+          emails: textes.filter((t) => t.includes('@')).length / Math.max(textes.length, 1),
+          longueurMoy: textes.reduce((s, t) => s + t.length, 0) / Math.max(textes.length, 1),
+        });
+      }
+      let colNumero = -1;
+      let meilleur = 0;
+      stats.forEach((s) => {
+        if (s.numeros > 0.5 && s.numeros > meilleur) {
+          meilleur = s.numeros;
+          colNumero = s.index;
+        }
+      });
+      const textuelles = stats.filter(
+        (s) =>
+          s.index !== colNumero &&
+          s.remplissage >= 0.4 &&
+          s.emails < 0.3 &&
+          s.longueurMoy >= 2,
+      );
+      return {
+        nbCols,
+        numero: colNumero,
+        nom: textuelles[0] ? textuelles[0].index : -1,
+        prenom: textuelles[1] ? textuelles[1].index : -1,
+        organisme: textuelles[2] ? textuelles[2].index : -1,
+      };
+    }
+
+    function optionsColonnes(nbCols, selection) {
+      let html = '<option value="-1">—</option>';
+      for (let c = 0; c < nbCols; c += 1) {
+        const exemple = (lignesFichier.find((l) => l[c]) || [])[c] || '';
+        html += `<option value="${c}" ${c === selection ? 'selected' : ''}>Colonne ${lettreColonne(c)} — ex. « ${echapper(String(exemple).slice(0, 25))} »</option>`;
+      }
+      return html;
+    }
+
+    function afficherMapping() {
+      const d = detecterColonnes(lignesFichier);
+      document.getElementById('an-zone-mapping').innerHTML = `
+        <h3>Correspondance des colonnes (${lignesFichier.length} lignes lues)</h3>
+        <label class="champ">N° d'inscription
+          <select id="anc-numero">${optionsColonnes(d.nbCols, d.numero)}</select></label>
+        <label class="champ">Nom
+          <select id="anc-nom">${optionsColonnes(d.nbCols, d.nom)}</select></label>
+        <label class="champ">Prénom
+          <select id="anc-prenom">${optionsColonnes(d.nbCols, d.prenom)}</select></label>
+        <label class="champ">Établissement / société
+          <select id="anc-organisme">${optionsColonnes(d.nbCols, d.organisme)}</select></label>
+        <div id="an-apercu" class="muet petit"></div>
+        <div class="ligne-boutons">
+          <button id="an-importer">Importer dans l'annuaire</button>
+        </div>
+        <div id="an-resultat"></div>`;
+
+      function lireFiches() {
+        const cols = {
+          numero: Number(document.getElementById('anc-numero').value),
+          nom: Number(document.getElementById('anc-nom').value),
+          prenom: Number(document.getElementById('anc-prenom').value),
+          organisme: Number(document.getElementById('anc-organisme').value),
+        };
+        const fiches = [];
+        lignesFichier.forEach((l) => {
+          const numero = normaliserNumero(cols.numero >= 0 ? l[cols.numero] : '');
+          if (!numero || !/^[A-Z]/.test(numero)) return;
+          fiches.push({
+            numero,
+            nom: String(cols.nom >= 0 ? l[cols.nom] || '' : '').trim(),
+            prenom: String(cols.prenom >= 0 ? l[cols.prenom] || '' : '').trim(),
+            organisme: String(cols.organisme >= 0 ? l[cols.organisme] || '' : '').trim(),
+          });
+        });
+        return fiches;
+      }
+
+      function apercu() {
+        const fiches = lireFiches();
+        document.getElementById('an-apercu').textContent = fiches.length
+          ? `${fiches.length} fiches prêtes — ex. : ` +
+            fiches
+              .slice(0, 3)
+              .map((f) => `${f.numero} ${f.prenom} ${f.nom} (${f.organisme})`)
+              .join(' · ')
+          : 'Aucune fiche exploitable avec cette correspondance.';
+      }
+      ['anc-numero', 'anc-nom', 'anc-prenom', 'anc-organisme'].forEach((id) =>
+        document.getElementById(id).addEventListener('change', apercu),
+      );
+      apercu();
+
+      document.getElementById('an-importer').addEventListener('click', async () => {
+        const fiches = lireFiches();
+        if (!fiches.length) return;
+        const type = document.getElementById('an-type').value;
+        const bouton = document.getElementById('an-importer');
+        bouton.disabled = true;
+        bouton.textContent = 'Import en cours…';
+        for (let i = 0; i < fiches.length; i += 400) {
+          const lot = db.batch();
+          fiches.slice(i, i + 400).forEach((f) => {
+            lot.set(db.collection('annuaire').doc(f.numero), {
+              ...f,
+              type,
+              importeLe: new Date().toISOString(),
+            });
+          });
+          await lot.commit();
+        }
+        document.getElementById('an-resultat').innerHTML =
+          `<div class="info">✅ ${fiches.length} fiches importées (${type === 'exposant' ? 'exposants' : 'visiteurs'}).</div>`;
+        setTimeout(router, 1200);
+      });
+    }
+
+    const champFichier = document.getElementById('an-fichier');
+    champFichier.addEventListener('change', async () => {
+      const fichier = champFichier.files[0];
+      if (!fichier) return;
+      if (!window.XLSX) {
+        alert('La bibliothèque de lecture Excel ne s’est pas chargée : vérifiez la connexion internet.');
+        return;
+      }
+      const tampon = await fichier.arrayBuffer();
+      const classeur = XLSX.read(tampon);
+      const feuille = classeur.Sheets[classeur.SheetNames[0]];
+      lignesFichier = XLSX.utils
+        .sheet_to_json(feuille, { header: 1, raw: false, defval: '' })
+        .filter((l) => l.some((v) => String(v).trim() !== ''));
+      afficherMapping();
+    });
+
+    const boutonVider = document.getElementById('an-vider');
+    if (boutonVider) {
+      boutonVider.addEventListener('click', async () => {
+        if (!confirm('Vider entièrement l’annuaire des inscrits attendus ?')) return;
+        const docs = snapAnnuaire.docs;
+        for (let i = 0; i < docs.length; i += 400) {
+          const lot = db.batch();
+          docs.slice(i, i + 400).forEach((d) => lot.delete(d.ref));
+          await lot.commit();
+        }
+        router();
+      });
+    }
   }
 
   async function vueJournee(journeeId) {

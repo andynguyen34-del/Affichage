@@ -28,6 +28,14 @@
     $app.innerHTML = `<div class="carte">${html}</div>`;
   }
 
+  function normaliserNumero(brut) {
+    return String(brut == null ? '' : brut)
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '')
+      .replace(/\//g, '-');
+  }
+
   if (!window.firebaseConfigEstRenseignee()) {
     message(
       "<h2>Portail en préparation</h2><p>Le site n'est pas encore configuré. Revenez un peu plus tard !</p>",
@@ -73,6 +81,7 @@
           <label class="champ">N° d'inscription *
             <input id="p-numero" required maxlength="20" autocomplete="off"
               placeholder="Sur la carte remise à l'accueil"></label>
+          <div id="p-numero-etat" class="muet petit" style="margin:-0.5rem 0 0.8rem"></div>
           <label class="champ">Mobile *
             <input id="p-mobile" type="tel" required autocomplete="tel"
               placeholder="06 12 34 56 78"
@@ -89,6 +98,41 @@
         </form>
       </div>`;
 
+    // Reconnaissance dans l'annuaire des inscrits : la saisie du numéro de la
+    // carte pré-remplit l'identité (et le profil visiteur / exposant).
+    const champNumero = document.getElementById('p-numero');
+    champNumero.addEventListener('change', async () => {
+      const etat = document.getElementById('p-numero-etat');
+      const numero = normaliserNumero(champNumero.value);
+      if (!numero) {
+        etat.textContent = '';
+        return;
+      }
+      etat.textContent = 'Vérification…';
+      try {
+        const fiche = await db.collection('annuaire').doc(numero).get();
+        if (fiche.exists) {
+          const f = fiche.data();
+          const champPrenom = document.getElementById('p-prenom');
+          const champNom = document.getElementById('p-nom');
+          const champOrganisme = document.getElementById('p-organisme');
+          if (!champPrenom.value) champPrenom.value = f.prenom || '';
+          if (!champNom.value) champNom.value = f.nom || '';
+          if (!champOrganisme.value) champOrganisme.value = f.organisme || '';
+          const radio = document.querySelector(`input[name="p-type"][value="${f.type}"]`);
+          if (radio) radio.checked = true;
+          etat.textContent = `✓ Reconnu : ${f.prenom || ''} ${f.nom || ''}${f.organisme ? ' — ' + f.organisme : ''}`;
+          etat.style.color = '#2e8b57';
+        } else {
+          etat.textContent =
+            'Numéro inconnu de la liste des inscrits — vérifiez la carte remise à l\'accueil (vous pouvez tout de même continuer).';
+          etat.style.color = '#d97706';
+        }
+      } catch (_) {
+        etat.textContent = '';
+      }
+    });
+
     document.getElementById('form-profil').addEventListener('submit', async (evt) => {
       evt.preventDefault();
       const type = (document.querySelector('input[name="p-type"]:checked') || {}).value;
@@ -97,7 +141,7 @@
         prenom: document.getElementById('p-prenom').value.trim(),
         nom: document.getElementById('p-nom').value.trim(),
         organisme: document.getElementById('p-organisme').value.trim(),
-        numeroInscription: document.getElementById('p-numero').value.trim(),
+        numeroInscription: normaliserNumero(document.getElementById('p-numero').value),
         mobile: document.getElementById('p-mobile').value.trim(),
         email: document.getElementById('p-email').value.trim(),
         creeLe: profil && profil.creeLe ? profil.creeLe : new Date().toISOString(),

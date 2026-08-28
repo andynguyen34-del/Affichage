@@ -97,6 +97,17 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Annuaire des inscrits attendus, importé depuis les fichiers Excel
+    // (adhérents visiteurs, représentants fournisseurs). Identifiant de
+    // document = N° d'inscription normalisé. Volontairement limité à
+    // numéro / nom / prénom / établissement / type : un participant connecté
+    // ne peut consulter que la fiche du numéro qu'il saisit, pour se faire
+    // reconnaître — jamais d'e-mail ni de mobile ici.
+    match /annuaire/{numero} {
+      allow get: if connecte();
+      allow list, write: if isAdmin();
+    }
+
     // Ateliers soumis à inscription puis tirage au sort (salles B, C, D…).
     // Le document porte le résultat du tirage (retenus, liste d'attente),
     // affiché aux participants — comme à la porte de la salle.
