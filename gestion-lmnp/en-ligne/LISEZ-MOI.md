@@ -135,5 +135,6 @@ rien n'est perdu, ils partiront après l'installation.
 ## Reprendre les données après cette mise à jour
 
 Le fichier `sauvegarde-donnees.json` de cette livraison contient vos données
-avec la répartition du bail entre les trois colocataires (350 € + part de
-charges chacun). Importez-le : Paramètres → « Importer une sauvegarde… ».
+avec la répartition du bail entre les trois colocataires
+(Nicolas 800 €, Léa 350 €, Ludovic 350 €, plus 200 € de charges à parts
+égales — 1 700 €/mois au total). Importez-le : Paramètres → « Importer une sauvegarde… ».
