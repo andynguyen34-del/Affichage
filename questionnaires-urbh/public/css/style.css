@@ -300,6 +300,14 @@ ul.liste a:hover { text-decoration: underline; }
 /* Actions d'amélioration */
 .action-faite { text-decoration: line-through; color: var(--texte-2); }
 
+/* Portail participants : gros boutons de menu */
+.btn-menu {
+  font-size: 1.05rem;
+  padding: 0.9rem 1.2rem;
+  width: 100%;
+  border-radius: 12px;
+}
+
 /* Connexion */
 .boite-connexion { max-width: 380px; margin: 8vh auto; }
 

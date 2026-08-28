@@ -28,18 +28,19 @@
     <div id="deja-repondu" class="carte merci" hidden>
       <div class="picto">✅</div>
       <h2>Réponse déjà enregistrée</h2>
-      <p>Une réponse à ce questionnaire a déjà été envoyée depuis cet appareil.
+      <p>Vous avez déjà répondu à ce questionnaire.
       Merci de votre participation !</p>
+      <p><a class="btn" href="portail.html">Retour au menu</a></p>
     </div>
 
     <form id="formulaire" hidden novalidate>
       <div class="carte">
         <h2 id="titre-questionnaire"></h2>
         <p id="contexte-journee" class="muet"></p>
-        <p class="muet">Ce questionnaire est <strong>anonyme</strong>. Vos
-        réponses servent uniquement à évaluer et améliorer nos journées
-        d'études, conformément à notre démarche qualité (certification
-        Qualiopi). Les questions marquées d'une étoile
+        <p class="muet">Vos réponses sont traitées de manière
+        <strong>confidentielle</strong> et servent uniquement à évaluer et
+        améliorer nos journées d'études, conformément à notre démarche qualité
+        (certification Qualiopi). Les questions marquées d'une étoile
         <span style="color:#c0392b">*</span> sont obligatoires.</p>
       </div>
 
@@ -57,10 +58,12 @@
       <h2>Merci pour votre participation !</h2>
       <p>Vos réponses ont bien été enregistrées. Elles contribueront à
       améliorer les prochaines journées d'études de l'URBH.</p>
+      <p><a class="btn" href="portail.html">Retour au menu</a></p>
     </div>
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/repondre.js"></script>

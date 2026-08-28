@@ -193,14 +193,25 @@
 
     document.getElementById('form-journee').addEventListener('submit', async (evt) => {
       evt.preventDefault();
+      const titre = document.getElementById('j-titre').value.trim();
+      const date = document.getElementById('j-date').value;
+      const lieu = document.getElementById('j-lieu').value.trim();
       const doc = await db.collection('journees').add({
-        titre: document.getElementById('j-titre').value.trim(),
-        date: document.getElementById('j-date').value,
-        lieu: document.getElementById('j-lieu').value.trim(),
+        titre,
+        date,
+        lieu,
         nbParticipants: Number(document.getElementById('j-participants').value) || 0,
         description: document.getElementById('j-description').value.trim(),
         actions: [],
         creeLe: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      // Vitrine publique de la journée (portail + tirage), inactive par défaut.
+      await db.collection('portails').doc(doc.id).set({
+        titre,
+        date: fmtDate(date),
+        lieu,
+        actif: false,
+        tirage: { ouvert: false, gagnants: [] },
       });
       location.hash = '#/journee/' + doc.id;
     });
@@ -218,7 +229,40 @@
     const questionnaires = snapQ.docs.map((d) => ({ id: d.id, ...d.data() }));
     questionnaires.sort((a, b) => (a.creeLe && b.creeLe ? a.creeLe.seconds - b.creeLe.seconds : 0));
 
+    // Vitrine publique (portail) : créée à la volée pour les journées antérieures.
+    const refPortail = db.collection('portails').doc(journeeId);
+    let portailDoc = await refPortail.get();
+    if (!portailDoc.exists) {
+      await refPortail.set({
+        titre: journee.titre,
+        date: fmtDate(journee.date),
+        lieu: journee.lieu || '',
+        actif: false,
+        tirage: { ouvert: false, gagnants: [] },
+      });
+      portailDoc = await refPortail.get();
+    }
+    const portail = portailDoc.data();
+    const tirageInfo = portail.tirage || { ouvert: false, gagnants: [] };
+    const gagnants = tirageInfo.gagnants || [];
+
+    const snapI = await db
+      .collection('inscriptions')
+      .where('journeeId', '==', journeeId)
+      .get();
+    const inscriptions = snapI.docs.map((d) => ({ id: d.id, ...d.data() }));
+    inscriptions.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+    const nbVisiteurs = inscriptions.filter((i) => i.type === 'visiteur').length;
+    const nbExposants = inscriptions.filter((i) => i.type === 'exposant').length;
+
+    const snapT = await db.collection('tirage').where('journeeId', '==', journeeId).get();
+    const participationsTirage = snapT.docs.map((d) => ({ id: d.id, ...d.data() }));
+
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
+
+    const base = location.origin + location.pathname.replace(/index\.html$/, '');
+    const urlFlyer = base + 'portail.html';
+    const urlDirecte = base + 'portail.html?e=' + journeeId;
 
     $app.innerHTML = `
       <div class="fil"><a href="#/journees">Journées d'études</a> › ${echapper(journee.titre)}</div>
@@ -255,6 +299,107 @@
       </div>
 
       <div class="carte">
+        <h2>Portail participants &amp; QR code</h2>
+        <p>Le QR code du flyer pointe vers l'adresse <strong>stable</strong> du
+        portail — celle-ci affiche automatiquement la journée marquée
+        « active ». Le flyer reste donc valable d'une année sur l'autre.</p>
+        ${
+          portail.actif
+            ? `<div class="info">✅ Cette journée est <strong>active</strong> : c'est elle
+                que le portail présente aux participants.</div>`
+            : `<div class="erreur">Cette journée n'est pas active : le QR code du flyer
+                ne la montrera pas tant que vous ne l'aurez pas activée.</div>
+              <div class="ligne-boutons">
+                <button id="bouton-activer">Définir comme journée active</button>
+              </div>`
+        }
+        <div class="lien-public" style="margin-top:0.8rem">
+          <div id="zone-qr"></div>
+          <div style="flex:1">
+            <p class="petit"><strong>Adresse du flyer (stable)</strong></p>
+            <div class="url">${echapper(urlFlyer)}</div>
+            <p class="petit" style="margin-bottom:0"><strong>Adresse directe de cette journée</strong></p>
+            <div class="url">${echapper(urlDirecte)}</div>
+            <div class="ligne-boutons">
+              <button id="bouton-copier-portail" class="secondaire">Copier l'adresse du flyer</button>
+              <button id="bouton-telecharger-qr" class="secondaire">Télécharger le QR pour impression (PNG)</button>
+              <a class="btn secondaire" href="${attr(urlDirecte)}" target="_blank" rel="noopener">Voir le portail</a>
+            </div>
+            <p class="muet petit">PNG 2048 × 2048, correction d'erreur élevée :
+            adapté à l'impression sur flyer. Prévoir une marge blanche autour.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="carte">
+        <h2>Inscrits (${inscriptions.length})</h2>
+        <div class="tuiles">
+          <div class="tuile"><div class="valeur">${nbVisiteurs}</div>
+            <div class="legende">visiteurs blanchisseurs</div></div>
+          <div class="tuile"><div class="valeur">${nbExposants}</div>
+            <div class="legende">exposants fournisseurs</div></div>
+        </div>
+        ${
+          inscriptions.length
+            ? `<div class="ligne-boutons">
+                <button id="bouton-csv-inscrits" class="secondaire">Exporter les inscrits (CSV — pour campagne SMS)</button>
+              </div>
+              <ul class="liste">${inscriptions
+                .map(
+                  (i) => `
+                <li>
+                  <div>
+                    <span class="titre-item">${echapper(i.prenom)} ${echapper(i.nom)}</span>
+                    <span class="badge ${i.type === 'exposant' ? 'brouillon' : 'ouvert'}">${
+                      i.type === 'exposant' ? 'Exposant' : 'Visiteur'
+                    }</span>
+                    <div class="muet petit">${echapper(i.organisme || '')}
+                      ${i.mobile ? ' — 📱 ' + echapper(i.mobile) : ''}
+                      ${i.dernierAccesLe ? ' — dernier accès ' + new Date(i.dernierAccesLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                      ${i.nbAcces ? ` (${i.nbAcces} connexions)` : ''}</div>
+                  </div>
+                </li>`,
+                )
+                .join('')}</ul>`
+            : `<p class="muet">Personne ne s'est encore présenté sur le portail.</p>`
+        }
+      </div>
+
+      <div class="carte">
+        <h2>🎁 Tirage au sort</h2>
+        <p class="muet">${participationsTirage.length} participation(s) enregistrée(s).
+          Les participations sont <strong>${tirageInfo.ouvert ? 'ouvertes' : 'fermées'}</strong>.</p>
+        <div class="ligne-boutons">
+          <button id="bouton-basculer-tirage" class="${tirageInfo.ouvert ? 'danger' : ''}">
+            ${tirageInfo.ouvert ? 'Fermer les participations' : 'Ouvrir les participations'}
+          </button>
+          <button id="bouton-tirer"
+            ${participationsTirage.length > gagnants.length ? '' : 'disabled title="Aucun participant restant"'}>
+            🎲 Tirer un gagnant
+          </button>
+        </div>
+        ${
+          gagnants.length
+            ? `<h3>Gagnants (annoncés sur le portail)</h3>
+              <ul class="liste">${gagnants
+                .map(
+                  (g2, i) => `
+                <li>
+                  <div>🏆 <span class="titre-item">${echapper(g2.prenom)} ${echapper(g2.nom)}</span>
+                    <span class="muet petit">${echapper(g2.organisme || '')}
+                    ${g2.mobile ? ' — 📱 ' + echapper(g2.mobile) : ''}</span></div>
+                  <div class="pousse">
+                    <button class="discret bouton-retirer-gagnant" data-index="${i}">Annuler</button>
+                  </div>
+                </li>`,
+                )
+                .join('')}</ul>`
+            : ''
+        }
+        <div id="resultat-tirage"></div>
+      </div>
+
+      <div class="carte">
         <h2>Questionnaires</h2>
         ${
           questionnaires.length
@@ -265,7 +410,8 @@
                   <div>
                     <a class="titre-item" href="#/questionnaire/${q.id}">${echapper(q.titre)}</a>
                     ${badgeStatut(q.statut)}
-                    <div class="muet">${(q.questions || []).length} questions</div>
+                    <div class="muet">${(q.questions || []).length} questions —
+                      ${q.audience === 'visiteur' ? 'visiteurs' : q.audience === 'exposant' ? 'exposants' : 'tous les inscrits'}</div>
                   </div>
                   <div class="pousse">
                     <a class="btn secondaire" href="#/questionnaire/${q.id}">Ouvrir</a>
@@ -282,6 +428,13 @@
               ${Object.entries(MODELES)
                 .map(([cle, m]) => `<option value="${cle}">${echapper(m.libelle)}</option>`)
                 .join('')}
+            </select>
+          </label>
+          <label class="champ">Proposé à
+            <select id="q-audience">
+              <option value="tous">Tous les inscrits</option>
+              <option value="visiteur">Visiteurs blanchisseurs uniquement</option>
+              <option value="exposant">Exposants fournisseurs uniquement</option>
             </select>
           </label>
           <div class="ligne-boutons">
@@ -320,7 +473,149 @@
         </form>
       </div>`;
 
-    // --- interactions
+    // --- portail & QR
+
+    if (window.QRCode) {
+      new QRCode(document.getElementById('zone-qr'), {
+        text: urlFlyer,
+        width: 180,
+        height: 180,
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+    } else {
+      document.getElementById('zone-qr').innerHTML =
+        '<p class="muet petit">QR code indisponible<br>(bibliothèque non chargée)</p>';
+    }
+
+    const boutonActiver = document.getElementById('bouton-activer');
+    if (boutonActiver) {
+      boutonActiver.addEventListener('click', async () => {
+        // Une seule journée active à la fois.
+        const tous = await db.collection('portails').get();
+        const lot = db.batch();
+        tous.docs.forEach((d) => lot.update(d.ref, { actif: d.id === journeeId }));
+        await lot.commit();
+        router();
+      });
+    }
+
+    document.getElementById('bouton-copier-portail').addEventListener('click', async (evt) => {
+      try {
+        await navigator.clipboard.writeText(urlFlyer);
+        evt.target.textContent = 'Adresse copiée ✓';
+      } catch (_) {
+        prompt("Copiez l'adresse :", urlFlyer);
+      }
+    });
+
+    document.getElementById('bouton-telecharger-qr').addEventListener('click', () => {
+      if (!window.QRCode) {
+        alert('La bibliothèque QR code ne s’est pas chargée : vérifiez la connexion internet.');
+        return;
+      }
+      // Rendu haute résolution hors écran, puis téléchargement du PNG.
+      const conteneur = document.createElement('div');
+      conteneur.style.position = 'fixed';
+      conteneur.style.left = '-9999px';
+      document.body.appendChild(conteneur);
+      new QRCode(conteneur, {
+        text: urlFlyer,
+        width: 2048,
+        height: 2048,
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+      setTimeout(() => {
+        const canvas = conteneur.querySelector('canvas');
+        const img = conteneur.querySelector('img');
+        const donnees = canvas ? canvas.toDataURL('image/png') : img ? img.src : null;
+        if (donnees) {
+          const a = document.createElement('a');
+          a.href = donnees;
+          a.download = 'qr-portail-urbh.png';
+          a.click();
+        }
+        conteneur.remove();
+      }, 150);
+    });
+
+    // --- inscrits
+
+    const boutonCsvInscrits = document.getElementById('bouton-csv-inscrits');
+    if (boutonCsvInscrits) {
+      boutonCsvInscrits.addEventListener('click', () => {
+        const sep = ';';
+        const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lignes = [
+          ['Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Première connexion', 'Dernier accès', 'Nb connexions']
+            .map(cellule)
+            .join(sep),
+        ];
+        inscriptions.forEach((i) => {
+          lignes.push(
+            [
+              i.type === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur',
+              i.prenom,
+              i.nom,
+              i.organisme || '',
+              i.mobile || '',
+              i.email || '',
+              i.creeLe ? new Date(i.creeLe).toLocaleString('fr-FR') : '',
+              i.dernierAccesLe ? new Date(i.dernierAccesLe).toLocaleString('fr-FR') : '',
+              i.nbAcces || '',
+            ]
+              .map(cellule)
+              .join(sep),
+          );
+        });
+        const blob = new Blob(['\uFEFF' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'inscrits-' + fmtDate(journee.date).replace(/\//g, '-') + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    }
+
+    // --- tirage au sort
+
+    document.getElementById('bouton-basculer-tirage').addEventListener('click', async () => {
+      await refPortail.update({ 'tirage.ouvert': !tirageInfo.ouvert });
+      router();
+    });
+
+    const boutonTirer = document.getElementById('bouton-tirer');
+    boutonTirer.addEventListener('click', async () => {
+      const dejaGagnants = new Set(gagnants.map((g2) => g2.participantId));
+      const candidats = participationsTirage.filter((p) => !dejaGagnants.has(p.participantId));
+      if (!candidats.length) return;
+      const elu = candidats[Math.floor(Math.random() * candidats.length)];
+      await refPortail.update({
+        'tirage.gagnants': [
+          ...gagnants,
+          {
+            participantId: elu.participantId,
+            prenom: elu.prenom,
+            nom: elu.nom,
+            organisme: elu.organisme || '',
+            mobile: elu.mobile || '',
+          },
+        ],
+      });
+      router();
+    });
+
+    document.querySelectorAll('.bouton-retirer-gagnant').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        if (!confirm('Annuler ce gagnant ? Il redevient éligible au tirage.')) return;
+        await refPortail.update({
+          'tirage.gagnants': gagnants.filter((_, idx) => idx !== i),
+        });
+        router();
+      }),
+    );
+
+    // --- journée : modification / suppression
 
     document.getElementById('bouton-modifier-journee').addEventListener('click', () => {
       document.getElementById('form-modif-journee').hidden = false;
@@ -339,6 +634,11 @@
         description: document.getElementById('jm-description').value.trim(),
       };
       await db.collection('journees').doc(journeeId).update(maj);
+      await refPortail.update({
+        titre: maj.titre,
+        date: fmtDate(maj.date),
+        lieu: maj.lieu,
+      });
       // Répercute le contexte affiché en tête des questionnaires publics.
       const lot = db.batch();
       questionnaires.forEach((q) => {
@@ -354,26 +654,41 @@
 
     document.getElementById('bouton-supprimer-journee').addEventListener('click', async () => {
       if (questionnaires.length) return;
-      if (!confirm('Supprimer définitivement cette journée d’études ?')) return;
-      await db.collection('journees').doc(journeeId).delete();
+      if (!confirm('Supprimer définitivement cette journée d’études (inscrits et tirage compris) ?')) return;
+      const aSupprimer = [
+        ...inscriptions.map((i) => db.collection('inscriptions').doc(i.id)),
+        ...participationsTirage.map((p) => db.collection('tirage').doc(p.id)),
+        refPortail,
+        db.collection('journees').doc(journeeId),
+      ];
+      for (let i = 0; i < aSupprimer.length; i += 400) {
+        const lot = db.batch();
+        aSupprimer.slice(i, i + 400).forEach((ref) => lot.delete(ref));
+        await lot.commit();
+      }
       location.hash = '#/journees';
     });
+
+    // --- questionnaires
 
     document.getElementById('form-questionnaire').addEventListener('submit', async (evt) => {
       evt.preventDefault();
       const modele = MODELES[document.getElementById('q-modele').value];
-      const doc = await db.collection('questionnaires').add({
+      const doc2 = await db.collection('questionnaires').add({
         journeeId,
         journeeTitre: journee.titre,
         journeeDate: fmtDate(journee.date),
         journeeLieu: journee.lieu || '',
         titre: modele.titre + ' — ' + journee.titre,
         statut: 'brouillon',
+        audience: document.getElementById('q-audience').value,
         questions: JSON.parse(JSON.stringify(modele.questions)),
         creeLe: firebase.firestore.FieldValue.serverTimestamp(),
       });
-      location.hash = '#/questionnaire/' + doc.id;
+      location.hash = '#/questionnaire/' + doc2.id;
     });
+
+    // --- actions d'amélioration
 
     async function enregistrerActions(nouvelles) {
       await db.collection('journees').doc(journeeId).update({ actions: nouvelles });
@@ -550,7 +865,7 @@
   function exporterCsv(questionnaire, reponses) {
     const sep = ';';
     const questions = questionnaire.questions || [];
-    const entetes = ['Horodatage', ...questions.map((q) => q.libelle)];
+    const entetes = ['Horodatage', 'Profil', ...questions.map((q) => q.libelle)];
 
     function cellule(v) {
       const texte = v == null ? '' : String(v);
@@ -561,6 +876,7 @@
     reponses.forEach((r) => {
       const valeurs = [
         fmtHorodatage(r.soumisLe),
+        r.participantType === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur',
         ...questions.map((q) => {
           const v = r.reponses ? r.reponses[q.id] : '';
           if (q.type === 'echelle4' && v) return `${v} - ${ECHELLE4[Number(v) - 1] || ''}`;
@@ -626,7 +942,14 @@
         <h2>${echapper(questionnaire.titre)} ${badgeStatut(questionnaire.statut)}</h2>
         <p class="muet">${echapper(questionnaire.journeeTitre || '')}
           ${questionnaire.journeeDate ? ' — ' + echapper(questionnaire.journeeDate) : ''}
-          ${questionnaire.journeeLieu ? ' — ' + echapper(questionnaire.journeeLieu) : ''}</p>
+          ${questionnaire.journeeLieu ? ' — ' + echapper(questionnaire.journeeLieu) : ''}
+          — proposé ${
+            questionnaire.audience === 'visiteur'
+              ? 'aux visiteurs blanchisseurs'
+              : questionnaire.audience === 'exposant'
+                ? 'aux exposants fournisseurs'
+                : 'à tous les inscrits'
+          }</p>
         <p class="muet petit">Bilan édité le ${new Date().toLocaleDateString('fr-FR')} —
           document conservé au titre de la démarche qualité (Qualiopi, indicateur 30).</p>
       </div>

@@ -1,5 +1,11 @@
-// Formulaire public de réponse à un questionnaire.
-// Anonyme : aucune donnée d'identification n'est collectée ni envoyée.
+// Formulaire de réponse à un questionnaire.
+//
+// Le participant arrive depuis le portail (portail.html), où il s'est
+// présenté une fois : son téléphone porte une session anonyme Firebase.
+// L'identifiant du document de réponse « <questionnaireId>_<uid> » garantit
+// une seule réponse par personne et par questionnaire (règle serveur).
+// Les réponses ne comportent ni nom ni e-mail : seulement le profil
+// (visiteur / exposant) pour l'analyse des résultats.
 
 (function () {
   'use strict';
@@ -27,27 +33,18 @@
 
   const params = new URLSearchParams(location.search);
   const questionnaireId = params.get('id');
-  const cleLocale = questionnaireId ? 'urbh_repondu_' + questionnaireId : null;
 
-  if (!questionnaireId || !window.firebaseConfigEstRenseignee()) {
+  if (!questionnaireId || !/^[A-Za-z0-9_-]+$/.test(questionnaireId) || !window.firebaseConfigEstRenseignee()) {
     montrer('indisponible');
     return;
   }
 
-  let dejaRepondu = false;
-  try {
-    dejaRepondu = !!localStorage.getItem(cleLocale);
-  } catch (_) {
-    /* stockage local inaccessible (navigation privée) : on laisse répondre */
-  }
-  if (dejaRepondu) {
-    montrer('deja-repondu');
-    return;
-  }
-
   firebase.initializeApp(window.FIREBASE_CONFIG);
+  const auth = firebase.auth();
   const db = firebase.firestore();
 
+  let uid = null;
+  let profil = null;
   let questionnaire = null;
 
   function htmlQuestion(q, index) {
@@ -170,17 +167,17 @@
     bouton.textContent = 'Envoi en cours…';
 
     try {
-      await db.collection('reponses').add({
-        questionnaireId,
-        journeeId: questionnaire.journeeId || '',
-        soumisLe: firebase.firestore.FieldValue.serverTimestamp(),
-        reponses: valeurs,
-      });
-      try {
-        localStorage.setItem(cleLocale, new Date().toISOString());
-      } catch (_) {
-        /* stockage local indisponible : sans gravité */
-      }
+      await db
+        .collection('reponses')
+        .doc(questionnaireId + '_' + uid)
+        .set({
+          questionnaireId,
+          journeeId: questionnaire.journeeId || '',
+          participantId: uid,
+          participantType: (profil && profil.type) || 'visiteur',
+          soumisLe: firebase.firestore.FieldValue.serverTimestamp(),
+          reponses: valeurs,
+        });
       montrer('merci');
       window.scrollTo(0, 0);
     } catch (e) {
@@ -193,15 +190,49 @@
     }
   });
 
-  db.collection('questionnaires')
-    .doc(questionnaireId)
-    .get()
-    .then((doc) => {
-      if (!doc.exists || doc.data().statut !== 'ouvert') {
-        montrer('indisponible');
-      } else {
-        afficherFormulaire(doc.data());
+  async function demarrer() {
+    // Le participant doit s'être présenté sur le portail au préalable.
+    let profilDoc = null;
+    try {
+      profilDoc = await db.collection('participants').doc(uid).get();
+    } catch (_) {
+      /* traité ci-dessous */
+    }
+    if (!profilDoc || !profilDoc.exists) {
+      location.replace('portail.html');
+      return;
+    }
+    profil = profilDoc.data();
+
+    // Déjà répondu ? (le document de réponse porte un identifiant prévisible)
+    try {
+      const dejaDoc = await db.collection('reponses').doc(questionnaireId + '_' + uid).get();
+      if (dejaDoc.exists) {
+        montrer('deja-repondu');
+        return;
       }
-    })
-    .catch(() => montrer('indisponible'));
+    } catch (_) {
+      /* pas encore de réponse */
+    }
+
+    try {
+      const doc = await db.collection('questionnaires').doc(questionnaireId).get();
+      if (!doc.exists || doc.data().statut !== 'ouvert') montrer('indisponible');
+      else afficherFormulaire(doc.data());
+    } catch (_) {
+      montrer('indisponible');
+    }
+  }
+
+  let demarre = false;
+  auth.onAuthStateChanged((user) => {
+    if (demarre) return;
+    if (user) {
+      demarre = true;
+      uid = user.uid;
+      demarrer();
+    } else {
+      auth.signInAnonymously().catch(() => montrer('indisponible'));
+    }
+  });
 })();
