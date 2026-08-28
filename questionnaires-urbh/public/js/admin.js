@@ -353,7 +353,7 @@
                     <span class="badge ${i.type === 'exposant' ? 'brouillon' : 'ouvert'}">${
                       i.type === 'exposant' ? 'Exposant' : 'Visiteur'
                     }</span>
-                    <div class="muet petit">${echapper(i.organisme || '')}
+                    <div class="muet petit">${i.numeroInscription ? 'Carte n° ' + echapper(i.numeroInscription) + ' — ' : ''}${echapper(i.organisme || '')}
                       ${i.mobile ? ' — 📱 ' + echapper(i.mobile) : ''}
                       ${i.dernierAccesLe ? ' — dernier accès ' + new Date(i.dernierAccesLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
                       ${i.nbAcces ? ` (${i.nbAcces} connexions)` : ''}</div>
@@ -386,7 +386,7 @@
                   (g2, i) => `
                 <li>
                   <div>🏆 <span class="titre-item">${echapper(g2.prenom)} ${echapper(g2.nom)}</span>
-                    <span class="muet petit">${echapper(g2.organisme || '')}
+                    <span class="muet petit">${g2.numeroInscription ? 'carte n° ' + echapper(g2.numeroInscription) + ' — ' : ''}${echapper(g2.organisme || '')}
                     ${g2.mobile ? ' — 📱 ' + echapper(g2.mobile) : ''}</span></div>
                   <div class="pousse">
                     <button class="discret bouton-retirer-gagnant" data-index="${i}">Annuler</button>
@@ -546,13 +546,14 @@
         const sep = ';';
         const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
         const lignes = [
-          ['Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Première connexion', 'Dernier accès', 'Nb connexions']
+          ['N° inscription', 'Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Première connexion', 'Dernier accès', 'Nb connexions']
             .map(cellule)
             .join(sep),
         ];
         inscriptions.forEach((i) => {
           lignes.push(
             [
+              i.numeroInscription || '',
               i.type === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur',
               i.prenom,
               i.nom,
@@ -598,6 +599,7 @@
             nom: elu.nom,
             organisme: elu.organisme || '',
             mobile: elu.mobile || '',
+            numeroInscription: elu.numeroInscription || '',
           },
         ],
       });

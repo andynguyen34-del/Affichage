@@ -16,6 +16,7 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    reste donc valable d'une année sur l'autre.
 2. À la **première connexion**, le participant se présente : visiteur
    blanchisseur ou exposant fournisseur, prénom, nom, établissement/société,
+   **N° d'inscription** (imprimé sur la carte remise à l'accueil),
    **mobile** (pour l'envoi de résultats par SMS) et e-mail facultatif.
 3. Son téléphone est ensuite **reconnu automatiquement** (session anonyme
    Firebase conservée par l'appareil) : aux visites suivantes il retombe

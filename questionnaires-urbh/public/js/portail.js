@@ -70,6 +70,9 @@
             <input id="p-nom" required autocomplete="family-name"></label>
           <label class="champ">Établissement / société
             <input id="p-organisme" autocomplete="organization"></label>
+          <label class="champ">N° d'inscription *
+            <input id="p-numero" required maxlength="20" autocomplete="off"
+              placeholder="Sur la carte remise à l'accueil"></label>
           <label class="champ">Mobile *
             <input id="p-mobile" type="tel" required autocomplete="tel"
               placeholder="06 12 34 56 78"
@@ -94,6 +97,7 @@
         prenom: document.getElementById('p-prenom').value.trim(),
         nom: document.getElementById('p-nom').value.trim(),
         organisme: document.getElementById('p-organisme').value.trim(),
+        numeroInscription: document.getElementById('p-numero').value.trim(),
         mobile: document.getElementById('p-mobile').value.trim(),
         email: document.getElementById('p-email').value.trim(),
         creeLe: profil && profil.creeLe ? profil.creeLe : new Date().toISOString(),
@@ -132,6 +136,7 @@
       organisme: profil.organisme || '',
       email: profil.email || '',
       mobile: profil.mobile || '',
+      numeroInscription: profil.numeroInscription || '',
       creeLe,
       dernierAccesLe: new Date().toISOString(),
       nbAcces: firebase.firestore.FieldValue.increment(1),
@@ -198,7 +203,7 @@
               <ul class="verbatims">${gagnants
                 .map(
                   (gg) =>
-                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
+                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.numeroInscription ? ' (carte n° ' + echapper(gg.numeroInscription) + ')' : ''}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
                 )
                 .join('')}</ul>`
             : ''
@@ -248,6 +253,7 @@
       document.getElementById('p-prenom').value = profil.prenom || '';
       document.getElementById('p-nom').value = profil.nom || '';
       document.getElementById('p-organisme').value = profil.organisme || '';
+      document.getElementById('p-numero').value = profil.numeroInscription || '';
       document.getElementById('p-mobile').value = profil.mobile || '';
       document.getElementById('p-email').value = profil.email || '';
     });
@@ -268,6 +274,7 @@
               prenom: profil.prenom,
               organisme: profil.organisme || '',
               mobile: profil.mobile || '',
+              numeroInscription: profil.numeroInscription || '',
               creeLe: new Date().toISOString(),
             });
           vueMenu();

@@ -59,7 +59,7 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(
              ['type', 'nom', 'prenom', 'organisme', 'email', 'mobile',
-              'creeLe', 'majLe'])
+              'numeroInscription', 'creeLe', 'majLe'])
         && request.resource.data.type in ['visiteur', 'exposant']
         && request.resource.data.nom is string
         && request.resource.data.prenom is string;
@@ -74,8 +74,8 @@ service cloud.firestore {
         && request.resource.data.participantId == request.auth.uid
         && request.resource.data.keys().hasOnly(
              ['journeeId', 'participantId', 'type', 'nom', 'prenom',
-              'organisme', 'email', 'mobile', 'creeLe', 'dernierAccesLe',
-              'nbAcces'])
+              'organisme', 'email', 'mobile', 'numeroInscription', 'creeLe',
+              'dernierAccesLe', 'nbAcces'])
         && request.resource.data.type in ['visiteur', 'exposant'];
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow list, delete: if isAdmin();
@@ -90,7 +90,7 @@ service cloud.firestore {
         && request.resource.data.participantId == request.auth.uid
         && request.resource.data.keys().hasOnly(
              ['journeeId', 'participantId', 'type', 'nom', 'prenom',
-              'organisme', 'mobile', 'creeLe'])
+              'organisme', 'mobile', 'numeroInscription', 'creeLe'])
         && portailTirageOuvert(request.resource.data.journeeId);
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow list, delete: if isAdmin();
