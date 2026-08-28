@@ -89,6 +89,21 @@ imprimable** (papier ou PDF).
 **Amélioration continue.** Registre d'« actions d'amélioration » par journée
 (à faire / réalisée), alimenté par les retours des participants.
 
+## Affichage de la certification Qualiopi : prudence
+
+L'usage de la marque et du logo Qualiopi est strictement encadré (décret
+n° 2019-564 et charte d'usage) : mention obligatoire des catégories
+d'actions certifiées accompagnant le logo, interdiction sur les
+attestations remises aux stagiaires, pas d'usage laissant croire que les
+contenus de formation seraient eux-mêmes certifiés. Par prudence,
+l'application **ne mentionne pas Qualiopi dans les pages vues par les
+participants** (portail, questionnaires) et n'affiche aucun logo. Les
+références aux indicateurs du référentiel n'apparaissent que dans les
+écrans internes d'administration et sur le bilan destiné au dossier
+qualité — un usage documentaire, pas de la communication. Toute mention
+publique (site, flyers, bilans diffusés) est à valider avec votre
+certificateur et la charte d'usage en vigueur.
+
 ## Correspondance Qualiopi
 
 | Exigence | Réponse de l'application |
