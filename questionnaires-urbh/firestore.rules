@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Questionnaires de satisfaction URBH — règles d'accès.
+//
+// Principe :
+//  - L'administration (journées, questionnaires, lecture des réponses) est
+//    réservée aux comptes listés dans le document config/admins.
+//  - Un participant anonyme peut uniquement lire un questionnaire OUVERT
+//    et déposer UNE réponse dessus. Il ne peut jamais lire les réponses
+//    des autres, ni modifier ou supprimer quoi que ce soit.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email in
+             get(/databases/$(database)/documents/config/admins).data.emails;
+    }
+
+    // Liste des administrateurs : à créer une fois depuis la console Firebase
+    // (document config/admins, champ « emails » = tableau d'adresses).
+    // Modifiable uniquement depuis la console, jamais depuis l'application.
+    match /config/admins {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /journees/{journeeId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /questionnaires/{questionnaireId} {
+      // Un participant ne voit un questionnaire que s'il est ouvert.
+      allow get: if resource.data.statut == 'ouvert' || isAdmin();
+      allow list, create, update, delete: if isAdmin();
+    }
+
+    match /reponses/{reponseId} {
+      // Dépôt anonyme d'une réponse : uniquement sur un questionnaire ouvert,
+      // avec une structure imposée et un horodatage serveur.
+      allow create: if
+        request.resource.data.keys().hasOnly(
+          ['questionnaireId', 'journeeId', 'soumisLe', 'reponses'])
+        && request.resource.data.questionnaireId is string
+        && request.resource.data.reponses is map
+        && request.resource.data.soumisLe == request.time
+        && get(/databases/$(database)/documents/questionnaires/$(request.resource.data.questionnaireId))
+             .data.statut == 'ouvert'
+        && request.resource.data.journeeId ==
+           get(/databases/$(database)/documents/questionnaires/$(request.resource.data.questionnaireId))
+             .data.journeeId;
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+  }
+}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Questionnaire de satisfaction — URBH</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="appbar">
+    <div>
+      <h1>URBH — Journées d'études</h1>
+      <div class="sous-titre">Questionnaire de satisfaction</div>
+    </div>
+  </header>
+
+  <main class="etroit">
+    <div id="chargement" class="carte">Chargement du questionnaire…</div>
+
+    <div id="indisponible" class="carte" hidden>
+      <h2>Questionnaire indisponible</h2>
+      <p>Ce questionnaire n'est pas ouvert ou n'existe plus. Si vous pensez
+      qu'il s'agit d'une erreur, rapprochez-vous des organisateurs de la
+      journée d'études.</p>
+    </div>
+
+    <div id="deja-repondu" class="carte merci" hidden>
+      <div class="picto">✅</div>
+      <h2>Réponse déjà enregistrée</h2>
+      <p>Une réponse à ce questionnaire a déjà été envoyée depuis cet appareil.
+      Merci de votre participation !</p>
+    </div>
+
+    <form id="formulaire" hidden novalidate>
+      <div class="carte">
+        <h2 id="titre-questionnaire"></h2>
+        <p id="contexte-journee" class="muet"></p>
+        <p class="muet">Ce questionnaire est <strong>anonyme</strong>. Vos
+        réponses servent uniquement à évaluer et améliorer nos journées
+        d'études, conformément à notre démarche qualité (certification
+        Qualiopi). Les questions marquées d'une étoile
+        <span style="color:#c0392b">*</span> sont obligatoires.</p>
+      </div>
+
+      <div class="carte">
+        <div id="zone-questions"></div>
+        <div id="erreur-envoi" class="erreur" hidden></div>
+        <div class="ligne-boutons">
+          <button type="submit" id="bouton-envoyer">Envoyer mes réponses</button>
+        </div>
+      </div>
+    </form>
+
+    <div id="merci" class="carte merci" hidden>
+      <div class="picto">🙏</div>
+      <h2>Merci pour votre participation !</h2>
+      <p>Vos réponses ont bien été enregistrées. Elles contribueront à
+      améliorer les prochaines journées d'études de l'URBH.</p>
+    </div>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/repondre.js"></script>
+</body>
+</html>
