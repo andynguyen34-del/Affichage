@@ -10,12 +10,12 @@
 // Ces valeurs ne sont pas des secrets : elles identifient le projet, et la
 // sécurité repose sur les règles Firestore (fichier firestore.rules).
 window.FIREBASE_CONFIG = {
-  apiKey: 'A_RENSEIGNER',
+  apiKey: 'AIzaSyC42TBqpPkRNCxObbordeisc9UPzX6irA4',
   authDomain: 'questionnaires-urbh.firebaseapp.com',
   projectId: 'questionnaires-urbh',
-  storageBucket: 'questionnaires-urbh.appspot.com',
-  messagingSenderId: 'A_RENSEIGNER',
-  appId: 'A_RENSEIGNER',
+  storageBucket: 'questionnaires-urbh.firebasestorage.app',
+  messagingSenderId: '446021992730',
+  appId: '1:446021992730:web:a691020b8628be2339eca3',
 };
 
 window.firebaseConfigEstRenseignee = function () {
