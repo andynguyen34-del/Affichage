@@ -22,14 +22,41 @@ function proportionDuMois(bail, annee, mois) {
   return couverts / jours;
 }
 
+/**
+ * Flux de loyer d'un bail : un par payeur.
+ * - Bail de colocation (bail.colocataires renseigné) : un flux par colocataire,
+ *   avec sa part de loyer et de charges — chacun a ses propres échéances,
+ *   virements et quittances.
+ * - Bail classique : un seul flux au nom du titulaire.
+ */
+export function fluxDuBail(bail) {
+  const colocataires = Array.isArray(bail.colocataires)
+    ? bail.colocataires.filter((c) => c && c.locataireId)
+    : [];
+  if (colocataires.length) {
+    return colocataires.map((c) => ({
+      locataireId: c.locataireId,
+      loyerHc: Number(c.partLoyer) || 0,
+      charges: Number(c.partCharges) || 0,
+      // Le suffixe rend l'identifiant d'échéance propre à chaque colocataire.
+      suffixe: `-${String(c.locataireId).slice(0, 8)}`,
+    }));
+  }
+  return [{
+    locataireId: bail.locataireId || '',
+    loyerHc: Number(bail.loyerHc) || 0,
+    charges: Number(bail.provisionCharges) || 0,
+    suffixe: '',
+  }];
+}
+
 /** Échéances théoriques d'un bail pour une année, d'après le bail lui-même. */
 export function echeancesTheoriques(bail, annee) {
   const lignes = [];
+  const flux = fluxDuBail(bail);
   for (let mois = 1; mois <= 12; mois += 1) {
     const proportion = proportionDuMois(bail, annee, mois);
     if (proportion <= 0) continue;
-    const loyerHc = centimes((Number(bail.loyerHc) || 0) * proportion);
-    const charges = centimes((Number(bail.provisionCharges) || 0) * proportion);
     // La date d'échéance est bornée à la période réellement couverte par le
     // bail dans ce mois, pour ne pas afficher une échéance hors bail.
     let dateEcheance = isoDepuis(annee, mois, Number(bail.jourEcheance) || 1);
@@ -37,21 +64,26 @@ export function echeancesTheoriques(bail, annee) {
     const finBail = String(bail.dateFin || '').slice(0, 10);
     if (debutBail && dateEcheance < debutBail) dateEcheance = debutBail;
     if (finBail && dateEcheance > finBail) dateEcheance = finBail;
-    lignes.push({
-      // Identifiant déterministe : deux postes qui « créent » le même mois
-      // visent le même enregistrement, jamais deux doublons.
-      id: `${bail.id}-${annee}-${String(mois).padStart(2, '0')}`,
-      bailId: bail.id,
-      annee,
-      mois,
-      proportion,
-      partiel: proportion < 1,
-      dateEcheance,
-      loyerHc,
-      charges,
-      autres: 0,
-      total: centimes(loyerHc + charges),
-    });
+    for (const payeur of flux) {
+      const loyerHc = centimes(payeur.loyerHc * proportion);
+      const charges = centimes(payeur.charges * proportion);
+      lignes.push({
+        // Identifiant déterministe : deux postes qui « créent » le même mois
+        // visent le même enregistrement, jamais deux doublons.
+        id: `${bail.id}-${annee}-${String(mois).padStart(2, '0')}${payeur.suffixe}`,
+        bailId: bail.id,
+        locataireId: payeur.locataireId,
+        annee,
+        mois,
+        proportion,
+        partiel: proportion < 1,
+        dateEcheance,
+        loyerHc,
+        charges,
+        autres: 0,
+        total: centimes(loyerHc + charges),
+      });
+    }
   }
   return lignes;
 }
@@ -81,14 +113,15 @@ export const LIBELLES_STATUT = {
  * réellement été enregistré (montant ajusté, encaissements, quittance).
  */
 export function echeancesAnnee(bail, annee, loyersEnregistres) {
-  const parMois = new Map();
+  // Rapprochement par identifiant (déterministe : bail + mois + colocataire).
+  const parId = new Map();
   for (const loyer of loyersEnregistres) {
-    if (loyer.bailId === bail.id && Number(loyer.annee) === Number(annee)) parMois.set(Number(loyer.mois), loyer);
+    if (loyer.bailId === bail.id && Number(loyer.annee) === Number(annee)) parId.set(loyer.id, loyer);
   }
   const lignes = echeancesTheoriques(bail, annee).map((theorique) => {
-    const reel = parMois.get(theorique.mois);
+    const reel = parId.get(theorique.id);
     if (!reel) return { ...theorique, encaissements: [], enregistre: false };
-    parMois.delete(theorique.mois);
+    parId.delete(theorique.id);
     const loyerHc = reel.loyerHc ?? theorique.loyerHc;
     const charges = reel.charges ?? theorique.charges;
     const autres = reel.autres ?? 0;
@@ -103,7 +136,7 @@ export function echeancesAnnee(bail, annee, loyersEnregistres) {
     };
   });
   // Mois enregistrés hors période du bail (régularisation, indemnité…) : on les garde.
-  for (const reste of parMois.values()) {
+  for (const reste of parId.values()) {
     const loyerHc = reste.loyerHc ?? 0;
     const charges = reste.charges ?? 0;
     const autres = reste.autres ?? 0;

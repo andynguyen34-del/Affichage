@@ -3,45 +3,7 @@
 
 import * as api from './api.js';
 
-export const COLLECTIONS = ['parametres', 'biens', 'locataires', 'baux', 'loyers',
-  'charges', 'immobilisations', 'emprunts', 'exercices'];
-
-const LISTES = new Set(COLLECTIONS.filter((n) => n !== 'parametres'));
-
-export const CATEGORIES_CHARGES = [
-  { code: 'taxe-fonciere', libelle: 'Taxe foncière' },
-  { code: 'cfe', libelle: 'Cotisation foncière des entreprises (CFE)' },
-  { code: 'assurance-pno', libelle: 'Assurance propriétaire non occupant' },
-  { code: 'assurance-gli', libelle: 'Assurance loyers impayés' },
-  { code: 'copropriete', libelle: 'Charges de copropriété non récupérables' },
-  { code: 'entretien', libelle: 'Entretien et petites réparations' },
-  { code: 'travaux', libelle: 'Travaux de réparation' },
-  { code: 'honoraires-comptables', libelle: 'Honoraires comptables, OGA' },
-  { code: 'honoraires-gestion', libelle: 'Frais de gestion locative' },
-  { code: 'annonces', libelle: 'Annonces, recherche de locataire' },
-  { code: 'energie', libelle: 'Énergie, eau, chauffage (à charge du bailleur)' },
-  { code: 'abonnements', libelle: 'Abonnements (internet, télévision)' },
-  { code: 'mobilier-petit', libelle: 'Petit mobilier et équipement (moins de 600 €)' },
-  { code: 'frais-bancaires', libelle: 'Frais bancaires' },
-  { code: 'fournitures', libelle: 'Fournitures et petit matériel' },
-  { code: 'deplacements', libelle: 'Frais de déplacement' },
-  { code: 'ordures', libelle: 'Taxe d’ordures ménagères non récupérable' },
-  { code: 'interets-emprunt', libelle: 'Intérêts d’emprunt (saisie manuelle)' },
-  { code: 'assurance-emprunteur', libelle: 'Assurance emprunteur (saisie manuelle)' },
-  { code: 'frais-acquisition', libelle: 'Frais d’acquisition déduits' },
-  { code: 'autres', libelle: 'Autres charges déductibles' },
-];
-
-export const CATEGORIES_IMMOBILISATIONS = [
-  { code: 'gros-oeuvre', libelle: 'Gros œuvre', duree: 50, partIndicative: 40 },
-  { code: 'facade', libelle: 'Façade, toiture, étanchéité', duree: 25, partIndicative: 10 },
-  { code: 'installations', libelle: 'Installations générales et techniques', duree: 20, partIndicative: 25 },
-  { code: 'agencements', libelle: 'Agencements intérieurs', duree: 15, partIndicative: 25 },
-  { code: 'mobilier', libelle: 'Mobilier et équipement', duree: 7, partIndicative: 0 },
-  { code: 'electromenager', libelle: 'Électroménager', duree: 5, partIndicative: 0 },
-  { code: 'travaux-amelioration', libelle: 'Travaux d’amélioration', duree: 12, partIndicative: 0 },
-  { code: 'frais-acquisition', libelle: 'Frais d’acquisition amortis', duree: 25, partIndicative: 0 },
-];
+export const COLLECTIONS = ['parametres', 'biens', 'locataires', 'baux', 'loyers', 'etatsDesLieux'];
 
 export const MODES_REGLEMENT = ['Virement', 'Chèque', 'Espèces', 'Prélèvement', 'CAF / APL', 'Autre'];
 
@@ -49,16 +11,7 @@ function parametresParDefaut() {
   return {
     bailleurs: [],
     adresseCorrespondance: '',
-    siret: '',
-    debutActivite: '',
-    methodeComptable: 'encaissement',
-    interetsAutomatiques: true,
-    microAbattement: 50,
-    microPlafond: 77700,
-    reports: { amortissementsDifferes: 0, deficits: [] },
-    casesDeclaration: { beneficeAvecOga: '5NA', beneficeSansOga: '5NK', deficit: '5NY' },
-    adherentOga: false,
-    indicesIrl: [],
+    lieuSignature: '',
   };
 }
 
@@ -143,10 +96,10 @@ export async function chargerTout(onEtape = () => {}) {
 const empreinteFichiers = (liste) =>
   liste.map((f) => `${f.espace}:${f.chemin}:${f.taille}:${f.modifie}`).sort().join('|');
 
-/** Relit les dossiers Documents et Factures. Renvoie true si la liste a changé. */
+/** Relit le dossier Documents. Renvoie true si la liste a changé. */
 export async function rechargerFichiers({ notifier: doitNotifier = false } = {}) {
   let changement = false;
-  for (const espace of ['documents', 'factures']) {
+  for (const espace of ['documents']) {
     const avant = empreinteFichiers(magasin.fichiers[espace] || []);
     // eslint-disable-next-line no-await-in-loop
     try { magasin.fichiers[espace] = await api.listerFichiers(espace); }
@@ -313,11 +266,3 @@ export async function enregistrerParametres(modifications) {
 }
 
 export const trouver = (nom, id) => liste(nom).find((e) => e.id === id) || null;
-
-export function libelleCategorieCharge(code) {
-  return CATEGORIES_CHARGES.find((c) => c.code === code)?.libelle || code || 'Sans catégorie';
-}
-
-export function libelleCategorieImmobilisation(code) {
-  return CATEGORIES_IMMOBILISATIONS.find((c) => c.code === code)?.libelle || code || 'Autre';
-}

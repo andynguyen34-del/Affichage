@@ -3,27 +3,21 @@
 import * as etat from './etat.js';
 import * as api from './api.js';
 import { h, vider, notifier, signalerErreur, bouton, confirmer, formulaire } from './ui.js';
-import * as fiscal from './calculs/fiscal.js';
 
 import tableauDeBord from './pages/tableau-de-bord.js';
 import bien from './pages/bien.js';
 import pageLoyers from './pages/loyers.js';
-import charges from './pages/charges.js';
-import factures, { routineIntegration } from './pages/factures.js';
-import pageAmortissements from './pages/amortissements.js';
-import emprunt from './pages/emprunt.js';
-import resultat from './pages/resultat.js';
-import liasse from './pages/liasse.js';
+import etatDesLieux from './pages/etat-des-lieux.js';
 import documents from './pages/documents.js';
 import parametres from './pages/parametres.js';
 import aide from './pages/aide.js';
+import { rendrePortail } from './pages/portail.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '9 — 27 août';
+const VERSION_APP = '10 — 28 août';
 
-const PAGES = [tableauDeBord, bien, pageLoyers, factures, charges, pageAmortissements,
-  emprunt, resultat, liasse, documents, parametres, aide];
+const PAGES = [tableauDeBord, bien, pageLoyers, etatDesLieux, documents, parametres, aide];
 
 const contexte = {
   annee: new Date().getFullYear(),
@@ -59,10 +53,20 @@ function dessinerNavigation() {
   }
 }
 
+/** Première année utile : début du plus ancien bail, ou l'année courante. */
+function premiereAnnee(donnees) {
+  const dates = [
+    ...donnees.baux.map((b) => b.dateDebut),
+    ...donnees.loyers.map((l) => (l.annee ? `${l.annee}-01-01` : null)),
+  ].filter(Boolean).sort();
+  const annee = Number(String(dates[0] || '').slice(0, 4));
+  return Number.isFinite(annee) && annee > 2000 ? annee : new Date().getFullYear();
+}
+
 function dessinerSelecteurAnnee() {
   const selecteur = vider(document.getElementById('selecteur-annee'));
   const donnees = collecte();
-  const debut = fiscal.premiereAnnee(donnees);
+  const debut = premiereAnnee(donnees);
   const fin = Math.max(new Date().getFullYear() + 1, contexte.annee);
   // On recadre l'exercice courant sur l'intervalle proposé : sans quoi une
   // suppression qui fait remonter la première année désynchronise le sélecteur
@@ -101,7 +105,7 @@ function dessinerAlertes() {
     zone.append(h('div', { class: 'alerte alerte-info' }, [
       h('div', {}, [
         h('strong', { texte: 'Première utilisation. ' }),
-        'Commencez par déclarer le logement dans « Bien & baux », puis ses composants dans « Amortissements ».',
+        'Commencez par déclarer le logement, les colocataires et le bail dans « Bien & baux ».',
       ]),
       bouton('Déclarer le logement', () => contexte.allerA('bien'), { petit: true }),
     ]));
@@ -120,10 +124,7 @@ export function collecte() {
     locataires: etat.liste('locataires'),
     baux: etat.liste('baux'),
     loyers: etat.liste('loyers'),
-    charges: etat.liste('charges'),
-    immobilisations: etat.liste('immobilisations'),
-    emprunts: etat.liste('emprunts'),
-    exercices: etat.liste('exercices'),
+    etatsDesLieux: etat.liste('etatsDesLieux'),
   };
 }
 
@@ -200,7 +201,7 @@ async function demarrerNuage() {
   }
 
   // Déjà connecté (session mémorisée) : on entre directement.
-  if (await api.attendreConnexion()) { await demarrerAvecDossier(); return; }
+  if (await api.attendreConnexion()) { await entrerSelonRole(); return; }
 
   chargement.hidden = true;
   connexion.hidden = false;
@@ -218,12 +219,29 @@ async function demarrerNuage() {
         document.getElementById('connexion-mdp').value,
       );
       formulaireConnexion.hidden = true;
-      await demarrerAvecDossier();
+      await entrerSelonRole();
     } catch (e) {
       erreur.hidden = false;
       erreur.textContent = e.message;
     } finally { boutonEnvoi.disabled = false; }
   };
+}
+
+/**
+ * Après connexion : gérant (Andy, Karine) → application complète ;
+ * colocataire → portail de consultation de ses documents.
+ */
+async function entrerSelonRole() {
+  const role = await api.detecterRole();
+  if (role === 'colocataire') {
+    document.getElementById('connexion').hidden = true;
+    document.getElementById('chargement').hidden = true;
+    await rendrePortail({
+      seDeconnecter: async () => { await api.seDeconnecter(); location.reload(); },
+    });
+    return;
+  }
+  await demarrerAvecDossier();
 }
 
 /** Écran de connexion : on désigne (ou reconnecte) le dossier partagé avant tout. */
@@ -474,18 +492,6 @@ async function ouvrirApplication() {
       localStorage.setItem('lmnp-utilisateur', reponse.nom);
       localStorage.setItem('lmnp-poste', reponse.nom);
     }
-  }
-
-  // Routine d'intégration des factures déposées dans le dossier partagé.
-  // On relit d'abord le dossier partagé : sans ce rafraîchissement, deux postes
-  // qui démarrent ensemble intègreraient chacun la même facture avant que
-  // OneDrive n'ait propagé la charge de l'autre. La clé stable par facture
-  // (cleFacture) reste le garde-fou de dernier recours.
-  if (parametresActuels.integrationAutomatiqueFactures) {
-    try {
-      await etat.rafraichir({ silencieux: true });
-      await routineIntegration(collecte(), { silencieux: true });
-    } catch (erreur) { console.error(erreur); }
   }
 
   // Reprise automatique des saisies faites sur l'autre poste.

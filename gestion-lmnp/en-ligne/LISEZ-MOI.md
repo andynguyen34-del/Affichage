@@ -1,16 +1,24 @@
-# Gestion LMNP — hébergement privé dédié (Firebase)
+# Gestion LMNP — gestion locative de la colocation (Firebase)
 
-L'application est une page web hébergée sur Firebase Hosting, dans un projet
-**dédié uniquement à la gestion personnelle** : `gestion-lmnp-anika`.
+L'application gère la location : virements de loyer des colocataires,
+quittances PDF (publiées sur l'espace de chaque colocataire et envoyées par
+e-mail), états des lieux avec reportage photo et signatures, espace
+colocataire de consultation. La comptabilité, elle, se fait dans votre outil
+comptable en ligne.
+
+Elle est hébergée sur Firebase Hosting, dans un projet **dédié uniquement à
+la gestion personnelle** : `gestion-lmnp-anika`.
 Rien n'est partagé avec les autres outils (Planning CTTH, projet `ctth-app`…) :
 projet distinct, base distincte, adresse distincte — et le fichier
 `.firebaserc` de ce dossier épingle le projet, si bien qu'un
 `firebase deploy` lancé ici ne peut PAS toucher un autre projet.
 
-Les données comptables vivent dans Firestore, les justificatifs (factures,
-documents) dans Firebase Storage, et l'accès est protégé par un compte
-e-mail + mot de passe. Plus aucun accès aux fichiers du poste : les blocages
-de sécurité locaux ne s'appliquent plus.
+Les données vivent dans Firestore, les documents (quittances, rapports
+d'état des lieux, photos) dans Firebase Storage, et l'accès est protégé par
+un compte e-mail + mot de passe. La mise en place initiale (projet,
+Authentication, base, Storage, premier déploiement) est déjà faite : pour
+cette mise à jour, il suffit de remplacer `public/index.html` et de relancer
+`firebase deploy` (voir « Mise à jour de l'application »).
 
 ## Sécurité
 
@@ -95,9 +103,37 @@ Quand une nouvelle version de `public/index.html` est livrée : remplacer le
 fichier, puis relancer `firebase deploy --account andynguyen34@gmail.com`
 dans ce dossier. L'adresse ne change pas.
 
-## Les factures
+## Les comptes des colocataires
 
-Déposez les PDF directement dans la page **Factures** de l'application
-(bouton ou glisser-déposer) : la date, le montant, le fournisseur et la
-catégorie sont lus dans le nom du fichier, comme avant. Le dossier OneDrive
-n'est plus surveillé.
+1. Renseignez l'adresse e-mail du colocataire dans l'application
+   (« Bien & baux » → Locataires → Modifier).
+2. Ouvrez son accès dans « Paramètres → Accès à l'application ».
+3. Créez son compte de connexion dans la console Firebase :
+   Authentication → Users → « Add user » (même adresse + un mot de passe
+   que vous lui communiquez).
+
+Il se connecte alors à la même adresse que vous et ne voit que son espace :
+ses quittances, l'état des lieux, son bail. Les règles de sécurité lui
+interdisent tout le reste.
+
+## L'envoi des quittances par e-mail (une fois)
+
+L'application dépose chaque courriel (quittance en pièce jointe) dans la
+collection Firestore « mail ». Pour que l'envoi parte réellement, installez
+l'extension officielle **Trigger Email from Firestore** :
+
+1. Console Firebase → Extensions → rechercher « Trigger Email » → Installer.
+2. « Email documents collection » : `mail`.
+3. « SMTP connection URI » : votre compte d'envoi. Le plus simple :
+   un compte gratuit Brevo (300 courriels/jour) — l'URI est de la forme
+   `smtps://IDENTIFIANT:CLE@smtp-relay.brevo.com:465`.
+4. Laissez le reste par défaut et validez.
+
+Tant que l'extension n'est pas installée, les courriels restent en file :
+rien n'est perdu, ils partiront après l'installation.
+
+## Reprendre les données après cette mise à jour
+
+Le fichier `sauvegarde-donnees.json` de cette livraison contient vos données
+avec la répartition du bail entre les trois colocataires (350 € + part de
+charges chacun). Importez-le : Paramètres → « Importer une sauvegarde… ».

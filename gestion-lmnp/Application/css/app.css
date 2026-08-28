@@ -344,3 +344,25 @@ textarea { min-height: 4.5rem; resize: vertical; }
 
 /* ---------- point d'attente (écran « occupé ») ---------- */
 .attente-point { color: var(--accent); font-weight: 600; }
+
+/* ---------- espace colocataire ---------- */
+.application.portail { display: block; background: var(--fond); min-height: 100vh; }
+.portail-cadre { max-width: 720px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+.portail-entete { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.6rem; }
+.portail-entete h1 { margin: .2rem 0 .3rem; font-size: 1.5rem; }
+.portail-marque { color: var(--encre-douce); font-weight: 600; font-size: .9rem; }
+.portail-section { margin-bottom: 1.6rem; }
+.portail-section h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.portail-document {
+  display: flex; align-items: center; gap: .8rem;
+  background: var(--fond-carte); border: 1px solid var(--bordure);
+  border-radius: 10px; padding: .8rem 1rem; margin-bottom: .6rem;
+}
+.portail-icone { font-size: 1.4rem; }
+.portail-details { flex: 1; min-width: 0; }
+.portail-titre { font-weight: 600; }
+.portail-pied { color: var(--encre-tres-douce); font-size: .78rem; margin-top: 2rem; text-align: center; }
+@media (max-width: 560px) {
+  .portail-document { flex-wrap: wrap; }
+  .portail-entete { flex-direction: column; }
+}

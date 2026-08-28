@@ -1,57 +1,22 @@
-// Paramètres de l'activité, reports antérieurs et sauvegarde.
+// Paramètres : identité du bailleur, accès des colocataires à leur espace,
+// sauvegarde et reprise des données.
 
 import * as etat from '../etat.js';
-import { h, carte, tableau, bouton, formulaire, confirmer, executer,
+import * as api from '../api.js';
+import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
-import { montant, date, nombre, anneeDe } from '../format.js';
+import { date } from '../format.js';
 
 async function modifierIdentite(parametres) {
   const saisie = await formulaire({
-    titre: 'Identité de l’activité',
+    titre: 'Identité',
     champs: [
       { cle: 'nomActivite', libelle: 'Nom de l’activité', type: 'texte', largeur: 'pleine', exemple: 'LMNP ANIKA' },
-      { cle: 'siret', libelle: 'SIRET', type: 'texte', aide: 'Délivré après immatriculation (formulaire P0i).' },
-      { cle: 'debutActivite', libelle: 'Début d’activité', type: 'date' },
       { cle: 'lieuSignature', libelle: 'Lieu de signature des quittances', type: 'texte' },
-      { cle: 'adherentOga', libelle: 'Adhérent d’un organisme de gestion agréé', type: 'case' },
     ],
     valeurs: parametres,
   });
   if (saisie) await executer(etat.enregistrerParametres(saisie), 'Paramètres enregistrés.');
-}
-
-async function modifierRegles(parametres) {
-  const saisie = await formulaire({
-    titre: 'Règles de calcul',
-    champs: [
-      { cle: 'methodeComptable', libelle: 'Méthode retenue', type: 'liste', options: [
-        { valeur: 'encaissement', libelle: 'Trésorerie — loyers encaissés, charges payées' },
-        { valeur: 'engagement', libelle: 'Engagement — loyers dus, charges engagées' },
-      ], aide: 'Le BIC relève en principe des créances acquises et des dettes engagées ; '
-        + 'beaucoup de petits LMNP retiennent la trésorerie. Choisissez et gardez la même méthode.' },
-      { cle: 'interetsAutomatiques', libelle: 'Reprendre automatiquement les intérêts d’emprunt', type: 'case' },
-      { cle: 'microAbattement', libelle: 'Abattement micro-BIC (%)', type: 'nombre',
-        aide: 'Utilisé seulement pour la comparaison entre régimes. Taux légal à vérifier chaque année.' },
-      { cle: 'microPlafond', libelle: 'Plafond de recettes du micro-BIC (€)', type: 'montant' },
-    ],
-    valeurs: parametres,
-  });
-  if (saisie) await executer(etat.enregistrerParametres(saisie), 'Règles enregistrées.');
-}
-
-async function modifierCases(parametres) {
-  const saisie = await formulaire({
-    titre: 'Cases de la 2042-C-PRO',
-    aide: 'Locations meublées non professionnelles au régime réel. Vérifiez ces repères sur la notice '
-      + 'du millésime : ils dépendent du rang du déclarant et de l’adhésion à un organisme agréé.',
-    champs: [
-      { cle: 'beneficeAvecOga', libelle: 'Bénéfice — adhérent d’un organisme agréé', type: 'texte' },
-      { cle: 'beneficeSansOga', libelle: 'Bénéfice — sans organisme agréé', type: 'texte' },
-      { cle: 'deficit', libelle: 'Déficit', type: 'texte' },
-    ],
-    valeurs: parametres.casesDeclaration || {},
-  });
-  if (saisie) await executer(etat.enregistrerParametres({ casesDeclaration: saisie }), 'Cases enregistrées.');
 }
 
 async function modifierBailleur(parametres, index) {
@@ -72,38 +37,6 @@ async function modifierBailleur(parametres, index) {
   await executer(etat.enregistrerParametres({ bailleurs }), 'Bailleur enregistré.');
 }
 
-async function modifierReports(parametres) {
-  const reports = parametres.reports || {};
-  const saisie = await formulaire({
-    titre: 'Reports des exercices antérieurs',
-    aide: 'À renseigner une seule fois, si l’activité existait avant l’utilisation de cette application. '
-      + 'Reprenez les montants figurant sur la dernière liasse fiscale déposée.',
-    champs: [
-      { cle: 'amortissementsDifferes', libelle: 'Amortissements réputés différés reportés (€)', type: 'montant' },
-    ],
-    valeurs: { amortissementsDifferes: reports.amortissementsDifferes || 0 },
-  });
-  if (!saisie) return;
-  await executer(etat.enregistrerParametres({
-    reports: { ...reports, amortissementsDifferes: Number(saisie.amortissementsDifferes) || 0 },
-  }), 'Reports enregistrés.');
-}
-
-async function ajouterDeficitAnterieur(parametres) {
-  const reports = parametres.reports || {};
-  const saisie = await formulaire({
-    titre: 'Déficit antérieur reportable',
-    champs: [
-      { cle: 'annee', libelle: 'Exercice d’origine', type: 'entier', requis: true, min: 2000, max: 2100 },
-      { cle: 'montant', libelle: 'Montant restant à imputer (€)', type: 'montant', requis: true },
-    ],
-    valeurs: { annee: new Date().getFullYear() - 1 },
-  });
-  if (!saisie) return;
-  const deficits = [...(reports.deficits || []), { annee: Number(saisie.annee), montant: Number(saisie.montant) }];
-  await executer(etat.enregistrerParametres({ reports: { ...reports, deficits } }), 'Déficit enregistré.');
-}
-
 function exporterSauvegarde(donnees) {
   const contenu = JSON.stringify({
     exporteLe: new Date().toISOString(),
@@ -112,7 +45,7 @@ function exporterSauvegarde(donnees) {
   }, null, 2);
   const lien = document.createElement('a');
   lien.href = URL.createObjectURL(new Blob([contenu], { type: 'application/json' }));
-  lien.download = `sauvegarde-lmnp-${new Date().toISOString().slice(0, 10)}.json`;
+  lien.download = `sauvegarde-location-${new Date().toISOString().slice(0, 10)}.json`;
   lien.click();
   URL.revokeObjectURL(lien.href);
   notifier('Sauvegarde téléchargée.', 'succes');
@@ -124,8 +57,6 @@ async function importerSauvegarde() {
   let lu;
   try { lu = JSON.parse(await fichier.text()); }
   catch { signalerErreur(new Error('Ce fichier n’est pas une sauvegarde lisible.')); return; }
-  // Deux formats acceptés : la sauvegarde complète de l'application
-  // ({ donnees: {...} }) ou directement l'objet des collections.
   const donnees = lu?.donnees && typeof lu.donnees === 'object' ? lu.donnees : lu;
   const noms = etat.COLLECTIONS.filter((nom) => donnees && typeof donnees[nom] === 'object' && donnees[nom] !== null);
   if (!noms.length) {
@@ -147,12 +78,106 @@ async function importerSauvegarde() {
   })(), `Sauvegarde importée (${noms.length} collection${noms.length > 1 ? 's' : ''}).`);
 }
 
+// ------------------------------------------------- accès des colocataires
+
+function carteAcces(donnees) {
+  const zone = h('div', { class: 'legende', texte: 'Chargement des accès…' });
+
+  const rafraichir = async () => {
+    let roles;
+    try { roles = await api.lireRoles(); }
+    catch (erreur) {
+      zone.replaceChildren(h('div', { class: 'alerte alerte-erreur', texte: `Accès illisibles : ${erreur.message}` }));
+      return;
+    }
+    const colocataires = donnees.locataires.filter((l) => l.email && l.nom !== 'Voyageurs Airbnb');
+    const parEmail = roles.colocataires || {};
+
+    const lignesGerants = (roles.admins || []).map((email) => h('div', {
+      style: 'display:flex;align-items:center;gap:.7rem;padding:.3rem 0',
+    }, [
+      h('span', { style: 'flex:1', texte: email }),
+      badge('gérant', 'succes'),
+      bouton('✕', async () => {
+        if ((roles.admins || []).length <= 1) { notifier('Impossible de retirer le dernier gérant.', 'erreur'); return; }
+        const ok = await confirmer({ titre: 'Retirer ce gérant', message: `${email} n’aura plus accès à la gestion.`, libelleValider: 'Retirer', danger: true });
+        if (!ok) return;
+        await executer(api.ecrireRoles({ ...roles, admins: roles.admins.filter((a) => a !== email) }), 'Gérant retiré.');
+        rafraichir();
+      }, { petit: true, type: 'danger' }),
+    ]));
+
+    const lignesColocataires = colocataires.map((locataire) => {
+      const email = String(locataire.email).trim().toLowerCase();
+      const aAcces = parEmail[email] === locataire.id;
+      return h('div', { style: 'display:flex;align-items:center;gap:.7rem;padding:.3rem 0;flex-wrap:wrap' }, [
+        h('span', { style: 'flex:1;min-width:12rem' }, [
+          h('strong', { texte: `${locataire.prenom || ''} ${locataire.nom}`.trim() }),
+          h('span', { class: 'legende', texte: ` — ${email}` }),
+        ]),
+        aAcces ? badge('accès ouvert', 'succes') : badge('pas d’accès', 'attente'),
+        bouton(aAcces ? 'Fermer l’accès' : 'Ouvrir l’accès', async () => {
+          const nouveaux = { ...parEmail };
+          if (aAcces) delete nouveaux[email];
+          else nouveaux[email] = locataire.id;
+          await executer((async () => {
+            await api.ecrireRoles({ ...roles, colocataires: nouveaux });
+            if (!aAcces) {
+              // Prépare son espace (même vide) pour qu'il voie une page propre.
+              const existant = await api.lirePortail(email);
+              if (!existant) {
+                await api.publierPortail(email, {
+                  nom: `${locataire.prenom || ''} ${locataire.nom}`.trim(),
+                  locataireId: locataire.id,
+                  documents: [],
+                });
+              }
+            }
+          })(), aAcces ? 'Accès fermé.' : 'Accès ouvert.');
+          rafraichir();
+        }, { petit: true, type: aAcces ? 'danger' : 'primaire' }),
+      ]);
+    });
+
+    zone.replaceChildren(
+      h('h3', { style: 'margin:.2rem 0 .3rem', texte: 'Gérants' }),
+      ...lignesGerants,
+      h('div', { style: 'margin:.4rem 0 1rem' }, [
+        bouton('+ Gérant', async () => {
+          const saisie = await formulaire({
+            titre: 'Ajouter un gérant',
+            aide: 'Le compte doit aussi exister dans Firebase (console → Authentication → Users).',
+            champs: [{ cle: 'email', libelle: 'Adresse e-mail', type: 'texte', requis: true }],
+          });
+          if (!saisie?.email) return;
+          const email = saisie.email.trim().toLowerCase();
+          await executer(api.ecrireRoles({ ...roles, admins: [...new Set([...(roles.admins || []), email])] }), 'Gérant ajouté.');
+          rafraichir();
+        }, { petit: true }),
+      ]),
+      h('h3', { style: 'margin:.2rem 0 .3rem', texte: 'Colocataires' }),
+      colocataires.length ? h('div', {}, lignesColocataires)
+        : h('p', { class: 'legende', texte: 'Renseignez l’adresse e-mail des colocataires dans « Bien & baux » pour leur ouvrir un accès.' }),
+      h('p', { class: 'legende', style: 'margin-top:.8rem', texte:
+        'Pour qu’un colocataire puisse se connecter, créez aussi son compte (même adresse + mot de passe) dans la '
+        + 'console Firebase : Authentication → Users → Add user. Il ne verra que ses propres documents.' }),
+    );
+  };
+  rafraichir();
+
+  return carte({
+    titre: 'Accès à l’application',
+    aide: 'Les gérants voient tout ; chaque colocataire ne voit que son espace documents.',
+    corps: zone,
+  });
+}
+
 export default {
   cle: 'parametres',
   libelle: 'Paramètres',
   icone: '⚙️',
   titre: 'Paramètres',
-  sousTitre: 'Identité de l’activité, règles de calcul et sauvegarde.',
+  sousTitre: 'Identité, accès des colocataires et sauvegarde.',
   rendre(contexte) {
     const donnees = contexte.donnees;
     const parametres = donnees.parametres;
@@ -160,20 +185,19 @@ export default {
     const infos = etat.infosServeur() || {};
 
     conteneur.append(carte({
-      titre: 'Identité de l’activité',
+      titre: 'Identité',
       actions: [bouton('Modifier', () => modifierIdentite(parametres), { petit: true })],
       corps: h('table', {}, h('tbody', {}, [
         ['Nom de l’activité', parametres.nomActivite || '—'],
-        ['SIRET', parametres.siret || 'non renseigné'],
-        ['Début d’activité', parametres.debutActivite ? date(parametres.debutActivite) : '—'],
         ['Lieu de signature', parametres.lieuSignature || '—'],
-        ['Organisme de gestion agréé', parametres.adherentOga ? 'adhérent' : 'non adhérent'],
+        ['Connecté en tant que', infos.dossier || '—'],
+        ['Version de l’application', infos.version || '—'],
       ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', { texte: valeur })])))),
     }));
 
     conteneur.append(carte({
       titre: 'Bailleurs',
-      aide: 'Le premier bailleur figure sur les quittances.',
+      aide: 'Le premier bailleur signe les quittances et les états des lieux.',
       actions: [bouton('+ Bailleur', () => modifierBailleur(parametres, null), { petit: true })],
       serre: true,
       corps: tableau({
@@ -199,73 +223,14 @@ export default {
       }),
     }));
 
-    conteneur.append(carte({
-      titre: 'Règles de calcul',
-      actions: [bouton('Modifier', () => modifierRegles(parametres), { petit: true })],
-      corps: h('table', {}, h('tbody', {}, [
-        ['Méthode comptable', parametres.methodeComptable === 'engagement'
-          ? 'Engagement — loyers dus et charges engagées'
-          : 'Trésorerie — loyers encaissés et charges payées'],
-        ['Intérêts d’emprunt', parametres.interetsAutomatiques === false
-          ? 'saisis manuellement en charges'
-          : 'calculés automatiquement depuis l’échéancier'],
-        ['Intégration automatique des factures', parametres.integrationAutomatiqueFactures
-          ? 'activée à l’ouverture de l’application' : 'désactivée'],
-        ['Abattement micro-BIC (comparaison)', `${nombre(parametres.microAbattement, 0)} %`],
-        ['Plafond micro-BIC (comparaison)', montant(parametres.microPlafond, { rond: true })],
-      ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', { texte: valeur })])))),
-    }));
+    if (api.MODE === 'nuage') conteneur.append(carteAcces(donnees));
 
-    const reports = parametres.reports || {};
     conteneur.append(carte({
-      titre: 'Reports des exercices antérieurs',
-      aide: 'Utile seulement si l’activité a commencé avant l’utilisation de cette application.',
-      actions: [
-        bouton('Amortissements différés', () => modifierReports(parametres), { petit: true }),
-        bouton('+ Déficit antérieur', () => ajouterDeficitAnterieur(parametres), { petit: true }),
-      ],
-      serre: true,
+      titre: 'Sauvegarde',
       corps: h('div', {}, [
-        h('div', { style: 'padding:1rem 1rem 0' }, [
-          h('strong', { texte: `Amortissements réputés différés reportés : ${montant(reports.amortissementsDifferes || 0)}` }),
-        ]),
-        tableau({
-          colonnes: [
-            { titre: 'Exercice d’origine', valeur: (d) => String(d.annee) },
-            { titre: 'Montant', nombre: true, valeur: (d) => montant(d.montant) },
-            { titre: '', actions: true, valeur: (d, index) => bouton('✕', async () => {
-              const deficits = (reports.deficits || []).filter((_, i) => i !== index);
-              await executer(etat.enregistrerParametres({ reports: { ...reports, deficits } }), 'Déficit retiré.');
-            }, { petit: true, type: 'danger' }) },
-          ],
-          lignes: reports.deficits || [],
-          messageVide: 'Aucun déficit antérieur enregistré.',
-        }),
-      ]),
-    }));
-
-    conteneur.append(carte({
-      titre: 'Cases de la déclaration',
-      actions: [bouton('Modifier', () => modifierCases(parametres), { petit: true })],
-      corps: h('table', {}, h('tbody', {}, [
-        ['Bénéfice — adhérent OGA', parametres.casesDeclaration?.beneficeAvecOga || '—'],
-        ['Bénéfice — sans OGA', parametres.casesDeclaration?.beneficeSansOga || '—'],
-        ['Déficit', parametres.casesDeclaration?.deficit || '—'],
-      ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', { texte: valeur })])))),
-    }));
-
-    conteneur.append(carte({
-      titre: 'Dossier et sauvegarde',
-      corps: h('div', {}, [
-        h('table', {}, h('tbody', {}, [
-          ['Dossier partagé', infos.dossier || '—'],
-          ['Dossier des factures', infos.dossierFactures || '—'],
-          ['Poste', `${infos.utilisateur || '—'} sur ${infos.poste || '—'}`],
-          ['Version de l’application', infos.version || '—'],
-        ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', { texte: valeur })])))),
-        h('p', { class: 'legende', style: 'margin-top:1rem', texte:
-          'Une copie de chaque fichier de données est déposée dans le sous-dossier « Sauvegardes », '
-          + 'à la première modification de chaque journée. Les sauvegardes de plus de six mois sont supprimées.' }),
+        h('p', { class: 'legende', texte:
+          'Une copie de chaque collection est conservée automatiquement à la première modification de chaque journée. '
+          + 'Vous pouvez aussi télécharger une sauvegarde complète, et la réimporter au besoin.' }),
         barreOutils([
           bouton('Télécharger une sauvegarde complète', () => exporterSauvegarde(donnees), { type: 'primaire' }),
           bouton('Importer une sauvegarde…', () => importerSauvegarde()),

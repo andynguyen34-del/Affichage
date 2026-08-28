@@ -1,7 +1,8 @@
 // Logement, locataires et baux.
 
 import * as etat from '../etat.js';
-import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer, barreOutils } from '../ui.js';
+import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer, barreOutils,
+  ouvrirModale, fermerModale } from '../ui.js';
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
 
@@ -21,12 +22,6 @@ const champsBien = () => [
   { cle: 'adresse', libelle: 'Adresse', type: 'texte', requis: true, largeur: 'pleine' },
   { cle: 'codePostal', libelle: 'Code postal', type: 'texte' },
   { cle: 'ville', libelle: 'Ville', type: 'texte' },
-  { cle: 'dateAcquisition', libelle: 'Date d’acquisition', type: 'date', requis: true },
-  { cle: 'dateMiseEnLocation', libelle: 'Date de mise en location', type: 'date', aide: 'Point de départ des amortissements.' },
-  { cle: 'prixAcquisition', libelle: 'Prix d’acquisition (€)', type: 'montant' },
-  { cle: 'partTerrain', libelle: 'Part du terrain (%)', type: 'nombre', aide: 'Non amortissable. Souvent 10 à 20 %.' },
-  { cle: 'fraisNotaire', libelle: 'Frais de notaire (€)', type: 'montant' },
-  { cle: 'fraisAgence', libelle: 'Frais d’agence (€)', type: 'montant' },
   { cle: 'notes', libelle: 'Notes', type: 'zone' },
 ];
 
@@ -144,10 +139,6 @@ async function reviserLoyer(bail) {
 function carteBien(donnees, bien) {
   const bauxDuBien = donnees.baux.filter((b) => b.bienId === bien.id);
   const actif = bauxDuBien.find((b) => bailEstActif(b));
-  const prixTotal = (Number(bien.prixAcquisition) || 0) + (Number(bien.fraisNotaire) || 0) + (Number(bien.fraisAgence) || 0);
-  const rendement = (actif && prixTotal)
-    ? ((Number(actif.loyerHc) || 0) * 12 * 100) / prixTotal
-    : null;
 
   return carte({
     titre: bien.nom,
@@ -157,22 +148,95 @@ function carteBien(donnees, bien) {
       bouton('Supprimer', async () => {
         const confirme = await confirmer({
           titre: 'Supprimer le logement',
-          message: `« ${bien.nom} » sera retiré. Les baux, charges et amortissements rattachés resteront enregistrés mais ne seront plus reliés à un logement.`,
+          message: `« ${bien.nom} » sera retiré. Les baux rattachés resteront enregistrés mais ne seront plus reliés à un logement.`,
           libelleValider: 'Supprimer', danger: true,
         });
         if (confirme) await executer(etat.supprimer('biens', bien.id), 'Logement supprimé.');
       }, { petit: true, type: 'danger' }),
     ],
     corps: h('div', { class: 'grille grille-4' }, [
-      infoBloc('Acquis le', date(bien.dateAcquisition)),
-      infoBloc('Prix de revient', montant(prixTotal, { rond: true })),
       infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
       infoBloc('Loyer en cours', actif ? `${montant(actif.loyerHc)} + ${montant(actif.provisionCharges || 0)}` : '—'),
-      infoBloc('Rendement brut', rendement ? `${nombre(rendement, 2)} %` : '—'),
-      infoBloc('Part du terrain', bien.partTerrain ? `${nombre(bien.partTerrain, 0)} %` : '—'),
-      infoBloc('Mise en location', date(bien.dateMiseEnLocation)),
       infoBloc('Baux enregistrés', String(bauxDuBien.length)),
+      infoBloc('Colocataires du bail actif', actif ? String((actif.colocataires || []).length || 1) : '—'),
     ]),
+  });
+}
+
+/**
+ * Répartition du loyer entre colocataires : chacun a sa part de loyer et de
+ * charges — elle détermine ses échéances mensuelles et ses quittances.
+ */
+async function repartirColocataires(donnees, bail) {
+  const lignes = (bail.colocataires && bail.colocataires.length)
+    ? bail.colocataires.map((c) => ({ ...c }))
+    : [bail.locataireId, bail.coTitulaireId].filter(Boolean)
+      .map((id) => ({ locataireId: id, partLoyer: 0, partCharges: 0 }));
+  const zone = h('div');
+  const totalAttendu = `${montant(bail.loyerHc)} + ${montant(bail.provisionCharges || 0)} de charges`;
+
+  const dessinerLignes = () => {
+    zone.replaceChildren();
+    lignes.forEach((ligne, index) => {
+      const options = donnees.locataires.map((l) => h('option', {
+        value: l.id, selected: l.id === ligne.locataireId,
+      }, `${l.prenom || ''} ${l.nom}`.trim()));
+      zone.append(h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap' }, [
+        h('select', { style: 'flex:2;min-width:10rem', onchange: (e) => { ligne.locataireId = e.target.value; } }, options),
+        h('input', {
+          type: 'number', step: '0.01', min: '0', value: ligne.partLoyer || 0,
+          style: 'flex:1;min-width:6rem', title: 'Part de loyer (€/mois)',
+          oninput: (e) => { ligne.partLoyer = Number(e.target.value) || 0; },
+        }),
+        h('input', {
+          type: 'number', step: '0.01', min: '0', value: ligne.partCharges || 0,
+          style: 'flex:1;min-width:6rem', title: 'Part de charges (€/mois)',
+          oninput: (e) => { ligne.partCharges = Number(e.target.value) || 0; },
+        }),
+        h('button', { class: 'bouton bouton-petit bouton-danger', type: 'button', onclick: () => {
+          lignes.splice(index, 1); dessinerLignes();
+        } }, '✕'),
+      ]));
+    });
+  };
+  dessinerLignes();
+
+  await new Promise((resoudre) => {
+    ouvrirModale({
+      titre: 'Répartition entre colocataires',
+      large: true,
+      corps: h('div', {}, [
+        h('p', { class: 'legende', texte: `Bail : ${totalAttendu} par mois. Colonnes : colocataire, part de loyer (€), part de charges (€).` }),
+        zone,
+        h('button', { class: 'bouton bouton-petit', type: 'button', style: 'margin-top:.4rem', onclick: () => {
+          const dejaPris = new Set(lignes.map((l) => l.locataireId));
+          const libre = donnees.locataires.find((l) => !dejaPris.has(l.id));
+          lignes.push({ locataireId: libre?.id || donnees.locataires[0]?.id || '', partLoyer: 0, partCharges: 0 });
+          dessinerLignes();
+        } }, '+ Ajouter un colocataire'),
+      ]),
+      pied: [
+        h('button', { class: 'bouton', type: 'button', onclick: () => { fermerModale(); resoudre(); } }, 'Annuler'),
+        h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: async () => {
+          const propres = lignes.filter((l) => l.locataireId);
+          const sommeLoyer = propres.reduce((s, l) => s + (Number(l.partLoyer) || 0), 0);
+          const sommeCharges = propres.reduce((s, l) => s + (Number(l.partCharges) || 0), 0);
+          const attendu = (Number(bail.loyerHc) || 0) + (Number(bail.provisionCharges) || 0);
+          fermerModale();
+          if (Math.abs(sommeLoyer + sommeCharges - attendu) > 0.02 && attendu > 0) {
+            const ok = await confirmer({
+              titre: 'Sommes différentes du bail',
+              message: `Les parts saisies totalisent ${montant(sommeLoyer + sommeCharges)} alors que le bail prévoit ${montant(attendu)} par mois. Enregistrer quand même ?`,
+              libelleValider: 'Enregistrer',
+            });
+            if (!ok) { resoudre(); return; }
+          }
+          await executer(etat.enregistrer('baux', { ...bail, colocataires: propres }), 'Répartition enregistrée.');
+          resoudre();
+        } }, 'Enregistrer'),
+      ],
+      surFermeture: () => resoudre(),
+    });
   });
 }
 
@@ -210,10 +274,17 @@ export default {
 
     // ------------------------------------------------------------- baux
     const colonnesBaux = [
-      { titre: 'Locataire', valeur: (b) => h('div', {}, [
-        h('div', { texte: nomLocataire(donnees, b.locataireId) }),
-        b.coTitulaireId ? h('div', { class: 'legende', texte: `et ${nomLocataire(donnees, b.coTitulaireId)}` }) : null,
-      ]) },
+      { titre: 'Locataires', valeur: (b) => {
+        const colocataires = (b.colocataires || []).filter((c) => c.locataireId);
+        if (colocataires.length) {
+          return h('div', {}, colocataires.map((c) => h('div', { class: colocataires.indexOf(c) ? 'legende' : '', texte:
+            `${nomLocataire(donnees, c.locataireId)} — ${montant((Number(c.partLoyer) || 0) + (Number(c.partCharges) || 0))}` })));
+        }
+        return h('div', {}, [
+          h('div', { texte: nomLocataire(donnees, b.locataireId) }),
+          b.coTitulaireId ? h('div', { class: 'legende', texte: `et ${nomLocataire(donnees, b.coTitulaireId)}` }) : null,
+        ]);
+      } },
       { titre: 'Logement', valeur: (b) => donnees.biens.find((x) => x.id === b.bienId)?.nom || '—' },
       { titre: 'Période', valeur: (b) => `${date(b.dateDebut)} → ${b.dateFin ? date(b.dateFin) : 'en cours'}` },
       { titre: 'Loyer HC', nombre: true, valeur: (b) => montant(b.loyerHc) },
@@ -221,6 +292,9 @@ export default {
       { titre: 'Dépôt', nombre: true, valeur: (b) => montant(b.depotGarantie || 0) },
       { titre: 'État', valeur: (b) => (bailEstActif(b) ? badge('En cours', 'succes') : badge('Terminé', 'attente')) },
       { titre: '', actions: true, valeur: (b) => h('div', { class: 'groupe-boutons' }, [
+        bouton('Répartir', () => repartirColocataires(donnees, b), {
+          petit: true, titre: 'Répartir le loyer entre les colocataires (parts individuelles)',
+        }),
         bouton('Réviser', () => reviserLoyer(b), { petit: true, titre: 'Réviser le loyer selon l’indice IRL' }),
         bouton('Modifier', () => ouvrirBail(donnees, b), { petit: true }),
         bouton('✕', async () => {
@@ -255,7 +329,8 @@ export default {
           { titre: 'Nom', valeur: (l) => `${l.nom} ${l.prenom || ''}`.trim() },
           { titre: 'Courriel', valeur: (l) => l.email || '—' },
           { titre: 'Téléphone', valeur: (l) => l.telephone || '—' },
-          { titre: 'Baux', nombre: true, valeur: (l) => String(donnees.baux.filter((b) => b.locataireId === l.id || b.coTitulaireId === l.id).length) },
+          { titre: 'Baux', nombre: true, valeur: (l) => String(donnees.baux.filter((b) => b.locataireId === l.id
+            || b.coTitulaireId === l.id || (b.colocataires || []).some((c) => c.locataireId === l.id)).length) },
           { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
             bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
             bouton('✕', async () => {

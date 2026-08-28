@@ -20,6 +20,28 @@ export async function initialiser() { /* rien à préparer */ }
 export async function attendreConnexion() { return null; }
 export async function seConnecter() { throw new Error('Sans objet en version dossier.'); }
 export async function seDeconnecter() { /* rien */ }
+export async function detecterRole() { return 'admin'; }
+export async function lireRoles() { return { admins: [], colocataires: {} }; }
+export async function ecrireRoles() { /* sans objet */ }
+export async function publierPortail() { /* sans objet */ }
+export async function lirePortail() { return null; }
+export async function lireMonPortail() { return null; }
+export async function supprimerPortail() { /* sans objet */ }
+export async function envoyerCourriel() { throw new Error('Envoi de courriel indisponible en version dossier.'); }
+export async function telechargerFichier(espace, chemin) { return ouvrirFichier(espace, chemin); }
+export async function deposerOctets(espace, chemin, octets) {
+  const dir = await dossier(espace);
+  const { parent, nom } = await cheminVersFichier(dir, chemin, true);
+  await ecrireAtomique(parent, nom, octets);
+  return { espace, chemin };
+}
+export const utilisateurEmail = () => '';
+export async function lireOctets(espace, chemin) {
+  const dir = await dossier(espace);
+  const { parent, nom } = await cheminVersFichier(dir, chemin, false);
+  const fichier = await (await parent.getFileHandle(nom)).getFile();
+  return new Uint8Array(await fichier.arrayBuffer());
+}
 
 export const dossierConnecte = () => racine !== null;
 export const nomDossier = () => racine?.name || '';

@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, runTransaction,
-  connectFirestoreEmulator,
+  collection, addDoc, connectFirestoreEmulator,
 } from 'firebase/firestore';
 import {
   getStorage, ref as refStockage, uploadBytes, listAll, getMetadata,
@@ -237,7 +237,106 @@ export async function ouvrirFichier(espace, chemin) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+/** Lit le contenu brut d'un fichier (octets). */
+export async function lireOctets(espace, chemin) {
+  const contenu = await getBlob(refFichier(espace, chemin));
+  return new Uint8Array(await contenu.arrayBuffer());
+}
+
+/** Télécharge un fichier sur le poste (bouton « Télécharger »). */
+export async function telechargerFichier(espace, chemin, nomFichier) {
+  const contenu = await getBlob(refFichier(espace, chemin));
+  const lien = document.createElement('a');
+  lien.href = URL.createObjectURL(contenu);
+  lien.download = nomFichier || chemin.split('/').pop();
+  lien.click();
+  setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+}
+
+/** Dépose des octets générés par l'application (PDF de quittance, rapport…). */
+export async function deposerOctets(espace, chemin, octets, typeMime) {
+  await uploadBytes(refFichier(espace, chemin), octets, { contentType: typeMime || 'application/octet-stream' });
+  return { espace, chemin };
+}
+
 export async function arreter() { /* rien à libérer */ }
+
+// ------------------------------------------------------------ rôles et portail
+
+// systeme/roles : { admins: [e-mails gérants], colocataires: { e-mail: locataireId } }.
+// Lisible par les gérants seulement ; sert aussi aux règles de sécurité.
+const documentRoles = () => doc(base, 'systeme', 'roles');
+
+/**
+ * Détermine le rôle du compte connecté. Les règles n'autorisent la lecture de
+ * systeme/roles qu'aux gérants : un refus de permission signifie « colocataire ».
+ * Au premier lancement (document absent), le compte courant devient gérant.
+ */
+export async function detecterRole() {
+  try {
+    const photo = await getDoc(documentRoles());
+    if (!photo.exists()) {
+      await setDoc(documentRoles(), { admins: [utilisateurEmail()], colocataires: {} });
+    }
+    return 'admin';
+  } catch { return 'colocataire'; }
+}
+
+export async function lireRoles() {
+  const photo = await getDoc(documentRoles());
+  return photo.exists() ? photo.data() : { admins: [utilisateurEmail()], colocataires: {} };
+}
+
+export async function ecrireRoles(roles) {
+  await setDoc(documentRoles(), roles);
+}
+
+// portail/{e-mail} : ce que voit un colocataire connecté — son nom et la liste
+// de ses documents. Écrit par les gérants, lu par le colocataire concerné.
+const cleEmail = (email) => String(email || '').trim().toLowerCase();
+
+export async function publierPortail(email, contenu) {
+  await setDoc(doc(base, 'portail', cleEmail(email)), {
+    ...contenu,
+    email: cleEmail(email),
+    majLe: new Date().toISOString(),
+  });
+}
+
+export async function lirePortail(email) {
+  const photo = await getDoc(doc(base, 'portail', cleEmail(email)));
+  return photo.exists() ? photo.data() : null;
+}
+
+export async function lireMonPortail() {
+  return lirePortail(utilisateurEmail());
+}
+
+export async function supprimerPortail(email) {
+  try { await deleteDoc(doc(base, 'portail', cleEmail(email))); } catch { /* déjà absent */ }
+}
+
+// --------------------------------------------------------------------- courriel
+
+/**
+ * Met un courriel en file d'envoi (collection « mail », lue par l'extension
+ * Firebase « Trigger Email » — voir le guide de mise en place). Les pièces
+ * jointes sont passées en base64.
+ */
+export async function envoyerCourriel({ destinataires, sujet, html, piecesJointes = [] }) {
+  await addDoc(collection(base, 'mail'), {
+    to: destinataires,
+    message: {
+      subject: sujet,
+      html,
+      attachments: piecesJointes.map((p) => ({
+        filename: p.nom,
+        content: p.base64,
+        encoding: 'base64',
+      })),
+    },
+  });
+}
 
 // -------------------------------------------------------------------- verrou
 
