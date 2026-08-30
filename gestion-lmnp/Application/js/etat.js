@@ -3,7 +3,7 @@
 
 import * as api from './api.js';
 
-export const COLLECTIONS = ['parametres', 'biens', 'locataires', 'baux', 'loyers', 'etatsDesLieux'];
+export const COLLECTIONS = ['parametres', 'biens', 'locataires', 'baux', 'loyers', 'cautions', 'etatsDesLieux'];
 
 export const MODES_REGLEMENT = ['Virement', 'Chèque', 'Espèces', 'Prélèvement', 'CAF / APL', 'Autre'];
 

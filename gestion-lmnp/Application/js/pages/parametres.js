@@ -197,7 +197,7 @@ export default {
 
     conteneur.append(carte({
       titre: 'Bailleurs',
-      aide: 'Le premier bailleur signe les quittances et les états des lieux.',
+      aide: 'Le premier bailleur signe les quittances.',
       actions: [bouton('+ Bailleur', () => modifierBailleur(parametres, null), { petit: true })],
       serre: true,
       corps: tableau({

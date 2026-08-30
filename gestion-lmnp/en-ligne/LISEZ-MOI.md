@@ -1,10 +1,10 @@
 # Gestion LMNP — gestion locative de la colocation (Firebase)
 
-L'application gère la location : virements de loyer des colocataires,
-quittances PDF (publiées sur l'espace de chaque colocataire et envoyées par
-e-mail), états des lieux avec reportage photo et signatures, espace
-colocataire de consultation. La comptabilité, elle, se fait dans votre outil
-comptable en ligne.
+L'application gère la location, rien d'autre : virements de loyer des
+colocataires, cautions (dépôts de garantie reçus/restitués), quittances PDF
+déposées sur l'espace de chaque colocataire avec e-mail de mise à
+disposition, états des lieux avec reportage photo et signatures. La
+comptabilité, elle, se fait dans votre outil comptable en ligne.
 
 Elle est hébergée sur Firebase Hosting, dans un projet **dédié uniquement à
 la gestion personnelle** : `gestion-lmnp-anika`.
@@ -118,8 +118,8 @@ interdisent tout le reste.
 
 ## L'envoi des quittances par e-mail (une fois)
 
-L'application dépose chaque courriel (quittance en pièce jointe) dans la
-collection Firestore « mail ». Pour que l'envoi parte réellement, installez
+L'application dépose chaque notification de mise à disposition (avec le
+lien vers l'espace colocataire) dans la collection Firestore « mail ». Pour que l'envoi parte réellement, installez
 l'extension officielle **Trigger Email from Firestore** :
 
 1. Console Firebase → Extensions → rechercher « Trigger Email » → Installer.

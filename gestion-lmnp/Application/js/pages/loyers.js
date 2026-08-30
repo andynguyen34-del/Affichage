@@ -6,7 +6,7 @@ import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, e
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
-import { pdfQuittance, octetsEnBase64 } from '../pdf.js';
+import { pdfQuittance } from '../pdf.js';
 import { publierDocument } from '../portail-publication.js';
 import * as api from '../api.js';
 
@@ -43,8 +43,9 @@ function periodeTexte(echeance, bail) {
 }
 
 /**
- * Génère la quittance PDF d'une échéance intégralement payée, la publie sur le
- * portail du colocataire, propose le téléchargement et l'envoi par e-mail.
+ * Génère la quittance PDF d'une échéance intégralement payée : dépôt sur
+ * l'espace du colocataire, téléchargement, et e-mail de mise à disposition
+ * (le colocataire retire le PDF sur son espace).
  */
 async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   const bailleur = donnees.parametres.bailleurs?.[0];
@@ -62,6 +63,7 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   });
   const nomFichier = `Quittance ${echeance.annee}-${String(echeance.mois).padStart(2, '0')} ${nomDe(locataire)}.pdf`;
 
+  // Mise à disposition sur l'espace du colocataire.
   let publie = null;
   let erreurPublication = null;
   try { publie = await publierDocument({
@@ -82,18 +84,19 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
     setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
   };
 
-  const envoyer = async () => {
+  const notifierParEmail = async () => {
     if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Bien & baux »).', 'erreur'); return; }
+    if (!publie) { notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
     await executer(api.envoyerCourriel({
       destinataires: [locataire.email],
-      sujet: `Quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
+      sujet: `Votre quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
-        + `<p>Veuillez trouver ci-joint votre quittance de loyer pour ${nomMois(echeance.mois)} ${echeance.annee} `
-        + `(${montant(echeance.total || 0)}).</p>`
-        + '<p>Elle reste aussi disponible à tout moment sur votre espace colocataire.</p>'
+        + `<p>Votre quittance de loyer pour <strong>${nomMois(echeance.mois)} ${echeance.annee}</strong> `
+        + `(${montant(echeance.total || 0)}) est disponible sur votre espace :</p>`
+        + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
+        + '<p>Connectez-vous avec votre adresse e-mail pour la consulter et la télécharger.</p>'
         + `<p>Bien cordialement,<br>${bailleur.nom}</p>`,
-      piecesJointes: [{ nom: nomFichier, base64: octetsEnBase64(octets) }],
-    }), `Quittance mise en file d’envoi vers ${locataire.email}.`);
+    }), `Notification de mise à disposition envoyée à ${locataire.email}.`);
   };
 
   ouvrirModale({
@@ -101,12 +104,13 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
     corps: h('div', {}, [
       h('p', { texte: `Quittance de ${nomDe(locataire)} pour ${nomMois(echeance.mois)} ${echeance.annee} (${montant(echeance.total || 0)}).` }),
       publie
-        ? h('p', { class: 'legende', texte: 'Déposée sur son espace colocataire : il peut la consulter et la télécharger.' })
-        : h('p', { class: 'legende', style: 'color:var(--alerte)', texte: `Non publiée sur le portail : ${erreurPublication?.message || 'erreur inconnue'}` }),
+        ? h('p', { class: 'legende', texte: 'Déposée sur son espace : il peut la consulter et la télécharger en PDF.' })
+        : h('p', { class: 'legende', style: 'color:var(--alerte)', texte:
+          `Non déposée sur son espace : ${erreurPublication?.message || 'erreur inconnue'}` }),
     ]),
     pied: [
       h('button', { class: 'bouton', type: 'button', onclick: telecharger }, 'Télécharger le PDF'),
-      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: envoyer }, 'Envoyer par e-mail'),
+      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: notifierParEmail }, 'Notifier par e-mail'),
     ],
   });
 }
@@ -310,7 +314,7 @@ export default {
           bouton('Quittance', () => quittancePdfEtEnvoi(donnees, bail, e), {
             petit: true,
             titre: calcul.statut(e) === 'paye'
-              ? 'Générer la quittance PDF, la publier sur l’espace colocataire et l’envoyer par e-mail'
+              ? 'Générer la quittance PDF (téléchargement, envoi par e-mail)'
               : 'Quittance possible seulement quand l’échéance est intégralement payée',
             desactive: calcul.statut(e) !== 'paye',
           }),
