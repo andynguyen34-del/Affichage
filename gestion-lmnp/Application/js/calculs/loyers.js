@@ -197,6 +197,66 @@ export function creancesAnnee(baux, annee, loyersEnregistres) {
   return total;
 }
 
+/**
+ * Provisions sur charges d'un bail sur une période, par colocataire :
+ * ce qui était prévu (au prorata des mois couverts) et ce qui a réellement
+ * été encaissé (au prorata du règlement de chaque échéance).
+ * La granularité est le mois : une échéance compte si son mois est couvert
+ * par la période.
+ */
+export function provisionsPeriode(bail, loyersEnregistres, debut, fin) {
+  const parLocataire = new Map();
+  const anneeDebut = Number(String(debut).slice(0, 4));
+  const anneeFin = Number(String(fin).slice(0, 4));
+  for (let annee = anneeDebut; annee <= anneeFin; annee += 1) {
+    for (const echeance of echeancesAnnee(bail, annee, loyersEnregistres)) {
+      const debutMois = isoDepuis(echeance.annee, echeance.mois, 1);
+      const finMois = isoDepuis(echeance.annee, echeance.mois, new Date(echeance.annee, echeance.mois, 0).getDate());
+      if (finMois < debut || debutMois > fin) continue;
+      const cle = echeance.locataireId || bail.locataireId || '';
+      if (!parLocataire.has(cle)) parLocataire.set(cle, { locataireId: cle, prevu: 0, encaisse: 0 });
+      const ligne = parLocataire.get(cle);
+      const charges = Number(echeance.charges) || 0;
+      ligne.prevu = centimes(ligne.prevu + charges);
+      const total = Number(echeance.total) || 0;
+      const ratio = total > 0 ? Math.min(totalEncaisse(echeance) / total, 1) : 0;
+      ligne.encaisse = centimes(ligne.encaisse + charges * ratio);
+    }
+  }
+  return [...parLocataire.values()];
+}
+
+/**
+ * Décompte de régularisation : les dépenses réelles récupérables (eau, taxe
+ * d'enlèvement des ordures ménagères…) sont réparties entre colocataires au
+ * prorata de leurs provisions PRÉVUES sur la période — ce qui tient compte
+ * des arrivées et départs en cours de période. Le solde de chacun est :
+ * provisions encaissées − quote-part réelle (positif = trop-perçu à
+ * rembourser ; négatif = complément à réclamer).
+ */
+export function decompteRegularisation(bail, loyersEnregistres, debut, fin, depensesReelles) {
+  const provisions = provisionsPeriode(bail, loyersEnregistres, debut, fin);
+  const totalPrevu = centimes(provisions.reduce((s, p) => s + p.prevu, 0));
+  const totalReel = centimes(depensesReelles.reduce((s, d) => s + (Number(d.montant) || 0), 0));
+  const lignes = provisions.map((p) => {
+    const part = totalPrevu > 0 ? centimes(totalReel * (p.prevu / totalPrevu)) : 0;
+    return { ...p, part, solde: centimes(p.encaisse - part) };
+  });
+  // Répartition au centime : la dernière ligne absorbe l'écart d'arrondi.
+  const sommeParts = centimes(lignes.reduce((s, l) => s + l.part, 0));
+  if (lignes.length && Math.abs(sommeParts - totalReel) > 0.001 && totalPrevu > 0) {
+    const derniere = lignes[lignes.length - 1];
+    derniere.part = centimes(derniere.part + totalReel - sommeParts);
+    derniere.solde = centimes(derniere.encaisse - derniere.part);
+  }
+  return {
+    lignes,
+    totalPrevu,
+    totalEncaisse: centimes(lignes.reduce((s, l) => s + l.encaisse, 0)),
+    totalReel,
+  };
+}
+
 /** Loyer révisé selon l'IRL : loyer × (indice nouveau / indice de référence). */
 export function loyerIndexe(loyerActuel, indiceReference, indiceNouveau) {
   const reference = Number(indiceReference) || 0;

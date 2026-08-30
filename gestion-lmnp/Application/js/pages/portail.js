@@ -7,10 +7,11 @@ import { h, vider, signalerErreur } from '../ui.js';
 import { date, taille } from '../format.js';
 
 const LIBELLES_TYPE = {
-  quittance: { libelle: 'Quittance de loyer', icone: '🧾' },
-  'etat-des-lieux': { libelle: 'État des lieux', icone: '📷' },
-  bail: { libelle: 'Bail', icone: '📜' },
-  autre: { libelle: 'Document', icone: '📄' },
+  quittance: { libelle: 'Quittance de loyer', pluriel: 'Quittances de loyer', icone: '🧾' },
+  'etat-des-lieux': { libelle: 'État des lieux', pluriel: 'États des lieux', icone: '📷' },
+  bail: { libelle: 'Bail', pluriel: 'Baux', icone: '📜' },
+  regularisation: { libelle: 'Régularisation des charges', pluriel: 'Régularisations des charges', icone: '💧' },
+  autre: { libelle: 'Document', pluriel: 'Documents', icone: '📄' },
 };
 
 function ligneDocument(document_) {
@@ -49,7 +50,9 @@ export async function rendrePortail({ seDeconnecter }) {
   const documents = portail?.documents || [];
   const groupes = new Map();
   for (const document_ of documents) {
-    const cle = (document_.type === 'quittance') ? 'quittance' : (document_.type || 'autre');
+    // Un type inconnu de cette version se range dans « Document » plutôt que
+    // de disparaître de l'affichage.
+    const cle = LIBELLES_TYPE[document_.type] ? document_.type : 'autre';
     if (!groupes.has(cle)) groupes.set(cle, []);
     groupes.get(cle).push(document_);
   }
@@ -69,10 +72,10 @@ export async function rendrePortail({ seDeconnecter }) {
     !erreur && !documents.length
       ? h('div', { class: 'alerte alerte-info', texte: 'Aucun document pour l’instant. Vos quittances et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' })
       : null,
-    ...['etat-des-lieux', 'bail', 'quittance', 'autre']
+    ...['etat-des-lieux', 'bail', 'quittance', 'regularisation', 'autre']
       .filter((cle) => groupes.has(cle))
       .map((cle) => h('section', { class: 'portail-section' }, [
-        h('h2', { texte: `${LIBELLES_TYPE[cle].icone} ${LIBELLES_TYPE[cle].libelle}${groupes.get(cle).length > 1 ? 's' : ''}` }),
+        h('h2', { texte: `${LIBELLES_TYPE[cle].icone} ${groupes.get(cle).length > 1 ? LIBELLES_TYPE[cle].pluriel : LIBELLES_TYPE[cle].libelle}` }),
         ...groupes.get(cle)
           .sort((a, b) => String(b.publieLe).localeCompare(String(a.publieLe)))
           .map(ligneDocument),

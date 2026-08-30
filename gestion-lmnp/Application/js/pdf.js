@@ -167,6 +167,54 @@ export async function pdfQuittance({ bailleur, locataire, bien, echeance, period
   return document_.save();
 }
 
+/**
+ * Décompte de régularisation des charges d'un colocataire : dépenses réelles
+ * de la période, provisions versées, quote-part et solde.
+ */
+export async function pdfRegularisation({ bailleur, locataire, bien, debut, fin, depenses, totalReel, ligne, lieu }) {
+  const { document_, page } = await nouvellePage();
+
+  blocParties(page, bailleur, locataire, bien);
+  page.titre('Décompte de régularisation des charges');
+  page.texte(`Période : du ${dateLongue(debut)} au ${dateLongue(fin)}`);
+  page.trait();
+
+  page.sousTitre('Dépenses récupérables réellement payées sur la période');
+  for (const depense of depenses || []) page.ligneMontant(depense.libelle, montant(depense.montant));
+  page.trait();
+  page.ligneMontant('Total des dépenses récupérables', montant(totalReel || 0), { grasse: true });
+
+  page.sousTitre('Votre situation');
+  page.ligneMontant('Provisions pour charges prévues sur la période', montant(ligne.prevu || 0));
+  page.ligneMontant('Provisions réellement versées avec vos loyers', montant(ligne.encaisse || 0));
+  page.ligneMontant('Votre quote-part des dépenses réelles', montant(ligne.part || 0));
+  page.trait();
+  const solde = Number(ligne.solde) || 0;
+  page.ligneMontant('Solde de la régularisation', montant(solde), { grasse: true });
+  page.espace(10);
+  if (solde > 0.005) {
+    page.texte(`Vos provisions excèdent votre quote-part des dépenses réelles : un trop-perçu de ${montant(solde)} `
+      + 'vous est remboursé.');
+  } else if (solde < -0.005) {
+    page.texte(`Vos provisions n'ont pas couvert votre quote-part des dépenses réelles : un complément de `
+      + `${montant(-solde)} reste à régler.`);
+  } else {
+    page.texte('Vos provisions couvrent exactement votre quote-part : le décompte est équilibré.');
+  }
+  page.espace(8);
+  page.texte(
+    'La quote-part est calculée au prorata des provisions prévues de chaque colocataire sur la période, '
+    + 'ce qui tient compte des arrivées et départs en cours de période. Les justificatifs des dépenses '
+    + '(factures d\'eau, avis de taxe foncière) sont tenus à votre disposition.',
+    { taille: 8.5, couleur: DOUX },
+  );
+  page.espace(18);
+  page.texte(`${lieu ? `${lieu}, le ` : 'Le '}${dateLongue(new Date().toISOString().slice(0, 10))}`);
+  page.texte(bailleur?.nom || '', { police: 'grasse' });
+
+  return document_.save();
+}
+
 const LIBELLES_ETAT = { neuf: 'Neuf', bon: 'Bon état', usage: 'État d\'usage', mauvais: 'Mauvais état' };
 
 /**

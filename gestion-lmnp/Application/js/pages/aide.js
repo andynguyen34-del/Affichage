@@ -10,7 +10,7 @@ export default {
   libelle: 'Aide',
   icone: '❓',
   titre: 'Mode d’emploi',
-  sousTitre: 'Loyers, cautions, quittances et états des lieux — rien d’autre.',
+  sousTitre: 'Loyers, cautions, régularisation des charges, quittances et états des lieux — rien d’autre.',
   rendre() {
     const conteneur = h('div');
 
@@ -37,6 +37,23 @@ export default {
             ' (ou « Modifier » pour une date ou un montant différents).'],
           'À la fin du bail : « Modifier » → renseignez la restitution, déduction faite des éventuelles retenues.',
           'Le dépôt de garantie n’est pas un loyer : il ne compte pas dans les recettes.',
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
+      titre: 'La régularisation des charges',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          'La page « Charges » cumule les provisions prélevées avec les loyers : prévues d’après le bail, '
+            + 'encaissées d’après les virements pointés.',
+          ['Une fois par an (ou en fin de bail) : ', h('strong', { texte: '+ Régularisation' }),
+            ' — saisissez la période, la dépense d’eau réelle (factures du service des eaux) et la taxe '
+            + 'd’enlèvement des ordures ménagères (ligne « TEOM » de l’avis de taxe foncière).'],
+          'L’application répartit les dépenses au prorata des provisions de chacun et calcule le solde : '
+            + 'trop-perçu à rembourser ou complément à réclamer.',
+          ['Le bouton ', h('strong', { texte: 'Décompte' }),
+            ' génère le PDF du colocataire, le dépose sur son espace et propose l’e-mail de mise à disposition.'],
         ]),
       ]),
     }));

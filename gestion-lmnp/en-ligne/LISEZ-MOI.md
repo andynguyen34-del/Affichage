@@ -1,10 +1,13 @@
 # Gestion LMNP — gestion locative de la colocation (Firebase)
 
 L'application gère la location, rien d'autre : virements de loyer des
-colocataires, cautions (dépôts de garantie reçus/restitués), quittances PDF
-déposées sur l'espace de chaque colocataire avec e-mail de mise à
-disposition, états des lieux avec reportage photo et signatures. La
-comptabilité, elle, se fait dans votre outil comptable en ligne.
+colocataires, cautions (dépôts de garantie reçus/restitués), régularisation
+annuelle des charges (provisions prélevées sur les loyers comparées aux
+dépenses réelles d'eau et de taxe d'enlèvement des ordures ménagères, solde
+par colocataire), quittances et décomptes PDF déposés sur l'espace de chaque
+colocataire avec e-mail de mise à disposition, états des lieux avec
+reportage photo et signatures. La comptabilité, elle, se fait dans votre
+outil comptable en ligne.
 
 Elle est hébergée sur Firebase Hosting, dans un projet **dédié uniquement à
 la gestion personnelle** : `gestion-lmnp-anika`.

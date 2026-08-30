@@ -6,6 +6,7 @@ import { h, vider, notifier, signalerErreur, bouton, confirmer, formulaire } fro
 
 import pageLoyers from './pages/loyers.js';
 import cautions from './pages/cautions.js';
+import regularisation from './pages/regularisation.js';
 import etatDesLieux from './pages/etat-des-lieux.js';
 import bien from './pages/bien.js';
 import parametres from './pages/parametres.js';
@@ -14,9 +15,9 @@ import { rendrePortail } from './pages/portail.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '11 — 30 août';
+const VERSION_APP = '12 — 30 août';
 
-const PAGES = [pageLoyers, cautions, etatDesLieux, bien, parametres, aide];
+const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
 const contexte = {
   annee: new Date().getFullYear(),
