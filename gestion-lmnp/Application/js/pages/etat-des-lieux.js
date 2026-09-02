@@ -71,8 +71,11 @@ async function creerEtatDesLieux(donnees, contexte) {
   if (nouveau?.id) { edlOuvert = nouveau.id; contexte.allerA('etat-des-lieux'); }
 }
 
-async function ajouterPhotos(edl, piece) {
-  const fichiers = await choisirFichier({ accept: 'image/*', multiple: true });
+async function ajouterPhotos(edl, piece, { camera = false } = {}) {
+  // camera : ouvre directement l'appareil photo de la tablette ; sinon, la
+  // galerie (avec sélection multiple).
+  const choisi = await choisirFichier({ accept: 'image/*', multiple: !camera, camera });
+  const fichiers = camera ? (choisi ? [choisi] : []) : choisi;
   if (!fichiers?.length) return;
   notifier(`Envoi de ${fichiers.length} photo(s)…`);
   for (const fichier of fichiers) {
@@ -123,7 +126,10 @@ function blocPiece(edl, piece, numero) {
           const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.etatGeneral = e.target.value;
         }).catch(signalerErreur),
       }, ETATS.map((o) => h('option', { value: o.valeur, selected: o.valeur === (piece.etatGeneral || '') }, o.libelle))),
-      bouton('+ Photos', () => ajouterPhotos(edl, piece), { petit: true, type: 'primaire' }),
+      bouton('📷 Caméra', () => ajouterPhotos(edl, piece, { camera: true }), {
+        petit: true, type: 'primaire', titre: 'Prendre une photo avec la caméra de la tablette',
+      }),
+      bouton('+ Photos', () => ajouterPhotos(edl, piece), { petit: true, titre: 'Choisir des photos dans la galerie' }),
       bouton('✕ Pièce', async () => {
         const ok = await confirmer({ titre: 'Retirer la pièce', message: `Retirer « ${piece.nom} » et ses photos du rapport ?`, libelleValider: 'Retirer', danger: true });
         if (ok) await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
@@ -137,6 +143,7 @@ function blocPiece(edl, piece, numero) {
         const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.commentaire = e.target.value;
       }).catch(signalerErreur),
     }, piece.commentaire || ''),
+    blocMeubles(edl, piece),
     (piece.photos || []).length ? h('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem' },
       piece.photos.map((photo) => h('div', { style: 'position:relative' }, [
         vignette(photo.chemin),
@@ -347,6 +354,53 @@ function carteContradictoire(edl, donnees) {
   });
 }
 
+/**
+ * Inventaire du mobilier de la pièce : chaque meuble avec sa quantité et son
+ * état — c'est l'inventaire obligatoire du meublé (annexe du bail), repris
+ * dans le rapport PDF.
+ */
+function blocMeubles(edl, piece) {
+  const meubles = piece.meubles || [];
+  const majMeuble = (meubleId, transformation) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+    const cible = x.pieces.find((p) => p.id === piece.id);
+    const meuble = cible && (cible.meubles || []).find((m) => m.id === meubleId);
+    if (meuble) transformation(meuble);
+  }).catch(signalerErreur);
+
+  return h('div', { style: 'margin-top:.6rem' }, [
+    h('div', { style: 'display:flex;align-items:center;gap:.6rem;margin-bottom:.3rem' }, [
+      h('span', { class: 'legende', texte: `Mobilier (${meubles.length})` }),
+      bouton('+ Meuble', () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+        const cible = x.pieces.find((p) => p.id === piece.id);
+        if (cible) cible.meubles = [...(cible.meubles || []), { id: crypto.randomUUID(), nom: '', quantite: 1, etat: 'bon' }];
+      }), null), { petit: true }),
+    ]),
+    ...meubles.map((meuble) => h('div', { style: 'display:flex;gap:.5rem;align-items:center;margin-bottom:.35rem;flex-wrap:wrap' }, [
+      h('input', {
+        value: meuble.nom || '', placeholder: 'ex. : lit double 160, matelas, table de chevet…',
+        style: 'flex:3;min-width:11rem',
+        onchange: (e) => majMeuble(meuble.id, (m) => { m.nom = e.target.value; }),
+      }),
+      h('input', {
+        type: 'number', min: '1', step: '1', value: meuble.quantite || 1,
+        style: 'width:4.2rem', title: 'Quantité',
+        onchange: (e) => majMeuble(meuble.id, (m) => { m.quantite = Number(e.target.value) || 1; }),
+      }),
+      h('select', {
+        style: 'flex:1;min-width:7rem', title: 'État du meuble',
+        onchange: (e) => majMeuble(meuble.id, (m) => { m.etat = e.target.value; }),
+      }, ETATS.filter((o) => o.valeur).map((o) => h('option', { value: o.valeur, selected: o.valeur === (meuble.etat || 'bon') }, o.libelle))),
+      h('button', {
+        class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer ce meuble',
+        onclick: () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+          const cible = x.pieces.find((p) => p.id === piece.id);
+          if (cible) cible.meubles = (cible.meubles || []).filter((m) => m.id !== meuble.id);
+        }), 'Meuble retiré.'),
+      }, '✕'),
+    ])),
+  ]);
+}
+
 async function signer(edl, donnees, partie) {
   const image = await demanderSignature({ titre: 'Signature', nom: partie.nom });
   if (!image) return;
@@ -356,10 +410,12 @@ async function signer(edl, donnees, partie) {
   }), `Signature de ${partie.nom} enregistrée.`);
 }
 
-/** Les signataires attendus : le bailleur et chaque colocataire du bail. */
+/** Les signataires attendus : TOUS les bailleurs (Andy et Karine), puis chaque colocataire du bail. */
 function partiesAttendues(edl, donnees) {
-  const bailleur = donnees.parametres.bailleurs?.[0];
-  const parties = [{ cle: 'bailleur', nom: `${bailleur?.nom || 'Bailleur'} (bailleur)` }];
+  const bailleurs = (donnees.parametres.bailleurs || []).filter((b) => b.nom);
+  const parties = bailleurs.length
+    ? bailleurs.map((b, i) => ({ cle: i === 0 ? 'bailleur' : `bailleur-${i}`, nom: `${b.nom} (bailleur)` }))
+    : [{ cle: 'bailleur', nom: 'Bailleur' }];
   for (const id of edl.locataireIds || []) {
     const locataire = donnees.locataires.find((l) => l.id === id);
     if (locataire) parties.push({ cle: `locataire-${id}`, nom: nomDe(locataire), locataireId: id });

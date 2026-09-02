@@ -61,8 +61,9 @@ function sectionContradictoire(contradictoire) {
   const selecteur = h('select', { style: 'min-width:11rem' },
     (contradictoire.pieces || []).map((p) => h('option', { value: `${p.numero}-${p.nom}` }, `${p.numero} — ${p.nom}`)));
 
-  const deposer = async () => {
-    const fichiers = await choisirFichier({ accept: 'image/*', multiple: true });
+  const deposer = async ({ camera = false } = {}) => {
+    const choisi = await choisirFichier({ accept: 'image/*', multiple: !camera, camera });
+    const fichiers = camera ? (choisi ? [choisi] : []) : choisi;
     if (!fichiers?.length) return;
     notifier(`Envoi de ${fichiers.length} photo(s)…`);
     const piece = String(selecteur.value || 'piece').replace(/[\\/:*?"<>|]/g, '-');
@@ -89,7 +90,9 @@ function sectionContradictoire(contradictoire) {
         : `la période de dépôt s'est terminée le ${dateLongue(contradictoire.finLe)}. Vos photos restent consultables ci-dessous.`) }),
     ouverte ? h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap' }, [
       selecteur,
-      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: () => deposer().catch(signalerErreur) },
+      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: () => deposer({ camera: true }).catch(signalerErreur) },
+        '📷 Prendre une photo'),
+      h('button', { class: 'bouton', type: 'button', onclick: () => deposer().catch(signalerErreur) },
         '+ Ajouter des photos'),
     ]) : null,
     listeZone,

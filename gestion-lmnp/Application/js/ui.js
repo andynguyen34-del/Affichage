@@ -360,10 +360,13 @@ export async function executer(promesse, messageSucces) {
   }
 }
 
-/** Ouvre le sélecteur de fichiers du système et renvoie le fichier choisi. */
-export function choisirFichier({ accept = '', multiple = false } = {}) {
+/**
+ * Ouvre le sélecteur de fichiers du système et renvoie le fichier choisi.
+ * `camera: true` ouvre directement l'appareil photo sur tablette et téléphone.
+ */
+export function choisirFichier({ accept = '', multiple = false, camera = false } = {}) {
   return new Promise((resoudre) => {
-    const entree = h('input', { type: 'file', accept, multiple, style: 'display:none' });
+    const entree = h('input', { type: 'file', accept, multiple, capture: camera ? 'environment' : null, style: 'display:none' });
     entree.addEventListener('change', () => {
       const fichiers = Array.from(entree.files || []);
       entree.remove();

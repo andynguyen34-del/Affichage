@@ -283,6 +283,17 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.sousTitre(`${indexPiece + 1}. ${piece.nom || 'Pièce'}`);
     if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
     if (piece.commentaire) page.texte(piece.commentaire);
+    // Inventaire du mobilier de la pièce (obligatoire en location meublée).
+    const meubles = (piece.meubles || []).filter((m) => m.nom);
+    if (meubles.length) {
+      page.espace(2);
+      page.texte('Mobilier :', { taille: 9.5, police: 'grasse', couleur: DOUX });
+      for (const meuble of meubles) {
+        page.texte(`- ${meuble.nom}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
+          + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`, { taille: 9.5 });
+      }
+      page.espace(2);
+    }
     const photos = photosParPiece?.[piece.id] || [];
     // Reportage photo : deux photos par ligne.
     for (let i = 0; i < photos.length; i += 2) {

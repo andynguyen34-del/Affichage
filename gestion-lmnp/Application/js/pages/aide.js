@@ -62,11 +62,15 @@ export default {
       titre: 'L’état des lieux — le déroulé de la visite',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Créez-le depuis la page « États des lieux » (entrée ou sortie), puis photographiez chaque pièce '
-            + '(photos compressées automatiquement) : état général, observations, compteurs, clés.',
+          'Créez-le depuis la page « États des lieux » (entrée ou sortie), puis photographiez chaque pièce — '
+            + 'bouton « 📷 Caméra » pour l’appareil photo de la tablette, « + Photos » pour la galerie '
+            + '(compression automatique) : état général, observations, compteurs, clés.',
+          'Dans chaque pièce, « + Meuble » constitue l’inventaire du mobilier (nom, quantité, état) : '
+            + 'c’est l’annexe obligatoire du bail meublé, reprise dans le rapport PDF.',
           'Ajoutez le plan du logement (photo ou croquis) et posez d’un clic le numéro de chaque pièce dessus : '
             + 'le rapport PDF reprend le plan et ses repères.',
-          'Chaque partie signe l’état des lieux à l’écran, sur place — puis faites signer le bail dans la foulée '
+          'Chaque partie signe l’état des lieux à la main sur l’écran de la tablette (les deux bailleurs, '
+            + 'Andy et Karine, puis chaque colocataire) — et faites signer le bail dans la foulée '
             + '(« Bien & baux » → Bail signé).',
           'Le rapport PDF (plan, photos, signatures) se télécharge et est déposé sur l’espace de chaque colocataire.',
           ['Enfin, ouvrez la ', h('strong', { texte: 'fenêtre contradictoire' }),
