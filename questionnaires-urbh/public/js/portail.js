@@ -28,6 +28,17 @@
     $app.innerHTML = `<div class="carte">${html}</div>`;
   }
 
+  // Détail technique d'une erreur Firebase, ajouté aux messages pour
+  // diagnostiquer précisément (permission-denied = règles en retard, etc.).
+  function detailErreur(e) {
+    if (!e) return '';
+    const code = e.code || '';
+    if (code === 'permission-denied') {
+      return ' [permission-denied : les règles de sécurité déployées sont probablement en retard — redéployer avec firebase deploy --only firestore]';
+    }
+    return code ? ` [${code}]` : e.message ? ` [${e.message}]` : '';
+  }
+
   function normaliserNumero(brut) {
     return String(brut == null ? '' : brut)
       .trim()
@@ -162,7 +173,9 @@
         await enregistrerInscription();
         vueMenu();
       } catch (e) {
-        vueInscription("L'enregistrement a échoué. Vérifiez votre connexion puis réessayez.");
+        vueInscription(
+          "L'enregistrement a échoué. Vérifiez votre connexion puis réessayez." + detailErreur(e),
+        );
       }
     });
   }
@@ -426,9 +439,10 @@
               creeLe: new Date().toISOString(),
             });
           vueMenu();
-        } catch (_) {
+        } catch (e) {
           erreurAtelier(
-            "L'inscription n'a pas pu être enregistrée (inscriptions closes ou connexion instable). Réessayez.",
+            "L'inscription n'a pas pu être enregistrée (inscriptions closes ou connexion instable). Réessayez." +
+              detailErreur(e),
           );
           b.disabled = false;
         }
@@ -471,7 +485,8 @@
         } catch (e) {
           const erreur = document.getElementById('erreur-tirage');
           erreur.textContent =
-            "La participation n'a pas pu être enregistrée (tirage fermé ou connexion instable). Réessayez.";
+            "La participation n'a pas pu être enregistrée (tirage fermé ou connexion instable). Réessayez." +
+            detailErreur(e);
           erreur.hidden = false;
           boutonTirage.disabled = false;
         }
@@ -533,6 +548,9 @@
       vueInscription();
     }
   }
+
+  const piedVersion = document.getElementById('pied-version');
+  if (piedVersion && window.APP_BUILD) piedVersion.textContent = ' — v' + window.APP_BUILD;
 
   // Réutilise la session existante (participant déjà connu, ou administrateur
   // qui teste le portail) ; sinon crée une session anonyme liée à l'appareil.

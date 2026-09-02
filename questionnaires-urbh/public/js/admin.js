@@ -1888,6 +1888,9 @@
   auth = firebase.auth();
   db = firebase.firestore();
 
+  const $version = document.getElementById('version-app');
+  if ($version && window.APP_BUILD) $version.textContent = 'v' + window.APP_BUILD;
+
   const $deconnexion = document.getElementById('bouton-deconnexion');
   $deconnexion.addEventListener('click', () => auth.signOut());
 

@@ -18,6 +18,10 @@ window.FIREBASE_CONFIG = {
   appId: '1:446021992730:web:a691020b8628be2339eca3',
 };
 
+// Numéro de version de l'application, affiché en pied de page : permet de
+// vérifier que le site déployé correspond bien à la dernière livraison.
+window.APP_BUILD = 8;
+
 window.firebaseConfigEstRenseignee = function () {
   const c = window.FIREBASE_CONFIG || {};
   return c.apiKey && c.apiKey !== 'A_RENSEIGNER';
