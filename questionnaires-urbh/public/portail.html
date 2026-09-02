@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Journées d'études URBH</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="appbar">
+    <div>
+      <h1>URBH — Journées d'études</h1>
+      <div class="sous-titre" id="sous-titre-journee">Bienvenue</div>
+    </div>
+  </header>
+
+  <main class="etroit" id="app-portail">
+    <div class="carte">Chargement…</div>
+  </main>
+
+  <footer class="muet petit" style="text-align:center;padding:1rem 1rem 2rem">
+    Une question ? Écrivez-nous : urbhasso@gmail.com
+    <span id="pied-version"></span>
+  </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <!-- Servi par Firebase Hosting : initialise l'application avec la
+       configuration du projet. Absent hors hébergement Firebase. -->
+  <script src="/__/firebase/init.js"></script>
+  <script src="js/portail.js"></script>
+</body>
+</html>
