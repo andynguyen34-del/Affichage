@@ -160,7 +160,10 @@ thead th {
   letter-spacing: .03em; color: var(--encre-douce); padding: .55rem .8rem;
   border-bottom: 1px solid var(--bordure); background: #fafbfc; white-space: nowrap;
 }
-tbody td { padding: .5rem .8rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; }
+tbody td { padding: .45rem .7rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; }
+/* Dans un tableau, les actions restent sur UNE ligne : c'est la hauteur des
+   lignes qui fait la lisibilité de la page. */
+td.actions .groupe-boutons { flex-wrap: nowrap; justify-content: flex-end; gap: .35rem; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: #fbfcfd; }
 td.nombre, th.nombre { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

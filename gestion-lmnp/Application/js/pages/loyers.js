@@ -2,7 +2,7 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
-  barreOutils, notifier, ouvrirModale } from '../ui.js';
+  barreOutils, notifier, ouvrirModale, fermerModale } from '../ui.js';
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
@@ -225,6 +225,24 @@ function documentsQuittance(donnees, bail, echeance, quittance) {
   }
 }
 
+/** Menu « ⋯ » d'une échéance : les actions moins fréquentes, hors du tableau. */
+function menuEcheance(donnees, bail, echeance) {
+  const action = (libelle, fonction, aide) => h('button', {
+    class: 'bouton', type: 'button', style: 'width:100%;justify-content:flex-start;margin-bottom:.45rem;display:flex;gap:.5rem',
+    title: aide || null,
+    onclick: () => { fermerModale(); fonction(); },
+  }, libelle);
+  ouvrirModale({
+    titre: `${nomMois(echeance.mois)} ${echeance.annee} — autres actions`,
+    corps: h('div', {}, [
+      action('🖨 Imprimer', () => documentsQuittance(donnees, bail, echeance, calcul.statut(echeance) === 'paye'),
+        'Quittance si payée, sinon avis d’échéance'),
+      action('✎ Ajuster les montants', () => ajusterEcheance(echeance)),
+      action('📄 Voir les encaissements', () => voirEncaissements(echeance)),
+    ]),
+  });
+}
+
 function ligneStatut(echeance) {
   const info = calcul.LIBELLES_STATUT[calcul.statut(echeance)];
   return badge(info.texte, info.ton);
@@ -293,12 +311,9 @@ export default {
       const colonnes = [
         { titre: 'Mois', valeur: (e) => h('div', {}, [
           h('div', { texte: nomMois(e.mois) }),
-          e.partiel ? h('div', { class: 'legende', texte: 'mois partiel' }) : null,
-          e.horsBail ? h('div', { class: 'legende', texte: 'hors période du bail' }) : null,
+          h('div', { class: 'legende', texte: `échéance ${date(e.dateEcheance)}${e.partiel ? ' · mois partiel' : ''}${e.horsBail ? ' · hors bail' : ''}` }),
         ]) },
-        { titre: 'Échéance', valeur: (e) => date(e.dateEcheance) },
-        { titre: 'Loyer', nombre: true, valeur: (e) => montant(e.loyerHc) },
-        { titre: 'Charges', nombre: true, valeur: (e) => montant(e.charges) },
+        { titre: 'Loyer + charges', nombre: true, valeur: (e) => `${montant(e.loyerHc)} + ${montant(e.charges)}` },
         { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
         { titre: 'Encaissé', nombre: true, valeur: (e) => {
           const recu = calcul.totalEncaisse(e);
@@ -318,10 +333,7 @@ export default {
               : 'Quittance possible seulement quand l’échéance est intégralement payée',
             desactive: calcul.statut(e) !== 'paye',
           }),
-          bouton('Imprimer', () => documentsQuittance(donnees, bail, e, calcul.statut(e) === 'paye'), {
-            petit: true, titre: 'Imprimer (quittance si payée, sinon avis d’échéance)',
-          }),
-          bouton('⋯', () => ajusterEcheance(e), { petit: true, titre: 'Ajuster les montants' }),
+          bouton('⋯', () => menuEcheance(donnees, bail, e), { petit: true, titre: 'Imprimer, ajuster, encaissements…' }),
         ]) },
       ];
 
