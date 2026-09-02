@@ -12,10 +12,15 @@ et signatures — suivis d'une fenêtre de 3 semaines pendant laquelle chaque
 colocataire dépose ses photos contradictoires depuis son espace. La
 comptabilité, elle, se fait dans votre outil comptable en ligne.
 
-**Important pour cette mise à jour (v13)** : les règles de sécurité du
-Storage changent (dépôt des photos contradictoires par les colocataires).
-La commande de déploiement habituelle les publie en même temps que
-l'application — rien de plus à faire.
+Chaque colocataire dépose aussi ses justificatifs depuis son espace
+(attestation d'assurance habitation, entretien des climatiseurs, ramonage
+de la cheminée) ; le relevé et les rappels par e-mail se font depuis
+« Bien & baux → Justificatifs des colocataires ».
+
+**Important pour cette mise à jour (v15)** : les règles de sécurité du
+Storage changent (dépôt des photos contradictoires et des justificatifs
+par les colocataires). La commande de déploiement habituelle les publie
+en même temps que l'application — rien de plus à faire.
 
 Elle est hébergée sur Firebase Hosting, dans un projet **dédié uniquement à
 la gestion personnelle** : `gestion-lmnp-anika`.

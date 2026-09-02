@@ -24,6 +24,19 @@ service firebase.storage {
       allow update, delete: if estGerant();
     }
 
+    // Justificatifs fournis par le colocataire (assurance habitation,
+    // entretien des climatiseurs, ramonage…) : il peut en DÉPOSER dans son
+    // espace (images ou PDF), jamais les modifier ni les supprimer.
+    match /portail/{email}/justificatifs/{reste=**} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow create: if connecte()
+        && request.auth.token.email.lower() == email
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+      allow update, delete: if estGerant();
+    }
+
     // Documents publiés pour un colocataire : lecture par lui seul (et les
     // gérants), écriture par les gérants.
     match /portail/{email}/{reste=**} {

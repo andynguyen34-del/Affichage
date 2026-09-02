@@ -106,6 +106,9 @@ export default {
           'À la même adresse que vous, il n’accède qu’à ses documents : quittances et états des lieux, '
             + 'à consulter ou télécharger en PDF.',
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
+          'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
+            + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
+            + '« Bien & baux » → « Justificatifs des colocataires » → Relever, avec rappel par e-mail de ce qui manque.',
         ]),
       ]),
     }));
