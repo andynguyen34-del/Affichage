@@ -5,6 +5,7 @@ import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer
   ouvrirModale, fermerModale } from '../ui.js';
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
+import { ouvrirBailSignatures } from './bail-signature.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Local'].map((v) => ({ valeur: v, libelle: v }));
 const TYPES_BAIL = [
@@ -296,6 +297,9 @@ export default {
           petit: true, titre: 'Répartir le loyer entre les colocataires (parts individuelles)',
         }),
         bouton('Réviser', () => reviserLoyer(b), { petit: true, titre: 'Réviser le loyer selon l’indice IRL' }),
+        bouton('Bail signé', () => ouvrirBailSignatures(donnees, b), {
+          petit: true, titre: 'Joindre le PDF du bail, recueillir les signatures à l’écran et le déposer sur les espaces colocataires',
+        }),
         bouton('Modifier', () => ouvrirBail(donnees, b), { petit: true }),
         bouton('✕', async () => {
           const confirme = await confirmer({

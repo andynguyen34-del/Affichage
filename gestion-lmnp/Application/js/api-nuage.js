@@ -177,9 +177,10 @@ async function parcourir(reference, prefixe, espace, elements) {
   }
 }
 
-export async function listerFichiers(espace) {
+export async function listerFichiers(espace, prefixe = '') {
   const elements = [];
-  await parcourir(refStockage(stockage, espace), '', espace, elements);
+  const depart = prefixe ? `${espace}/${prefixe}` : espace;
+  await parcourir(refStockage(stockage, depart), prefixe, espace, elements);
   return elements.sort((a, b) => a.chemin.localeCompare(b.chemin));
 }
 

@@ -9,7 +9,8 @@ import { h, carte, bouton, badge, vide, formulaire, confirmer, executer,
 import { date, aujourdhui, taille } from '../format.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
-import { publierDocument } from '../portail-publication.js';
+import { publierDocument, ouvrirFenetreContradictoire } from '../portail-publication.js';
+import { compresserPhoto } from '../photos.js';
 
 const PIECES_PROPOSEES = ['Séjour', 'Cuisine', 'Chambre 1', 'Chambre 2', 'Chambre 3',
   'Salle de bain', 'WC', 'Entrée / couloir', 'Extérieur / jardin', 'Garage / annexe'];
@@ -34,17 +35,6 @@ const vignettes = new Map();
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : '?');
 
-/** Réduit une photo (canvas) : au plus 1400 px de large, JPEG qualité 0,82. */
-async function compresserPhoto(fichier) {
-  const image = await createImageBitmap(fichier);
-  const echelle = Math.min(1, 1400 / Math.max(image.width, image.height));
-  const canevas = document.createElement('canvas');
-  canevas.width = Math.round(image.width * echelle);
-  canevas.height = Math.round(image.height * echelle);
-  canevas.getContext('2d').drawImage(image, 0, 0, canevas.width, canevas.height);
-  image.close?.();
-  return new Promise((resoudre) => { canevas.toBlob(resoudre, 'image/jpeg', 0.82); });
-}
 
 async function creerEtatDesLieux(donnees, contexte) {
   const bailActif = [...donnees.baux].sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)))[0];
@@ -114,9 +104,13 @@ function vignette(chemin) {
   return image;
 }
 
-function blocPiece(edl, piece) {
+function blocPiece(edl, piece, numero) {
   return h('div', { style: 'border:1px solid var(--bordure);border-radius:8px;padding: .8rem;margin-bottom:.8rem' }, [
     h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem' }, [
+      h('span', {
+        class: 'badge badge-attente', title: 'Numéro de la pièce sur le plan',
+        style: 'min-width:1.6rem;text-align:center', texte: String(numero),
+      }),
       h('input', {
         value: piece.nom, style: 'font-weight:600;flex:2;min-width:9rem',
         onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
@@ -156,6 +150,201 @@ function blocPiece(edl, piece) {
         }, '✕'),
       ]))) : null,
   ]);
+}
+
+// ------------------------------------------------------------------- plan
+
+/**
+ * Plan du logement : une photo ou un scan du plan, sur lequel on pose le
+ * numéro de chaque pièce d'un simple clic — le rapport PDF reprend le plan
+ * avec ses repères.
+ */
+function cartePlan(edl) {
+  const cheminPlan = `${edl.id}/plan.jpg`;
+  const zone = h('div');
+
+  const chargerImage = () => {
+    const cadre = h('div', { style: 'position:relative;display:inline-block;max-width:100%' });
+    const image = h('img', { alt: 'Plan du logement', style: 'max-width:100%;border-radius:8px;border:1px solid var(--bordure);display:block' });
+    const connue = vignettes.get(cheminPlan);
+    if (connue) image.src = connue;
+    else {
+      api.lireOctets('etats-des-lieux', cheminPlan).then((octets) => {
+        const url = URL.createObjectURL(new Blob([octets], { type: 'image/jpeg' }));
+        vignettes.set(cheminPlan, url);
+        image.src = url;
+      }).catch(() => { image.alt = 'plan indisponible'; });
+    }
+    cadre.append(image);
+
+    const selecteur = h('select', { style: 'min-width:11rem' },
+      (edl.pieces || []).map((p, i) => h('option', { value: p.id }, `${i + 1} — ${p.nom}`)));
+
+    const dessinerReperes = () => {
+      cadre.querySelectorAll('.repere-plan').forEach((r) => r.remove());
+      for (const repere of edl.plan?.reperes || []) {
+        const numero = (edl.pieces || []).findIndex((p) => p.id === repere.pieceId) + 1;
+        if (!numero) continue;
+        cadre.append(h('button', {
+          class: 'repere-plan', type: 'button',
+          title: 'Cliquer pour retirer ce repère',
+          style: `position:absolute;left:${repere.x * 100}%;top:${repere.y * 100}%;transform:translate(-50%,-50%);`
+            + 'width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:var(--accent, #1d6f5c);'
+            + 'color:#fff;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.4);padding:0',
+          onclick: (evenement) => {
+            evenement.stopPropagation();
+            executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+              x.plan = x.plan || { reperes: [] };
+              x.plan.reperes = (x.plan.reperes || []).filter((r) => !(r.pieceId === repere.pieceId && r.x === repere.x && r.y === repere.y));
+            }), 'Repère retiré.').then(() => {
+              edl.plan.reperes = edl.plan.reperes.filter((r) => !(r.pieceId === repere.pieceId && r.x === repere.x && r.y === repere.y));
+              dessinerReperes();
+            });
+          },
+        }, String(numero)));
+      }
+    };
+
+    image.addEventListener('click', (evenement) => {
+      const cadreImage = image.getBoundingClientRect();
+      const x = (evenement.clientX - cadreImage.left) / cadreImage.width;
+      const y = (evenement.clientY - cadreImage.top) / cadreImage.height;
+      const pieceId = selecteur.value;
+      if (!pieceId) return;
+      const repere = { pieceId, x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 };
+      executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => {
+        e.plan = e.plan || {};
+        e.plan.reperes = [...(e.plan.reperes || []), repere];
+      })).then(() => {
+        edl.plan = edl.plan || {};
+        edl.plan.reperes = [...(edl.plan.reperes || []), repere];
+        dessinerReperes();
+      });
+    });
+
+    zone.replaceChildren(
+      h('p', { class: 'legende', texte: 'Choisissez une pièce puis touchez le plan à son emplacement : son numéro s\'y pose. '
+        + 'Toucher un repère le retire. Les numéros correspondent aux pièces ci-dessus.' }),
+      h('div', { style: 'margin-bottom:.6rem' }, selecteur),
+      cadre,
+    );
+    dessinerReperes();
+  };
+
+  const televerserPlan = async () => {
+    const fichier = await choisirFichier({ accept: 'image/*' });
+    if (!fichier) return;
+    const reduite = await compresserPhoto(fichier);
+    await api.deposerOctets('etats-des-lieux', cheminPlan, new Uint8Array(await reduite.arrayBuffer()), 'image/jpeg');
+    vignettes.delete(cheminPlan);
+    await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => {
+      e.plan = { chemin: cheminPlan, reperes: (e.plan?.reperes || []) };
+    }), 'Plan enregistré.');
+    edl.plan = { chemin: cheminPlan, reperes: (edl.plan?.reperes || []) };
+    chargerImage();
+  };
+
+  if (edl.plan?.chemin) chargerImage();
+  else {
+    zone.append(vide('Aucun plan pour l\'instant',
+      'Photographiez un plan du logement (plan papier, croquis…) : vous poserez le numéro de chaque pièce dessus, '
+      + 'et le rapport PDF le reprendra.'));
+  }
+
+  return carte({
+    titre: 'Plan du logement et repères des pièces',
+    actions: [bouton(edl.plan?.chemin ? 'Remplacer le plan…' : 'Ajouter le plan…', () => televerserPlan().catch(signalerErreur), { petit: true, type: 'primaire' })],
+    corps: zone,
+  });
+}
+
+// ----------------------------------------------- photos contradictoires
+
+const ajouterJours = (dateIso, jours) => {
+  const d = new Date(`${dateIso}T12:00:00`);
+  d.setDate(d.getDate() + jours);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Fenêtre contradictoire : pendant 3 semaines après l'état des lieux, chaque
+ * colocataire peut déposer ses propres photos depuis son espace. Ici, côté
+ * gérant : ouverture de la fenêtre et relevé des photos déposées.
+ */
+function carteContradictoire(edl, donnees) {
+  const locataires = (edl.locataireIds || []).map((id) => donnees.locataires.find((l) => l.id === id)).filter(Boolean);
+  const zone = h('div');
+
+  const ouvrir = async () => {
+    const finLe = ajouterJours(edl.date, 21);
+    const pieces = (edl.pieces || []).map((p, i) => ({ numero: i + 1, nom: p.nom }));
+    let ouverts = 0;
+    for (const locataire of locataires) {
+      try {
+        /* eslint-disable no-await-in-loop */
+        await ouvrirFenetreContradictoire({
+          locataire, edl, finLe, pieces, bailleur: donnees.parametres.bailleurs?.[0],
+        });
+        ouverts += 1;
+      } catch (erreur) { notifier(erreur.message, 'erreur'); }
+    }
+    if (ouverts) {
+      await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => { e.contradictoireFinLe = finLe; }),
+        `Fenêtre ouverte jusqu'au ${date(finLe)} pour ${ouverts} colocataire(s), e-mails envoyés.`);
+      edl.contradictoireFinLe = finLe;
+      dessiner();
+    }
+  };
+
+  const relever = async () => {
+    zone.querySelector('.releve-contradictoire')?.remove();
+    const bloc = h('div', { class: 'releve-contradictoire', style: 'margin-top: .8rem' });
+    zone.append(bloc);
+    for (const locataire of locataires) {
+      const email = String(locataire.email || '').trim().toLowerCase();
+      if (!email) continue;
+      let fichiers = [];
+      try {
+        /* eslint-disable no-await-in-loop */
+        fichiers = await api.listerFichiers('portail', `${email}/contradictoire/${edl.id}`);
+      } catch { /* pas de dossier : aucune photo */ }
+      bloc.append(h('div', { style: 'margin-bottom:.6rem' }, [
+        h('div', { style: 'font-weight:600', texte: `${nomDe(locataire)} — ${fichiers.length} photo(s)` }),
+        fichiers.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' },
+          fichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true }))) : null,
+      ]));
+    }
+    if (!bloc.children.length) bloc.append(h('p', { class: 'legende', texte: 'Aucune photo contradictoire déposée pour l\'instant.' }));
+  };
+
+  const dessiner = () => {
+    zone.replaceChildren();
+    if (!edl.contradictoireFinLe) {
+      zone.append(
+        h('p', { class: 'legende', texte: 'Après la visite et les signatures, ouvrez la fenêtre contradictoire : '
+          + 'chaque colocataire disposera de 3 semaines pour déposer ses propres photos des pièces depuis son espace. '
+          + 'Il en sera informé par e-mail, avec la date limite.' }),
+        bouton('Ouvrir la fenêtre contradictoire (3 semaines)', () => ouvrir().catch(signalerErreur), { type: 'primaire' }),
+      );
+      return;
+    }
+    const close = edl.contradictoireFinLe < aujourdhui();
+    zone.append(
+      h('p', {}, [
+        close ? badge(`Close depuis le ${date(edl.contradictoireFinLe)}`, 'attente')
+          : badge(`Ouverte jusqu'au ${date(edl.contradictoireFinLe)}`, 'succes'),
+      ]),
+      h('div', { class: 'groupe-boutons', style: 'margin-top:.5rem' }, [
+        bouton('Relever les photos déposées', () => relever().catch(signalerErreur), { petit: true, type: 'primaire' }),
+      ]),
+    );
+  };
+  dessiner();
+
+  return carte({
+    titre: 'Photos contradictoires des colocataires',
+    corps: zone,
+  });
 }
 
 async function signer(edl, donnees, partie) {
@@ -211,8 +400,23 @@ async function genererRapport(edl, donnees) {
     image: (edl.signatures || []).find((s) => s.cle === partie.cle)?.image || null,
   }));
 
+  // Plan avec repères, s'il a été fourni.
+  let plan = null;
+  if (edl.plan?.chemin) {
+    try {
+      const octetsPlan = await api.lireOctets('etats-des-lieux', edl.plan.chemin);
+      plan = {
+        octets: octetsPlan,
+        reperes: (edl.plan.reperes || []).map((r) => ({
+          numero: (edl.pieces || []).findIndex((p) => p.id === r.pieceId) + 1, x: r.x, y: r.y,
+        })).filter((r) => r.numero > 0),
+        legende: (edl.pieces || []).map((p, i) => ({ numero: i + 1, nom: p.nom })),
+      };
+    } catch { /* plan indisponible : le rapport se génère sans lui */ }
+  }
+
   const octets = await pdfEtatDesLieux({
-    edl, bien, bailleur: donnees.parametres.bailleurs?.[0], locataires, photosParPiece, signatures,
+    edl, bien, bailleur: donnees.parametres.bailleurs?.[0], locataires, photosParPiece, signatures, plan,
   });
   const nomFichier = `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} ${edl.date}.pdf`;
 
@@ -255,8 +459,11 @@ function editeur(edl, donnees, contexte) {
   conteneur.append(carte({
     titre: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${date(edl.date)}`,
     aide: edl.statut === 'finalise' ? 'Rapport déjà généré — toute modification demandera une nouvelle génération.' : 'Brouillon — tout est modifiable.',
-    corps: h('div', {}, (edl.pieces || []).map((piece) => blocPiece(edl, piece))),
+    corps: h('div', {}, (edl.pieces || []).map((piece, index) => blocPiece(edl, piece, index + 1))),
   }));
+
+  conteneur.append(cartePlan(edl));
+  conteneur.append(carteContradictoire(edl, donnees));
 
   conteneur.append(carte({
     titre: 'Relevés des compteurs et clés',

@@ -59,14 +59,35 @@ export default {
     }));
 
     conteneur.append(carte({
-      titre: 'L’état des lieux',
+      titre: 'L’état des lieux — le déroulé de la visite',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Créez-le depuis la page « États des lieux » (entrée ou sortie).',
-          'Dans chaque pièce : photos (compressées automatiquement), état général et observations. '
-            + 'Relevez aussi les compteurs et les clés remises.',
-          'Chaque partie signe à l’écran, au doigt ou à la souris — idéalement sur place.',
-          'Le rapport PDF (photos et signatures incluses) se télécharge et est déposé sur l’espace de chaque colocataire.',
+          'Créez-le depuis la page « États des lieux » (entrée ou sortie), puis photographiez chaque pièce '
+            + '(photos compressées automatiquement) : état général, observations, compteurs, clés.',
+          'Ajoutez le plan du logement (photo ou croquis) et posez d’un clic le numéro de chaque pièce dessus : '
+            + 'le rapport PDF reprend le plan et ses repères.',
+          'Chaque partie signe l’état des lieux à l’écran, sur place — puis faites signer le bail dans la foulée '
+            + '(« Bien & baux » → Bail signé).',
+          'Le rapport PDF (plan, photos, signatures) se télécharge et est déposé sur l’espace de chaque colocataire.',
+          ['Enfin, ouvrez la ', h('strong', { texte: 'fenêtre contradictoire' }),
+            ' : chaque colocataire a 3 semaines pour déposer ses propres photos depuis son espace '
+            + '(datées, non modifiables) ; « Relever les photos » les affiche côté gérant.'],
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
+      titre: 'Le bail signé dans l’application',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          ['Page « Bien & baux », bouton ', h('strong', { texte: 'Bail signé' }),
+            ' sur la ligne du bail : joignez le PDF du bail, puis chaque partie signe à l’écran '
+            + '(tablette, doigt ou stylet).'],
+          '« Générer le bail signé » ajoute au PDF une page datée avec toutes les signatures.',
+          '« Déposer sur les espaces + notifier » met le bail à disposition de chaque colocataire '
+            + '(adresse e-mail requise) et lui envoie l’e-mail de mise à disposition.',
+          'Il s’agit d’une signature simple : suffisante pour les annexes, avenants et états des lieux ; '
+            + 'pour une valeur probante renforcée du bail, un service certifié reste préférable.',
         ]),
       ]),
     }));

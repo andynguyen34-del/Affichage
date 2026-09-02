@@ -12,6 +12,18 @@ service firebase.storage {
       );
     }
 
+    // Photos contradictoires d'état des lieux : le colocataire peut DÉPOSER
+    // des images dans son propre espace (jamais modifier ni supprimer —
+    // l'intégrité des preuves est préservée). Lecture : lui et les gérants.
+    match /portail/{email}/contradictoire/{reste=**} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow create: if connecte()
+        && request.auth.token.email.lower() == email
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update, delete: if estGerant();
+    }
+
     // Documents publiés pour un colocataire : lecture par lui seul (et les
     // gérants), écriture par les gérants.
     match /portail/{email}/{reste=**} {

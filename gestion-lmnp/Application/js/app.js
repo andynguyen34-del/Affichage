@@ -15,7 +15,7 @@ import { rendrePortail } from './pages/portail.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '12 — 30 août';
+const VERSION_APP = '13 — 2 septembre';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 

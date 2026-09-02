@@ -3,8 +3,9 @@
 // données de gestion.
 
 import * as api from '../api.js';
-import { h, vider, signalerErreur } from '../ui.js';
-import { date, taille } from '../format.js';
+import { h, vider, signalerErreur, choisirFichier, notifier } from '../ui.js';
+import { date, dateLongue, taille, aujourdhui } from '../format.js';
+import { compresserPhoto } from '../photos.js';
 
 const LIBELLES_TYPE = {
   quittance: { libelle: 'Quittance de loyer', pluriel: 'Quittances de loyer', icone: '🧾' },
@@ -32,6 +33,66 @@ function ligneDocument(document_) {
         api.telechargerFichier('portail', document_.chemin, nomFichier).catch(signalerErreur);
       } }, 'Télécharger'),
     ]),
+  ]);
+}
+
+/**
+ * Photos contradictoires : pendant la fenêtre ouverte par le bailleur après
+ * l'état des lieux, le colocataire dépose ici ses propres photos des pièces.
+ * Elles ne sont ni modifiables ni supprimables une fois déposées.
+ */
+function sectionContradictoire(contradictoire) {
+  const email = String(api.utilisateurEmail() || '').trim().toLowerCase();
+  const prefixe = `${email}/contradictoire/${contradictoire.edlId}`;
+  const ouverte = contradictoire.finLe >= aujourdhui();
+  const listeZone = h('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem' });
+
+  const rafraichir = async () => {
+    let fichiers = [];
+    try { fichiers = await api.listerFichiers('portail', prefixe); } catch { /* rien déposé */ }
+    listeZone.replaceChildren(...fichiers.map((f) => h('button', {
+      class: 'bouton bouton-petit', type: 'button',
+      onclick: () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur),
+    }, `📷 ${f.nom}`)));
+    if (!fichiers.length) listeZone.append(h('span', { class: 'legende', texte: 'Aucune photo déposée pour l’instant.' }));
+  };
+  rafraichir();
+
+  const selecteur = h('select', { style: 'min-width:11rem' },
+    (contradictoire.pieces || []).map((p) => h('option', { value: `${p.numero}-${p.nom}` }, `${p.numero} — ${p.nom}`)));
+
+  const deposer = async () => {
+    const fichiers = await choisirFichier({ accept: 'image/*', multiple: true });
+    if (!fichiers?.length) return;
+    notifier(`Envoi de ${fichiers.length} photo(s)…`);
+    const piece = String(selecteur.value || 'piece').replace(/[\\/:*?"<>|]/g, '-');
+    for (const fichier of fichiers) {
+      try {
+        /* eslint-disable no-await-in-loop */
+        const reduite = await compresserPhoto(fichier);
+        const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        await api.deposerOctets('portail', `${prefixe}/${piece} ${horodatage}.jpg`,
+          new Uint8Array(await reduite.arrayBuffer()), 'image/jpeg');
+      } catch (erreur) { signalerErreur(erreur); }
+    }
+    notifier('Photos déposées : elles sont horodatées et ne peuvent plus être modifiées.', 'succes');
+    rafraichir();
+  };
+
+  return h('section', { class: 'portail-section' }, [
+    h('h2', { texte: '📷 Vos photos contradictoires' }),
+    h('p', { class: 'legende', texte:
+      `Suite à l'état des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${dateLongue(contradictoire.dateEdl)}, `
+      + (ouverte
+        ? `vous pouvez déposer vos propres photos des pièces jusqu'au ${dateLongue(contradictoire.finLe)} inclus. `
+          + 'Choisissez la pièce, puis ajoutez vos photos : elles sont datées automatiquement.'
+        : `la période de dépôt s'est terminée le ${dateLongue(contradictoire.finLe)}. Vos photos restent consultables ci-dessous.`) }),
+    ouverte ? h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap' }, [
+      selecteur,
+      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: () => deposer().catch(signalerErreur) },
+        '+ Ajouter des photos'),
+    ]) : null,
+    listeZone,
   ]);
 }
 
@@ -80,6 +141,7 @@ export async function rendrePortail({ seDeconnecter }) {
           .sort((a, b) => String(b.publieLe).localeCompare(String(a.publieLe)))
           .map(ligneDocument),
       ])),
+    portail?.contradictoire ? sectionContradictoire(portail.contradictoire) : null,
     h('footer', { class: 'portail-pied', texte: 'Espace privé — seuls vous et votre bailleur voyez ces documents.' }),
   ]));
 }

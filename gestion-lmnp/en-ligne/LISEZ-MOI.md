@@ -5,9 +5,17 @@ colocataires, cautions (dépôts de garantie reçus/restitués), régularisation
 annuelle des charges (provisions prélevées sur les loyers comparées aux
 dépenses réelles d'eau et de taxe d'enlèvement des ordures ménagères, solde
 par colocataire), quittances et décomptes PDF déposés sur l'espace de chaque
-colocataire avec e-mail de mise à disposition, états des lieux avec
-reportage photo et signatures. La comptabilité, elle, se fait dans votre
-outil comptable en ligne.
+colocataire avec e-mail de mise à disposition, bail joint au dossier et
+signé à l'écran (tablette) puis mis à disposition de chaque colocataire,
+états des lieux avec reportage photo, plan du logement à repères numérotés
+et signatures — suivis d'une fenêtre de 3 semaines pendant laquelle chaque
+colocataire dépose ses photos contradictoires depuis son espace. La
+comptabilité, elle, se fait dans votre outil comptable en ligne.
+
+**Important pour cette mise à jour (v13)** : les règles de sécurité du
+Storage changent (dépôt des photos contradictoires par les colocataires).
+La commande de déploiement habituelle les publie en même temps que
+l'application — rien de plus à faire.
 
 Elle est hébergée sur Firebase Hosting, dans un projet **dédié uniquement à
 la gestion personnelle** : `gestion-lmnp-anika`.

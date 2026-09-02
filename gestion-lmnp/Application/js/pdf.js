@@ -222,7 +222,7 @@ const LIBELLES_ETAT = { neuf: 'Neuf', bon: 'Bon état', usage: 'État d\'usage',
  * clés, observations et signatures. `photosParPiece` associe l'identifiant de
  * chaque pièce à ses photos déjà chargées ({octets, legende}).
  */
-export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, signatures }) {
+export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, signatures, plan }) {
   const { document_, page } = await nouvellePage();
 
   page.titre(`État des lieux ${edl.type === 'sortie' ? 'de sortie' : 'd\'entrée'}`);
@@ -237,6 +237,36 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.texte(`Locataire : ${`${locataire.prenom || ''} ${locataire.nom}`.trim()}`);
   }
 
+  // Plan du logement avec le numéro de chaque pièce posé par le bailleur.
+  if (plan?.octets) {
+    page.sousTitre('Plan du logement');
+    let imagePlan = null;
+    try { imagePlan = await page.doc.embedJpg(plan.octets); }
+    catch { try { imagePlan = await page.doc.embedPng(plan.octets); } catch { imagePlan = null; } }
+    if (imagePlan) {
+      const largeurMax = A4.largeur - 2 * MARGE;
+      const echelle = Math.min(largeurMax / imagePlan.width, 430 / imagePlan.height, 1);
+      const l = imagePlan.width * echelle;
+      const hPlan = imagePlan.height * echelle;
+      page.besoin(hPlan + 10);
+      page.y -= hPlan;
+      page.page.drawImage(imagePlan, { x: MARGE, y: page.y, width: l, height: hPlan });
+      for (const repere of plan.reperes || []) {
+        const cx = MARGE + repere.x * l;
+        const cy = page.y + hPlan - repere.y * hPlan;
+        page.page.drawEllipse({ x: cx, y: cy, xScale: 9, yScale: 9, color: VERT, borderColor: rgb(1, 1, 1), borderWidth: 1.5 });
+        const numero = String(repere.numero);
+        page.page.drawText(numero, {
+          x: cx - (numero.length > 1 ? 5.4 : 2.8), y: cy - 3.4,
+          size: 9.5, font: page.polices.grasse, color: rgb(1, 1, 1),
+        });
+      }
+      page.y -= 8;
+      const legende = (plan.legende || []).map((p) => `${p.numero} ${sur(p.nom)}`).join(' · ');
+      if (legende) page.texte(legende, { taille: 8.5, couleur: DOUX });
+    }
+  }
+
   if ((edl.compteurs || []).some((c) => c.valeur)) {
     page.sousTitre('Relevés des compteurs');
     for (const compteur of edl.compteurs.filter((c) => c.valeur)) {
@@ -249,8 +279,8 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.texte(edl.cles);
   }
 
-  for (const piece of edl.pieces || []) {
-    page.sousTitre(piece.nom || 'Pièce');
+  for (const [indexPiece, piece] of (edl.pieces || []).entries()) {
+    page.sousTitre(`${indexPiece + 1}. ${piece.nom || 'Pièce'}`);
     if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
     if (piece.commentaire) page.texte(piece.commentaire);
     const photos = photosParPiece?.[piece.id] || [];
@@ -291,6 +321,50 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
       page.texte('(non signé)', { couleur: DOUX });
     }
     page.espace(6);
+  }
+
+  return document_.save();
+}
+
+/**
+ * Bail signé : le PDF du bail est repris tel quel, augmenté d'une page de
+ * signatures recueillies à l'écran dans l'application (nom, qualité, date,
+ * tracé de chaque signataire).
+ */
+export async function pdfBailSigne({ octetsOriginal, signatures, lieu }) {
+  const document_ = await PDFDocument.load(octetsOriginal);
+  const normale = await document_.embedFont(StandardFonts.Helvetica);
+  const grasse = await document_.embedFont(StandardFonts.HelveticaBold);
+  let page = document_.addPage([A4.largeur, A4.hauteur]);
+  let y = A4.hauteur - MARGE;
+
+  const ecrire = (texte, { taille = 10.5, police = normale, couleur = ENCRE, saut = 16 } = {}) => {
+    y -= saut;
+    page.drawText(sur(texte), { x: MARGE, y, size: taille, font: police, color: couleur });
+  };
+
+  ecrire('Signatures des parties', { taille: 16, police: grasse, saut: 20 });
+  ecrire('Signatures recueillies électroniquement dans l\'application de gestion locative,', { taille: 9, couleur: DOUX, saut: 18 });
+  ecrire('chaque partie ayant tracé sa signature à l\'écran. La présente page fait partie intégrante du bail.', { taille: 9, couleur: DOUX, saut: 12 });
+  y -= 10;
+
+  for (const signature of signatures || []) {
+    if (y < MARGE + 130) {
+      // Plus de place : on continue sur une page supplémentaire.
+      page = document_.addPage([A4.largeur, A4.hauteur]);
+      y = A4.hauteur - MARGE;
+    }
+    ecrire(`${signature.nom} — ${signature.role || ''}`.trim(), { police: grasse, saut: 22 });
+    ecrire(`${lieu ? `${lieu}, le ` : 'Le '}${dateLongue(signature.date)}`, { taille: 9, couleur: DOUX, saut: 14 });
+    if (signature.image) {
+      try {
+        const image = await document_.embedPng(signature.image);
+        const echelle = Math.min(200 / image.width, 80 / image.height, 1);
+        y -= image.height * echelle + 6;
+        page.drawImage(image, { x: MARGE, y, width: image.width * echelle, height: image.height * echelle });
+      } catch { /* image illisible : le nom et la date restent */ }
+    }
+    y -= 14;
   }
 
   return document_.save();
