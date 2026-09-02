@@ -7,8 +7,8 @@ import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, e
   barreOutils, notifier, ouvrirModale } from '../ui.js';
 import { montant, date, dateLongue, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js';
-import { pdfRegularisation } from '../pdf.js';
-import { publierDocument } from '../portail-publication.js';
+import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, nbMoisEntre } from '../pdf-anika.js';
+import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
@@ -93,16 +93,37 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
   const bail = donnees.baux.find((b) => b.id === regularisation.bailId);
   const bien = donnees.biens.find((b) => b.id === bail?.bienId);
 
-  const octets = await pdfRegularisation({
-    bailleur, locataire, bien,
-    debut: regularisation.debut,
-    fin: regularisation.fin,
-    depenses: depensesDe(regularisation),
-    totalReel: decompte.totalReel,
-    ligne,
+  // Quote-part du colocataire, poste par poste (au prorata de sa part totale),
+  // le dernier poste absorbant l'arrondi pour retomber exactement sur sa part.
+  const depenses = depensesDe(regularisation);
+  const ratio = decompte.totalReel > 0 ? (ligne.part / decompte.totalReel) : 0;
+  const postes = depenses.map((d) => ({ libelle: d.libelle, montant: centimes(d.montant * ratio) }));
+  if (postes.length) {
+    const somme = centimes(postes.reduce((s, p) => s + p.montant, 0));
+    postes[postes.length - 1].montant = centimes(postes[postes.length - 1].montant + ligne.part - somme);
+  }
+  const anneeDebut = String(regularisation.debut).slice(0, 4);
+  const anneeFin = String(regularisation.fin).slice(0, 4);
+
+  const octets = await pdfRegularisationAnika({
+    bailleur: {
+      nom: bailleur.nom,
+      adresse: bailleur.adresse || '',
+      email: bailleur.email || '',
+      siren: sirenDepuisSiret(donnees.parametres.siret),
+    },
+    locataireNom: nomDe(locataire),
+    logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },
+    anneeLibelle: anneeDebut === anneeFin ? `Année ${anneeDebut}` : `Période ${anneeDebut}-${anneeFin}`,
+    periodeDebut: dateLongueFr(regularisation.debut),
+    periodeFin: dateLongueFr(regularisation.fin),
+    nbMois: nbMoisEntre(regularisation.debut, regularisation.fin),
+    provisionsVersees: ligne.encaisse || 0,
+    charges: postes,
     lieu: donnees.parametres.lieuSignature || '',
+    dateSignature: dateLongueFr(aujourdhui()),
   });
-  const nomFichier = `Regularisation charges ${regularisation.debut} ${nomDe(locataire)}.pdf`;
+  const nomFichier = `ANIKA_regularisation_charges_${anneeDebut === anneeFin ? anneeDebut : `${anneeDebut}-${anneeFin}`}_${(locataire.prenom || locataire.nom || '').toLowerCase()}.pdf`;
 
   let publie = null;
   let erreurPublication = null;
@@ -131,7 +152,7 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
         ? `Le décompte fait apparaître un complément de <strong>${montant(-solde)}</strong> à régler.`
         : 'Le décompte est équilibré : rien à régler de part ni d’autre.');
     await executer(api.envoyerCourriel({
-      destinataires: [locataire.email],
+      destinataires: destinatairesDe(locataire),
       sujet: 'Votre décompte de régularisation des charges',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
         + `<p>Votre décompte de régularisation des charges pour la période du `

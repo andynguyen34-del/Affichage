@@ -6,8 +6,8 @@ import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, e
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
-import { pdfQuittance } from '../pdf.js';
-import { publierDocument } from '../portail-publication.js';
+import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
+import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 
 const locataireDe = (donnees, echeance, bail) =>
@@ -30,8 +30,8 @@ const gabaritEcheance = (echeance) => ({
   notes: echeance.notes || '',
 });
 
-/** Période couverte par une échéance, bornée aux dates du bail. */
-function periodeTexte(echeance, bail) {
+/** Bornes de la période couverte par une échéance, limitées au bail. */
+function periodeBornes(echeance, bail) {
   const dernierJour = new Date(echeance.annee, echeance.mois, 0).getDate();
   let debut = isoDepuis(echeance.annee, echeance.mois, 1);
   let fin = isoDepuis(echeance.annee, echeance.mois, dernierJour);
@@ -39,8 +39,13 @@ function periodeTexte(echeance, bail) {
   const finBail = String(bail?.dateFin || '').slice(0, 10);
   if (debutBail && debutBail > debut) debut = debutBail;
   if (finBail && finBail < fin) fin = finBail;
-  return `du ${dateLongue(debut)} au ${dateLongue(fin)}`;
+  return { debut, fin };
 }
+
+const periodeTexte = (echeance, bail) => {
+  const { debut, fin } = periodeBornes(echeance, bail);
+  return `du ${dateLongue(debut)} au ${dateLongue(fin)}`;
+};
 
 /**
  * Génère la quittance PDF d'une échéance intégralement payée : dépôt sur
@@ -53,15 +58,27 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   const locataire = locataireDe(donnees, echeance, bail);
   if (!locataire) { notifier('Locataire introuvable pour cette échéance.', 'erreur'); return; }
   const bien = donnees.biens.find((b) => b.id === bail?.bienId);
-  const periode = periodeTexte(echeance, bail);
+  const bornes = periodeBornes(echeance, bail);
   const dernier = (echeance.encaissements || []).slice(-1)[0];
 
-  const octets = await pdfQuittance({
-    bailleur, locataire, bien, echeance, periode,
-    dateReglement: dernier?.date || aujourdhui(),
+  const octets = await pdfQuittanceAnika({
+    bailleur: {
+      nom: bailleur.nom,
+      adresse: bailleur.adresse || '',
+      email: bailleur.email || '',
+      siren: sirenDepuisSiret(donnees.parametres.siret),
+    },
+    locataireNom: nomDe(locataire),
+    logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },
+    periodeLibelle: `${nomMois(echeance.mois)} ${echeance.annee}`,
+    periodeDebut: dateLongueFr(bornes.debut),
+    periodeFin: dateLongueFr(bornes.fin),
+    loyerHc: echeance.loyerHc || 0,
+    charges: echeance.charges || 0,
     lieu: donnees.parametres.lieuSignature || '',
+    dateSignature: dateLongueFr(dernier?.date || aujourdhui()),
   });
-  const nomFichier = `Quittance ${echeance.annee}-${String(echeance.mois).padStart(2, '0')} ${nomDe(locataire)}.pdf`;
+  const nomFichier = `ANIKA_quittance_loyer_${nomMois(echeance.mois)}_${echeance.annee}_${(locataire.prenom || locataire.nom || '').toLowerCase()}.pdf`;
 
   // Mise à disposition sur l'espace du colocataire.
   let publie = null;
@@ -89,7 +106,7 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
     if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Bien & baux »).', 'erreur'); return; }
     if (!publie) { notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
     await executer(api.envoyerCourriel({
-      destinataires: [locataire.email],
+      destinataires: destinatairesDe(locataire),
       sujet: `Votre quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
         + `<p>Votre quittance de loyer pour <strong>${nomMois(echeance.mois)} ${echeance.annee}</strong> `

@@ -7,6 +7,7 @@ import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
 import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js';
+import { destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { notifier, signalerErreur } from '../ui.js';
 
@@ -32,7 +33,9 @@ const champsBien = () => [
 const champsLocataire = () => [
   { cle: 'nom', libelle: 'Nom', type: 'texte', requis: true },
   { cle: 'prenom', libelle: 'Prénom', type: 'texte' },
-  { cle: 'email', libelle: 'Courriel', type: 'texte' },
+  { cle: 'email', libelle: 'Courriel', type: 'texte', aide: 'Sert à son espace en ligne et aux notifications.' },
+  { cle: 'email2', libelle: 'Courriel — 2e destinataire (facultatif)', type: 'texte',
+    aide: 'Reçoit une copie de toutes les notifications de documents (parent, garant…).' },
   { cle: 'telephone', libelle: 'Téléphone', type: 'texte' },
   { cle: 'adresse', libelle: 'Adresse de correspondance', type: 'texte', largeur: 'pleine' },
   { cle: 'notes', libelle: 'Notes', type: 'zone' },
@@ -293,7 +296,7 @@ function carteJustificatifs(donnees) {
           manquants.length ? bouton('Rappel par e-mail', async () => {
             const bailleur = donnees.parametres.bailleurs?.[0];
             await api.envoyerCourriel({
-              destinataires: [email],
+              destinataires: destinatairesDe(locataire),
               sujet: 'Justificatifs à déposer sur votre espace',
               html: `<p>Bonjour ${locataire.prenom || ''},</p>`
                 + '<p>Merci de déposer sur votre espace les justificatifs suivants, prévus par le bail :</p>'

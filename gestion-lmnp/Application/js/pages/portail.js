@@ -14,6 +14,7 @@ const LIBELLES_TYPE = {
   'etat-des-lieux': { libelle: 'État des lieux', pluriel: 'États des lieux', icone: '📷' },
   bail: { libelle: 'Bail', pluriel: 'Baux', icone: '📜' },
   regularisation: { libelle: 'Régularisation des charges', pluriel: 'Régularisations des charges', icone: '💧' },
+  restitution: { libelle: 'Restitution du dépôt de garantie', pluriel: 'Restitutions de dépôt de garantie', icone: '💶' },
   autre: { libelle: 'Document', pluriel: 'Documents', icone: '📄' },
 };
 
@@ -226,7 +227,7 @@ export async function rendrePortail({ seDeconnecter }) {
     !erreur && !documents.length
       ? h('div', { class: 'alerte alerte-info', texte: 'Aucun document pour l’instant. Vos quittances et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' })
       : null,
-    ...['etat-des-lieux', 'bail', 'quittance', 'regularisation', 'autre']
+    ...['etat-des-lieux', 'bail', 'quittance', 'regularisation', 'restitution', 'autre']
       .filter((cle) => groupes.has(cle))
       .map((cle) => h('section', { class: 'portail-section' }, [
         h('h2', { texte: `${LIBELLES_TYPE[cle].icone} ${groupes.get(cle).length > 1 ? LIBELLES_TYPE[cle].pluriel : LIBELLES_TYPE[cle].libelle}` }),

@@ -9,6 +9,13 @@ const nettoyerNomFichier = (nom) => String(nom)
   .replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
 
 /**
+ * Destinataires des notifications d'un colocataire : son adresse, plus le
+ * second destinataire s'il est renseigné (parent, garant…).
+ */
+export const destinatairesDe = (locataire) => [locataire?.email, locataire?.email2]
+  .map((e) => String(e || '').trim()).filter(Boolean);
+
+/**
  * Publie un document (octets PDF) pour un colocataire.
  * type : 'quittance' | 'etat-des-lieux' | 'bail' | 'autre'.
  */
@@ -69,7 +76,7 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, piece
   });
   if (envoyerEmail) {
     await api.envoyerCourriel({
-      destinataires: [email],
+      destinataires: destinatairesDe(locataire),
       sujet: 'État des lieux : vos photos contradictoires',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
         + `<p>Suite à l'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du `

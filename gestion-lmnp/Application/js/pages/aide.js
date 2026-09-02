@@ -21,6 +21,9 @@ export default {
           'Les échéances de chaque colocataire se créent toutes seules à partir du bail et de la répartition des parts (bouton « Répartir » dans « Bien & baux »).',
           ['À réception d’un virement : page « Loyers » → ', h('strong', { texte: 'Virement reçu' }),
             ' sur la ligne du colocataire et du mois.'],
+          'Les quittances, décomptes de régularisation et restitutions de dépôt sont édités à l’identité '
+            + 'visuelle ANIKA (polices, cachet). Chaque colocataire peut avoir un second destinataire '
+            + '(parent, garant…) qui reçoit copie des notifications — champ « Courriel — 2e destinataire ».',
           ['Quand le mois est soldé : bouton ', h('strong', { texte: 'Quittance' }),
             ' — le PDF est déposé sur l’espace du colocataire, téléchargeable, et un clic envoie '
             + 'l’e-mail de mise à disposition. « Imprimer » édite la version papier.'],

@@ -12,6 +12,12 @@ et signatures — suivis d'une fenêtre de 3 semaines pendant laquelle chaque
 colocataire dépose ses photos contradictoires depuis son espace. La
 comptabilité, elle, se fait dans votre outil comptable en ligne.
 
+Les documents remis aux colocataires (quittance de loyer, décompte de
+régularisation des charges, restitution du dépôt de garantie) sont édités à
+l'identité visuelle ANIKA (polices Italiana et Jura, cachet). Chaque
+colocataire peut avoir un « 2e destinataire » (parent, garant…) qui reçoit
+copie de toutes les notifications.
+
 Chaque colocataire dépose aussi ses justificatifs depuis son espace
 (attestation d'assurance habitation, entretien des climatiseurs, ramonage
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis

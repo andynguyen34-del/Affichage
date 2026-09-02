@@ -7,7 +7,7 @@ import { h, bouton, badge, notifier, executer, ouvrirModale, fermerModale, chois
 import { date, dateLongue, aujourdhui } from '../format.js';
 import { demanderSignature } from '../signature.js';
 import { pdfBailSigne } from '../pdf.js';
-import { publierDocument } from '../portail-publication.js';
+import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 
 const nomLocataire = (donnees, id) => {
@@ -122,7 +122,7 @@ async function notifierColocataires(donnees, bail, publies) {
   for (const locataire of publies) {
     // eslint-disable-next-line no-await-in-loop
     await api.envoyerCourriel({
-      destinataires: [locataire.email],
+      destinataires: destinatairesDe(locataire),
       sujet: 'Votre bail de colocation est disponible',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
         + '<p>Votre bail de colocation est disponible sur votre espace, où vous pouvez le consulter et le télécharger :</p>'

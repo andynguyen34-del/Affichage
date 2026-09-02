@@ -2,9 +2,13 @@
 // colocataire par colocataire.
 
 import * as etat from '../etat.js';
-import { h, carte, tableau, tuile, bouton, badge, formulaire, executer } from '../ui.js';
-import { montant, date, aujourdhui, centimes } from '../format.js';
+import { h, carte, tableau, tuile, bouton, badge, formulaire, executer,
+  notifier, ouvrirModale, fermerModale, signalerErreur } from '../ui.js';
+import { montant, date, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { fluxDuBail } from '../calculs/loyers.js';
+import { pdfRestitutionAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
+import { publierDocument, destinatairesDe } from '../portail-publication.js';
+import * as api from '../api.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
 
@@ -82,6 +86,134 @@ async function modifierCaution(ligne) {
   }), 'Caution enregistrée.');
 }
 
+/**
+ * Restitution du dépôt de garantie : saisie des retenues éventuelles, puis
+ * document ANIKA généré, déposé sur l'espace du colocataire et notifié.
+ */
+async function restituerCaution(donnees, ligne) {
+  const bailleur = donnees.parametres.bailleurs?.[0];
+  if (!bailleur?.nom) { notifier('Renseignez d’abord un bailleur dans les Paramètres.', 'erreur'); return; }
+  const locataire = donnees.locataires.find((l) => l.id === ligne.locataireId);
+  if (!locataire) { notifier('Locataire introuvable pour cette ligne.', 'erreur'); return; }
+  const bail = ligne.bail;
+  const bien = donnees.biens.find((b) => b.id === bail?.bienId);
+  const edlSortie = (donnees.etatsDesLieux || [])
+    .filter((e) => e.type === 'sortie' && (!bail || e.bailId === bail.id))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+
+  const retenues = (ligne.retenues || []).map((r) => ({ ...r }));
+  const zone = h('div');
+  const dessinerRetenues = () => {
+    zone.replaceChildren();
+    retenues.forEach((retenue, index) => {
+      zone.append(h('div', { style: 'display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;flex-wrap:wrap' }, [
+        h('input', {
+          value: retenue.libelle || '', placeholder: 'ex. : remplacement d’une vitre (facture)',
+          style: 'flex:3;min-width:12rem', oninput: (e) => { retenue.libelle = e.target.value; },
+        }),
+        h('input', {
+          type: 'number', step: '0.01', min: '0', value: retenue.montant || '',
+          style: 'width:7rem', title: 'Montant retenu (€)',
+          oninput: (e) => { retenue.montant = Number(e.target.value) || 0; },
+        }),
+        h('button', { class: 'bouton bouton-petit bouton-danger', type: 'button', onclick: () => {
+          retenues.splice(index, 1); dessinerRetenues();
+        } }, '✕'),
+      ]));
+    });
+  };
+  dessinerRetenues();
+
+  const selecteurMode = h('select', {}, ['virement bancaire', 'chèque', 'espèces']
+    .map((m) => h('option', { value: m, selected: m === (ligne.modeRestitution || 'virement bancaire') }, m)));
+  const champDateEdl = h('input', { type: 'date', value: edlSortie?.date || aujourdhui() });
+
+  const valider = async () => {
+    const propres = retenues.filter((r) => r.libelle && (Number(r.montant) || 0) > 0);
+    const depotVerse = Number(ligne.montantRecu) || Number(ligne.attendu) || 0;
+    const totalRetenues = centimes(propres.reduce((s, r) => s + r.montant, 0));
+    const restitue = centimes(depotVerse - totalRetenues);
+    if (restitue < 0) { notifier('Les retenues dépassent le dépôt versé.', 'erreur'); return; }
+    fermerModale();
+
+    const octets = await pdfRestitutionAnika({
+      bailleur: {
+        nom: bailleur.nom,
+        adresse: bailleur.adresse || '',
+        email: bailleur.email || '',
+        siren: sirenDepuisSiret(donnees.parametres.siret),
+      },
+      locataireNom: nomDe(locataire),
+      logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },
+      entreeLe: dateLongueFr(bail?.dateDebut || ''),
+      edlSortieLe: dateLongueFr(champDateEdl.value),
+      depotVerse,
+      retenues: propres,
+      modeRestitution: selecteurMode.value,
+      lieu: donnees.parametres.lieuSignature || '',
+      dateSignature: dateLongueFr(aujourdhui()),
+    });
+    const nomFichier = `ANIKA_restitution_depot_garantie_${(locataire.prenom || locataire.nom || '').toLowerCase()}.pdf`;
+
+    let publie = null;
+    try {
+      publie = await publierDocument({
+        locataire, type: 'restitution',
+        titre: 'Restitution du dépôt de garantie',
+        nomFichier, octets,
+      });
+    } catch (erreur) { notifier(erreur.message, 'erreur'); }
+
+    await executer(etat.enregistrer('cautions', {
+      id: ligne.id, bailId: ligne.bailId, locataireId: ligne.locataireId,
+      attendu: ligne.attendu || 0, recuLe: ligne.recuLe || '', montantRecu: ligne.montantRecu || 0,
+      restitueLe: aujourdhui(), montantRestitue: restitue,
+      retenues: propres, modeRestitution: selecteurMode.value, notes: ligne.notes || '',
+    }), `Restitution enregistrée : ${montant(restitue)}.`);
+
+    const lien = document.createElement('a');
+    lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
+    lien.download = nomFichierTelechargement(nomFichier);
+    document.body.append(lien);
+    lien.click();
+    setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+
+    if (publie && destinatairesDe(locataire).length) {
+      await executer(api.envoyerCourriel({
+        destinataires: destinatairesDe(locataire),
+        sujet: 'Restitution de votre dépôt de garantie',
+        html: `<p>Bonjour ${locataire.prenom || ''},</p>`
+          + `<p>Le décompte de restitution de votre dépôt de garantie est disponible sur votre espace : `
+          + `<strong>${montant(restitue)}</strong> vous ${propres.length ? 'seront restitués après déduction des retenues justifiées' : 'seront intégralement restitués'} `
+          + `par ${selecteurMode.value}.</p>`
+          + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
+          + `<p>Bien cordialement,<br>${bailleur.nom}</p>`,
+      }), 'Notification envoyée.');
+    }
+  };
+
+  ouvrirModale({
+    titre: `Restitution — ${nomDe(locataire)}`,
+    large: true,
+    corps: h('div', {}, [
+      h('p', { class: 'legende', texte:
+        `Dépôt versé : ${montant(Number(ligne.montantRecu) || Number(ligne.attendu) || 0)}. `
+        + 'Listez les retenues justifiées par l’état des lieux de sortie (aucune : restitution intégrale, '
+        + 'délai légal d’un mois ; avec retenues : deux mois). Le document ANIKA est déposé sur son espace.' }),
+      h('div', { style: 'display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.8rem' }, [
+        h('label', {}, ['Date de l’état des lieux de sortie ', champDateEdl]),
+        h('label', {}, ['Mode de restitution ', selecteurMode]),
+      ]),
+      zone,
+      bouton('+ Retenue', () => { retenues.push({ libelle: '', montant: 0 }); dessinerRetenues(); }, { petit: true }),
+    ]),
+    pied: [
+      bouton('Annuler', () => fermerModale()),
+      bouton('Générer la restitution', () => valider().catch(signalerErreur), { type: 'primaire' }),
+    ],
+  });
+}
+
 export default {
   cle: 'cautions',
   libelle: 'Cautions',
@@ -132,6 +264,9 @@ export default {
               attendu: l.attendu || 0, recuLe: aujourdhui(), montantRecu: l.attendu || 0,
               restitueLe: '', montantRestitue: 0, notes: l.notes || '',
             }), 'Caution marquée reçue.'), { petit: true, type: 'primaire' }) : null,
+            l.recuLe ? bouton('Restituer', () => restituerCaution(donnees, l), {
+              petit: true, titre: 'Décompte de restitution ANIKA : retenues, PDF, dépôt sur son espace, notification',
+            }) : null,
             bouton('Modifier', () => modifierCaution(l), { petit: true }),
           ]) },
         ],
