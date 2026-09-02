@@ -4,6 +4,7 @@
 // magasin d'état ne voient pas la différence.
 
 import { initializeApp } from 'firebase/app';
+import { nomFichierTelechargement } from './format.js';
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   connectAuthEmulator, setPersistence, browserLocalPersistence,
@@ -265,10 +266,26 @@ export async function supprimerFichier(espace, chemin) {
 }
 
 export async function ouvrirFichier(espace, chemin) {
-  const contenu = await getBlob(refFichier(espace, chemin));
-  const url = URL.createObjectURL(contenu);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  // L'onglet est ouvert TOUT DE SUITE, pendant le clic : ouvert après le
+  // chargement du fichier, il serait bloqué par l'anti-pop-up de Chrome
+  // (l'utilisateur ne verrait « rien se passer »).
+  let fenetre = null;
+  try { fenetre = window.open('', '_blank'); } catch { fenetre = null; }
+  if (fenetre) {
+    try {
+      fenetre.document.write('<title>Chargement…</title><p style="font-family:system-ui;padding:2rem">Chargement du document…</p>');
+    } catch { /* peu importe */ }
+  }
+  try {
+    const contenu = await getBlob(refFichier(espace, chemin));
+    const url = URL.createObjectURL(contenu);
+    if (fenetre && !fenetre.closed) fenetre.location.replace(url);
+    else window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (erreur) {
+    try { fenetre?.close(); } catch { /* déjà fermée */ }
+    throw erreur;
+  }
 }
 
 /** Lit le contenu brut d'un fichier (octets). */
@@ -282,9 +299,13 @@ export async function telechargerFichier(espace, chemin, nomFichier) {
   const contenu = await getBlob(refFichier(espace, chemin));
   const lien = document.createElement('a');
   lien.href = URL.createObjectURL(contenu);
-  lien.download = nomFichier || chemin.split('/').pop();
+  lien.download = nomFichierTelechargement(nomFichier || chemin.split('/').pop());
+  // L'ancre doit être dans la page pour que le clic déclenche le
+  // téléchargement sur tous les navigateurs (tablette comprise).
+  lien.style.display = 'none';
+  document.body.append(lien);
   lien.click();
-  setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+  setTimeout(() => { URL.revokeObjectURL(lien.href); lien.remove(); }, 60000);
 }
 
 /** Dépose des octets générés par l'application (PDF de quittance, rapport…). */

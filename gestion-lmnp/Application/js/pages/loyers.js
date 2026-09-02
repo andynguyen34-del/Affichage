@@ -3,7 +3,7 @@
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, ouvrirModale, fermerModale } from '../ui.js';
-import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis } from '../format.js';
+import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
 import { pdfQuittance } from '../pdf.js';
@@ -79,7 +79,8 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   const telecharger = () => {
     const lien = document.createElement('a');
     lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
-    lien.download = nomFichier;
+    lien.download = nomFichierTelechargement(nomFichier);
+    document.body.append(lien);
     lien.click();
     setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
   };

@@ -6,7 +6,7 @@ import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
-import { date, aujourdhui, taille } from '../format.js';
+import { date, aujourdhui, taille, nomFichierTelechargement } from '../format.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
 import { publierDocument, ouvrirFenetreContradictoire } from '../portail-publication.js';
@@ -494,7 +494,8 @@ async function genererRapport(edl, donnees) {
 
   const lien = document.createElement('a');
   lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
-  lien.download = nomFichier;
+  lien.download = nomFichierTelechargement(nomFichier);
+  document.body.append(lien);
   lien.click();
   setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
   notifier(publications.length

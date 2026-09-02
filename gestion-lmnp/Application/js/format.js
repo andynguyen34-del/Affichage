@@ -89,3 +89,14 @@ export function taille(octets) {
 export function centimes(valeur) {
   return Math.round((Number(valeur) + Number.EPSILON) * 100) / 100;
 }
+
+/**
+ * Nom de fichier sûr pour un téléchargement : Chrome perd le nom demandé
+ * (« download ») quand il contient des accents sur une URL blob — on les
+ * translittère (É→E, é→e…) et on écarte tout caractère hors ASCII.
+ */
+export const nomFichierTelechargement = (nom) => String(nom || 'document')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[’‘]/g, "'").replace(/[«»“”]/g, '')
+  .replace(/[^\x20-\x7E]/g, '-')
+  .replace(/[\\/:*?"<>|]/g, '-').trim() || 'document';

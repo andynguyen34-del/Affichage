@@ -5,7 +5,7 @@
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, ouvrirModale } from '../ui.js';
-import { montant, date, dateLongue, aujourdhui, centimes } from '../format.js';
+import { montant, date, dateLongue, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js';
 import { pdfRegularisation } from '../pdf.js';
 import { publierDocument } from '../portail-publication.js';
@@ -115,7 +115,8 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
   const telecharger = () => {
     const lien = document.createElement('a');
     lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
-    lien.download = nomFichier;
+    lien.download = nomFichierTelechargement(nomFichier);
+    document.body.append(lien);
     lien.click();
     setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
   };
