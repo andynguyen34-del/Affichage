@@ -1,6 +1,7 @@
 // Paramètres : identité du bailleur, accès des colocataires à leur espace,
 // sauvegarde et reprise des données.
 
+import { ouvrirChangementMotDePasse } from '../compte.js';
 import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
@@ -159,8 +160,12 @@ function carteAcces(donnees) {
       colocataires.length ? h('div', {}, lignesColocataires)
         : h('p', { class: 'legende', texte: 'Renseignez l’adresse e-mail des colocataires dans « Bien & baux » pour leur ouvrir un accès.' }),
       h('p', { class: 'legende', style: 'margin-top:.8rem', texte:
-        'Pour qu’un colocataire puisse se connecter, créez aussi son compte (même adresse + mot de passe) dans la '
-        + 'console Firebase : Authentication → Users → Add user. Il ne verra que ses propres documents.' }),
+        'Pour qu’un colocataire puisse se connecter, créez aussi son compte dans la console Firebase : '
+        + 'Authentication → Users → Add user (même adresse, mot de passe provisoire quelconque). À sa première '
+        + 'connexion, il clique sur « Première connexion ou mot de passe oublié ? » et choisit lui-même son '
+        + 'mot de passe — vous n’avez rien à lui transmettre. Il ne verra que ses propres documents.' }),
+      h('div', { style: 'margin-top:.6rem' },
+        bouton('Changer mon mot de passe', () => ouvrirChangementMotDePasse(), { petit: true })),
     );
   };
   rafraichir();

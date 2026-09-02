@@ -7,6 +7,7 @@ import { h, vider, signalerErreur, choisirFichier, notifier } from '../ui.js';
 import { date, dateLongue, taille, aujourdhui } from '../format.js';
 import { compresserPhoto } from '../photos.js';
 import { CATEGORIES_JUSTIFICATIFS, libelleCategorie, categorieDuChemin } from '../justificatifs.js';
+import { ouvrirChangementMotDePasse } from '../compte.js';
 
 const LIBELLES_TYPE = {
   quittance: { libelle: 'Quittance de loyer', pluriel: 'Quittances de loyer', icone: '🧾' },
@@ -214,7 +215,10 @@ export async function rendrePortail({ seDeconnecter }) {
         h('h1', { texte: portail?.nom ? `Bonjour ${portail.nom.split(' ')[0]}` : 'Bonjour' }),
         h('p', { class: 'legende', texte: 'Vos documents de location : consultez-les à l’écran ou téléchargez-les.' }),
       ]),
-      h('button', { class: 'bouton', type: 'button', onclick: () => { seDeconnecter().catch(signalerErreur); } }, 'Se déconnecter'),
+      h('div', { class: 'groupe-boutons' }, [
+        h('button', { class: 'bouton', type: 'button', onclick: () => { ouvrirChangementMotDePasse().catch(signalerErreur); } }, 'Mot de passe'),
+        h('button', { class: 'bouton', type: 'button', onclick: () => { seDeconnecter().catch(signalerErreur); } }, 'Se déconnecter'),
+      ]),
     ]),
     erreur
       ? h('div', { class: 'alerte alerte-erreur', texte: `Impossible de charger vos documents : ${erreur.message}. Rechargez la page (F5).` })

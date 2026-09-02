@@ -308,6 +308,12 @@ function rendreChamp(champ, etat, redessiner) {
     case 'date':
       controle = h('input', { id: identifiant, type: 'date', value: valeur ?? '', oninput: surSaisie((c) => c.value) });
       break;
+    case 'motdepasse':
+      controle = h('input', {
+        id: identifiant, type: 'password', value: valeur ?? '',
+        autocomplete: 'new-password', oninput: surSaisie((c) => c.value),
+      });
+      break;
     case 'mois':
       controle = h('input', { id: identifiant, type: 'month', value: valeur ?? '', oninput: surSaisie((c) => c.value) });
       break;

@@ -7,6 +7,7 @@ import { initializeApp } from 'firebase/app';
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
   connectAuthEmulator, setPersistence, browserLocalPersistence,
+  sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider,
 } from 'firebase/auth';
 import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, runTransaction,
@@ -87,6 +88,38 @@ export async function seConnecter(email, motDePasse) {
 
 export async function seDeconnecter() { await signOut(auth); }
 export const utilisateurEmail = () => auth?.currentUser?.email || '';
+
+/**
+ * Envoie l'e-mail « définir / réinitialiser le mot de passe » : le compte
+ * choisit lui-même son mot de passe, à la première connexion comme en cas
+ * d'oubli. L'e-mail part de Firebase directement (pas de l'extension).
+ */
+export async function envoyerReinitialisation(email) {
+  try {
+    await sendPasswordResetEmail(auth, String(email || '').trim());
+  } catch (erreur) {
+    // « user-not-found » n'est pas révélé : on ne confirme jamais à un tiers
+    // qu'une adresse a, ou non, un compte.
+    if (erreur?.code === 'auth/user-not-found') return;
+    throw new Error(MESSAGES_AUTH[erreur?.code] || `Envoi impossible (${erreur?.code || erreur?.message}).`);
+  }
+}
+
+/** Change le mot de passe du compte connecté, après vérification de l'actuel. */
+export async function changerMotDePasse(actuel, nouveau) {
+  const utilisateur = auth?.currentUser;
+  if (!utilisateur) throw new Error('Personne n’est connecté.');
+  try {
+    const preuve = EmailAuthProvider.credential(utilisateur.email, actuel);
+    await reauthenticateWithCredential(utilisateur, preuve);
+    await updatePassword(utilisateur, nouveau);
+  } catch (erreur) {
+    if (erreur?.code === 'auth/weak-password' || erreur?.code === 'auth/password-does-not-meet-requirements') {
+      throw new Error('Nouveau mot de passe trop faible : 6 caractères minimum.');
+    }
+    throw new Error(MESSAGES_AUTH[erreur?.code] || `Changement impossible (${erreur?.code || erreur?.message}).`);
+  }
+}
 
 // ---------------------------------------------------------------- collections
 

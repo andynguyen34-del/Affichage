@@ -15,7 +15,7 @@ import { rendrePortail } from './pages/portail.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '16 — 2 septembre';
+const VERSION_APP = '17 — 2 septembre';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -225,6 +225,26 @@ async function demarrerNuage() {
       erreur.hidden = false;
       erreur.textContent = e.message;
     } finally { boutonEnvoi.disabled = false; }
+  };
+
+  // Première connexion ou oubli : chacun définit son mot de passe lui-même,
+  // par le lien envoyé à son adresse — aucun mot de passe à transmettre.
+  document.getElementById('connexion-reinitialiser').onclick = async () => {
+    erreur.hidden = true;
+    const email = document.getElementById('connexion-email').value.trim();
+    if (!email) {
+      erreur.hidden = false;
+      erreur.textContent = 'Saisissez d’abord votre adresse e-mail ci-dessus, puis cliquez à nouveau.';
+      return;
+    }
+    try {
+      await api.envoyerReinitialisation(email);
+      message.textContent = `Si un compte existe pour ${email}, un e-mail vient de partir : `
+        + 'ouvrez-le et choisissez votre mot de passe, puis revenez vous connecter ici.';
+    } catch (e) {
+      erreur.hidden = false;
+      erreur.textContent = e.message;
+    }
   };
 }
 

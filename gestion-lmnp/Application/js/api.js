@@ -19,6 +19,8 @@ export const MODE = 'dossier';
 export async function initialiser() { /* rien à préparer */ }
 export async function attendreConnexion() { return null; }
 export async function seConnecter() { throw new Error('Sans objet en version dossier.'); }
+export async function envoyerReinitialisation() { throw new Error('Sans objet en version dossier.'); }
+export async function changerMotDePasse() { throw new Error('Sans objet en version dossier.'); }
 export async function seDeconnecter() { /* rien */ }
 export async function detecterRole() { return 'admin'; }
 export async function lireRoles() { return { admins: [], colocataires: {} }; }
