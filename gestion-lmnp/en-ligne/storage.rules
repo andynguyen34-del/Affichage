@@ -1,0 +1,52 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function connecte() { return request.auth != null; }
+    function rolesExiste() {
+      return firestore.exists(/databases/(default)/documents/systeme/roles);
+    }
+    function estGerant() {
+      return connecte() && (
+        !rolesExiste()
+        || request.auth.token.email in firestore.get(/databases/(default)/documents/systeme/roles).data.admins
+      );
+    }
+
+    // Photos contradictoires d'état des lieux : le colocataire peut DÉPOSER
+    // des images dans son propre espace (jamais modifier ni supprimer —
+    // l'intégrité des preuves est préservée). Lecture : lui et les gérants.
+    match /portail/{email}/contradictoire/{reste=**} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow create: if connecte()
+        && request.auth.token.email.lower() == email
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update, delete: if estGerant();
+    }
+
+    // Justificatifs fournis par le colocataire (assurance habitation,
+    // entretien des climatiseurs, ramonage…) : il peut en DÉPOSER dans son
+    // espace (images ou PDF), jamais les modifier ni les supprimer.
+    match /portail/{email}/justificatifs/{reste=**} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow create: if connecte()
+        && request.auth.token.email.lower() == email
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+      allow update, delete: if estGerant();
+    }
+
+    // Documents publiés pour un colocataire : lecture par lui seul (et les
+    // gérants), écriture par les gérants.
+    match /portail/{email}/{reste=**} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow write: if estGerant();
+    }
+
+    // Tout le reste (documents, états des lieux, corbeille…) : gérants.
+    match /{tout=**} {
+      allow read, write: if estGerant();
+    }
+  }
+}

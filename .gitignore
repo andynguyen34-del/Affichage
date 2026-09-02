@@ -7,3 +7,5 @@ data/
 .DS_Store
 Thumbs.db
 *.log
+gestion-lmnp/en-ligne/public/
+gestion-lmnp/Application/package-lock.json

@@ -1,0 +1,15 @@
+Déposez ici les factures et justificatifs de dépense (PDF, photo, scan).
+
+L'application les détecte au démarrage et propose de les intégrer en
+comptabilité. Une fois intégrées, elles sont rangées automatiquement dans
+le sous-dossier « Traitées » par année.
+
+Pour que la lecture automatique fonctionne au mieux, nommez le fichier
+ainsi :
+
+    2026-03-15 EDF 84,20.pdf
+    2026-02-01 Taxe fonciere 1250.pdf
+    2026-04-22 Leroy Merlin 137,90 robinetterie.pdf
+
+soit : date, fournisseur, montant. Ce n'est pas obligatoire : vous pourrez
+toujours compléter à la main.
