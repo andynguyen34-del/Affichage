@@ -5,6 +5,7 @@
 import * as api from './api.js';
 import * as etat from './etat.js';
 import { aujourdhui, dateLongue } from './format.js';
+import { finEnMillisecondes, DUREE_PAR_DEFAUT } from './contradictoire.js';
 
 /**
  * Le logement d'un colocataire : celui de son bail le plus récent.
@@ -68,7 +69,7 @@ export async function publierDocument({ locataire, type, titre, nomFichier, octe
  * lieux sur l'espace du colocataire : jusqu'à `finLe`, il peut déposer ses
  * propres photos, pièce par pièce. Envoie aussi l'e-mail d'information.
  */
-export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, pieces, bailleur, notifier: envoyerEmail = true }) {
+export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, dureeJours, pieces, apercu, logement, bailleur, notifier: envoyerEmail = true }) {
   const email = String(locataire?.email || '').trim().toLowerCase();
   if (!email) {
     throw new Error(`${locataire?.prenom || ''} ${locataire?.nom || 'Ce colocataire'} n'a pas d'adresse e-mail : `
@@ -86,7 +87,14 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, piece
       type: edl.type,
       dateEdl: edl.date,
       finLe,
+      finLeMs: finEnMillisecondes(finLe),
+      dureeJours: Number(dureeJours) || DUREE_PAR_DEFAUT,
       pieces: pieces || [],
+      // L'état des lieux lui-même (postes, observations, mobilier, photos
+      // copiées dans l'espace partagé) : le colocataire y répond point par point.
+      apercu: apercu || null,
+      logement: logement || actuel.logement || null,
+      publieLe: aujourdhui(),
     },
   });
   if (envoyerEmail) {
@@ -95,10 +103,11 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, piece
       sujet: 'État des lieux : vos photos contradictoires',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
         + `<p>Suite à l'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du `
-        + `<strong>${dateLongue(edl.date)}</strong>, vous pouvez déposer vos propres photos des pièces `
-        + `sur votre espace, <strong>jusqu'au ${dateLongue(finLe)}</strong> :</p>`
-        + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
-        + '<p>Passé ce délai, l\'état des lieux sera réputé accepté en l\'état.</p>'
+        + `<strong>${dateLongue(edl.date)}</strong>, il est consultable sur votre espace, pièce par pièce : `
+        + 'vous pouvez y indiquer, pour chaque point, si vous êtes d\'accord ou ajouter une remarque, et déposer vos propres photos, '
+        + `<strong>jusqu'au ${dateLongue(finLe)}</strong> inclus :</p>`
+        + `<p><a href="${window.location.origin}/colocataire">${window.location.origin}/colocataire</a></p>`
+        + '<p>Passé ce délai, vos réponses sont figées et jointes au rapport ; sans réponse, l\'état des lieux sera réputé accepté en l\'état.</p>'
         + `<p>Bien cordialement,<br>${bailleur?.nom || ''}</p>`,
     });
   }

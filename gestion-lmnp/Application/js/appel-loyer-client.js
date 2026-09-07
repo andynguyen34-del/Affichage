@@ -66,11 +66,22 @@ export async function envoyerAppels({ bienId, annee, mois, origine = 'manuel', f
   const bailleurs = (etat.parametres().bailleurs || []).map((b) => String(b?.email || '').trim()).filter(Boolean);
   let envoyes = 0;
   const details = [];
+  const locataires = etat.liste('locataires');
   for (const courriel of courriels) {
     /* eslint-disable no-await-in-loop */
     await api.envoyerCourriel({ destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html });
     envoyes += 1;
     details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
+    // L'échéance appelée s'affiche aussi sur l'espace du colocataire (accueil).
+    const email = String(locataires.find((l) => l.id === courriel.locataireId)?.email || '').trim().toLowerCase();
+    if (email) {
+      try {
+        await api.completerPortail(email, { echeance: {
+          annee: vise.annee, mois: vise.mois, montant: courriel.montantDu, dateLimite: courriel.dateLimite,
+          logement: logement || '', libelle: `Loyer ${nomMois(vise.mois)} ${courriel.nom}`, appeleLe: new Date().toISOString().slice(0, 10),
+        } });
+      } catch (erreur) { console.warn('Échéance sur l’espace :', email, erreur); }
+    }
   }
   if (envoyes && reglage.copieBailleur && bailleurs.length) {
     await api.envoyerCourriel({

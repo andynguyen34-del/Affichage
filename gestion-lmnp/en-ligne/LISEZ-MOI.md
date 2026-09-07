@@ -24,6 +24,18 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Logements & baux → Justificatifs des colocataires ».
 
+**Nouveau en v37 — état des lieux contradictoire sur l'espace colocataire,
+espace réorganisé.** À l'ouverture de la fenêtre contradictoire (durée
+réglable, 21 jours par défaut), l'état des lieux complet est publié sur
+l'espace de chaque colocataire : il répond point par point (d'accord ou
+remarque), dépose ses photos, et ses réponses sont relevées côté gérant puis
+jointes au rapport en annexe. L'espace colocataire est organisé en rubriques
+(Accueil « À faire », État des lieux, Quittances, Bail & documents,
+Justificatifs, Mon compte) et affiche la prochaine échéance de loyer.
+**À déployer : hébergement, règles Firestore et Storage, fonctions** (la
+commande habituelle déploie tout) — les règles autorisent le colocataire à
+écrire ses réponses et à lire les photos partagées.
+
 **Nouveau en v36 — icônes de lancement.** Chaque entrée s'installe comme
 une application avec son icône : « LMNP » (propriétaires, …/proprietaire) et
 « Résidence ANIKA » (colocataires, …/colocataire). Bouton « Installer
@@ -195,6 +207,43 @@ l'en-tête le bascule à tout moment. Un navigateur n'accorde le plein
 écran qu'à la suite d'un geste de l'utilisateur, jamais tout seul au
 chargement : c'est pourquoi l'installation reste la solution la plus
 confortable.
+
+## L'état des lieux contradictoire sur l'espace colocataire (v37)
+
+1. Après la visite et les signatures, onglet « Contradictoire » de l'état des
+   lieux → **« Ouvrir la fenêtre contradictoire… »** : choisissez la durée
+   (21 jours par défaut ; la date de fin, calculée, reste modifiable) et si
+   chaque colocataire est prévenu par e-mail. Les photos de l'état des lieux
+   sont copiées dans l'espace `partage/` du stockage (lisible par les comptes
+   colocataires de la résidence, jamais modifiable par eux), et l'état des
+   lieux (postes, observations, mobilier, relevés) est publié sur l'espace de
+   chaque colocataire.
+2. Le colocataire ouvre la rubrique « État des lieux » de son espace : pièce
+   par pièce, chaque point (état général, murs, plafond… chaque meuble, les
+   relevés) avec l'état et l'observation du bailleur, et pour chacun
+   « ✓ D'accord » ou « ✗ Remarque » + texte. Ses photos par pièce restent
+   datées et non modifiables. Enregistrement automatique ; réponses modifiables
+   jusqu'à la date de fin incluse, figées ensuite ; « Tout est d'accord pour le
+   reste » complète d'un coup. Un point sans réponse vaut accord.
+3. Côté gérant : « Relever les réponses » (répondu / pas encore, remarques et
+   photos de chacun), « Rappel par e-mail » aux retardataires, « Modifier la
+   date de fin », « Republier l'état des lieux » (après une correction),
+   « Rapport PDF avec annexe contradictoire » : le rapport est regénéré avec
+   une annexe par colocataire (date de réponse, points d'accord, remarques,
+   photos) et republié sur les espaces.
+4. Sécurité : le colocataire n'écrit que dans ses propres réponses
+   (`portail/{email}/reponses/{edlId}`), uniquement pendant la fenêtre (règle
+   Firestore) ; il ne lit que son espace et les photos partagées.
+
+## L'espace colocataire (v37)
+
+Rubriques en haut de l'espace : **Accueil** (« À faire » : état des lieux à
+compléter, justificatif manquant, dernier document ; « Prochaine échéance » :
+le loyer du mois publié par l'appel de loyer, avec le libellé du virement,
+marqué « réglé » dès que la quittance est publiée), **État des lieux**
+(contradictoire), **Quittances** et **Bail & documents** (rangés par année),
+**Justificatifs**, **Mon compte** (mot de passe, icône « Résidence ANIKA »,
+adresse de connexion, déconnexion). Une pastille signale ce qui attend.
 
 ## Icônes de lancement, une par entrée (v36)
 

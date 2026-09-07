@@ -411,6 +411,55 @@ textarea { min-height: 4.5rem; resize: vertical; }
   .portail-cadre { padding-top: .8rem; }
 }
 
+/* Espace colocataire : rubriques, accueil « À faire », documents par année,
+   état des lieux contradictoire point par point. */
+.portail-nav { display: flex; gap: .35rem; flex-wrap: wrap; margin: -.4rem 0 1rem; }
+.portail-nav button { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--bordure); background: var(--fond-carte); color: var(--encre); border-radius: 999px; padding: .35rem .8rem; font: inherit; font-size: .86rem; cursor: pointer; }
+.portail-nav button:hover { border-color: #2f5fa8; }
+.portail-nav button.actif { background: #2f5fa8; border-color: #2f5fa8; color: #fff; }
+.portail-nav .pastille { background: var(--alerte); color: #fff; font-size: .68rem; border-radius: 999px; padding: 0 .4rem; font-weight: 700; min-width: 1.1rem; text-align: center; }
+.portail-nav button.actif .pastille { background: #fff; color: #1f3f73; }
+.portail-taches { display: grid; gap: .5rem; }
+.portail-tache { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem; align-items: center; padding: .6rem .8rem; border-radius: 9px; border: 1px solid var(--bordure); background: var(--fond-carte); }
+.portail-tache.urgent { border-color: var(--attention); background: var(--attention-clair); }
+.portail-tache.fait { opacity: .8; }
+.portail-tache-icone { font-size: 1.3rem; }
+.portail-tache-titre { font-weight: 600; font-size: .92rem; }
+.portail-annee-titre { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--encre-tres-douce); margin: .6rem 0 .1rem; }
+.portail-photos { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; margin-top: .3rem; }
+.portail-vignette-bouton { border: 0; padding: 0; background: none; cursor: zoom-in; }
+.portail-vignette { width: 92px; height: 68px; object-fit: cover; border-radius: 7px; border: 1px solid var(--bordure); background: #eef1f4; display: block; }
+.portail-vignette.indisponible { font-size: .66rem; color: var(--encre-douce); padding: .3rem; }
+.edl-tete { display: grid; grid-template-columns: 1fr auto; gap: .6rem; align-items: center; padding: .7rem .8rem; background: #e6edf8; border-radius: 9px; margin-bottom: .7rem; }
+.edl-tete-titre { font-weight: 600; color: #1f3f73; }
+.edl-progression { font-size: .84rem; color: #1f3f73; text-align: right; }
+.edl-piece { border: 1px solid var(--bordure); border-radius: 9px; margin-bottom: .5rem; background: var(--fond-carte); }
+.edl-piece summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem; }
+.edl-piece summary::-webkit-details-marker { display: none; }
+.edl-piece summary::after { content: "▾"; color: var(--encre-tres-douce); }
+.edl-piece[open] summary::after { content: "▴"; }
+.edl-numero { width: 22px; height: 22px; border-radius: 50%; background: #2f5fa8; color: #fff; font-size: .75rem; font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+.edl-piece-nom { font-weight: 600; flex: 1; }
+.edl-resume.a-voir { color: var(--attention); font-weight: 600; }
+.edl-piece-corps { padding: 0 .8rem .8rem; display: grid; gap: .55rem; }
+.edl-point { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; padding: .5rem .6rem; border: 1px solid var(--bordure); border-radius: 8px; background: var(--fond); }
+.edl-point.meuble { background: #fbfcfd; }
+.edl-constat-nom { font-weight: 600; font-size: .9rem; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.edl-reponse { display: grid; gap: .35rem; border-left: 3px solid #2f5fa8; padding-left: .6rem; }
+.edl-choix { display: flex; gap: .4rem; }
+.edl-choix button { flex: 1; justify-content: center; }
+.edl-choix button.actif-ok { background: var(--succes-clair); border-color: var(--succes); color: var(--succes); font-weight: 600; }
+.edl-choix button.actif-non { background: var(--alerte-clair); border-color: var(--alerte); color: var(--alerte); font-weight: 600; }
+.edl-reponse textarea { width: 100%; box-sizing: border-box; min-height: 2.4rem; font-size: .86rem; }
+.edl-bloc-titre { font-size: .82rem; font-weight: 600; margin-top: .2rem; }
+.edl-releves { padding: .6rem .8rem; border: 1px solid var(--bordure); border-radius: 9px; margin-bottom: .5rem; display: grid; gap: .4rem; }
+.edl-pied { display: flex; justify-content: space-between; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .6rem .2rem 0; }
+.badge-etat { background: var(--succes-clair); color: var(--succes); }
+.badge-etat.etat-usage { background: var(--attention-clair); color: var(--attention); }
+.badge-etat.etat-mauvais { background: var(--alerte-clair); color: var(--alerte); }
+.badge-etat.etat-neuf, .badge-etat.etat-tres-bon { background: var(--accent-clair); color: var(--accent-fonce); }
+@media (max-width: 600px) { .edl-point { grid-template-columns: 1fr; } .edl-tete { grid-template-columns: 1fr; } .edl-progression { text-align: left; } }
+
 /* Éditeur d'état des lieux : bandeau compact fixé en haut de la zone
    (retour, titre, actions, onglets sur une ligne), puis le détail de l'onglet. */
 .edl-bandeau { position: sticky; top: -1.3rem; z-index: 5; margin: -1.3rem -1.4rem .8rem; padding: .55rem 1.4rem .45rem;

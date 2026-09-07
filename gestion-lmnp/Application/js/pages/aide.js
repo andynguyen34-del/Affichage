@@ -118,8 +118,11 @@ export default {
             + 'Depuis un réseau qui bloque ce serveur (poste professionnel), l’application les fait transiter par sa propre adresse, sans rien changer pour vous ; '
             + 'Paramètres → « Tester le stockage » l’indique.',
           ['Enfin, ouvrez la ', h('strong', { texte: 'fenêtre contradictoire' }),
-            ' : chaque colocataire a 3 semaines pour déposer ses propres photos depuis son espace '
-            + '(datées, non modifiables) ; « Relever les photos » les affiche côté gérant.'],
+            ' (onglet « Contradictoire ») : l’état des lieux est publié sur l’espace de chaque colocataire, qui y répond point par point '
+            + '(« D’accord » ou « Remarque » sur chaque poste, chaque meuble, les relevés) et dépose ses propres photos, datées et non modifiables. '
+            + 'La durée se règle à l’ouverture (21 jours par défaut) et la date de fin reste modifiable ensuite. '
+            + '« Relever les réponses » les affiche côté gérant, « Rappel par e-mail » relance ceux qui n’ont pas répondu, '
+            + '« Rapport PDF avec annexe contradictoire » regénère le rapport avec les réponses et photos de chacun et le republie.'],
         ]),
       ]),
     }));
@@ -150,8 +153,8 @@ export default {
             + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
             + 'Quel que soit le bouton choisi, c’est le rôle du compte qui décide de l’écran ouvert : un colocataire ne voit jamais l’espace propriétaires.',
           'Créez aussi son compte de connexion dans la console Firebase (Authentication → Users → Add user).',
-          'À la même adresse que vous, il n’accède qu’à ses documents : quittances et états des lieux, '
-            + 'à consulter ou télécharger en PDF.',
+          'Son espace est organisé en rubriques : Accueil (ce qu’il a à faire, la prochaine échéance de loyer publiée par l’appel de loyer, le dernier document), '
+            + 'État des lieux (le contradictoire), Quittances et Bail & documents (rangés par année), Justificatifs, Mon compte (mot de passe, icône, adresse).',
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '

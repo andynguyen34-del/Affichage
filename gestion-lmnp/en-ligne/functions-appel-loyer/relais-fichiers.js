@@ -10,7 +10,8 @@
 // - colocataire : lecture de son espace portail/{email}/**, dépôt (création
 //   seulement, images ou PDF < 10 Mo) sous portail/{email}/contradictoire/**
 //   et portail/{email}/justificatifs/**, jamais de modification ni de
-//   suppression (intégrité des preuves).
+//   suppression (intégrité des preuves) ; lecture de l'espace partage/**
+//   (copies des photos de l'état des lieux contradictoire).
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
@@ -40,16 +41,21 @@ async function identifier(req) {
   try { decode = await getAuth().verifyIdToken(jeton); } catch { throw refus(401, 'Session invalide ou expirée : reconnectez-vous.'); }
   const email = String(decode.email || '').trim().toLowerCase();
   if (!email) throw refus(401, 'Compte sans adresse e-mail.');
-  const roles = await getFirestore().doc('systeme/roles').get();
+  const base = getFirestore();
+  const roles = await base.doc('systeme/roles').get();
   const admins = roles.exists ? (roles.data().admins || []).map((a) => String(a).trim().toLowerCase()) : null;
   const gerant = admins === null || admins.includes(email);
-  return { email, gerant };
+  // Un colocataire de la résidence a un espace portail à son nom : il lit
+  // aussi l'espace « partage » (photos de l'état des lieux contradictoire).
+  const colocataire = !gerant && (await base.doc(`portail/${email}`).get()).exists;
+  return { email, gerant, colocataire };
 }
 
 const sonEspace = (qui, objet) => objet.startsWith(`portail/${qui.email}/`);
+const partage = (qui, objet) => qui.colocataire && objet.startsWith('partage/');
 
 function verifierLecture(qui, objet) {
-  if (qui.gerant || sonEspace(qui, objet)) return;
+  if (qui.gerant || sonEspace(qui, objet) || partage(qui, objet)) return;
   throw refus(403, 'Accès refusé à ce fichier.');
 }
 
@@ -113,7 +119,7 @@ export async function traiter(req, res) {
   if (op === 'liste' && req.method === 'GET') {
     const prefixe = nettoyerChemin(req.query.prefixe, { vide: true });
     const depart = prefixe ? `${espace}/${prefixe}/` : `${espace}/`;
-    if (!qui.gerant && !depart.startsWith(`portail/${qui.email}/`)) throw refus(403, 'Accès refusé à ce dossier.');
+    if (!qui.gerant && !depart.startsWith(`portail/${qui.email}/`) && !partage(qui, depart)) throw refus(403, 'Accès refusé à ce dossier.');
     const [fichiers] = await bucket.getFiles({ prefix: depart });
     const elements = fichiers
       .filter((f) => !f.name.endsWith('/'))

@@ -32,6 +32,9 @@ export async function ecrireDocumentSysteme(nom, contenu) { localStorage.setItem
 export async function publierPortail() { /* sans objet */ }
 export async function lirePortail() { return null; }
 export async function lireMonPortail() { return null; }
+export async function lireReponsesContradictoire() { return null; }
+export async function ecrireMesReponses() { /* sans objet */ }
+export async function completerPortail() { /* sans objet */ }
 export async function supprimerPortail() { /* sans objet */ }
 export async function envoyerCourriel() { throw new Error('Envoi de courriel indisponible en version dossier.'); }
 export async function telechargerFichier(espace, chemin) { return ouvrirFichier(espace, chemin); }

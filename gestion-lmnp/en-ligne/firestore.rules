@@ -22,6 +22,23 @@ service cloud.firestore {
     match /portail/{email} {
       allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
       allow write: if estGerant();
+
+      // Réponses du colocataire à l'état des lieux contradictoire : il écrit
+      // SES réponses (document nommé par l'identifiant de l'état des lieux
+      // publié sur son espace), tant que la fenêtre est ouverte.
+      match /reponses/{edlId} {
+        function portail() { return get(/databases/$(database)/documents/portail/$(email)).data; }
+        function fenetreOuverte() {
+          return portail().contradictoire.edlId == edlId
+            && request.time.toMillis() <= portail().contradictoire.finLeMs;
+        }
+        allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+        allow create, update: if connecte() && request.auth.token.email.lower() == email
+          && request.resource.data.edlId == edlId
+          && request.resource.data.keys().hasOnly(['edlId', 'reponses', 'majLe'])
+          && fenetreOuverte();
+        allow delete: if estGerant();
+      }
     }
 
     // File d'envoi des courriels (extension Trigger Email) : dépôt par les

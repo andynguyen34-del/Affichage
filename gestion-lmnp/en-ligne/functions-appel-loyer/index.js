@@ -65,6 +65,15 @@ export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
       // eslint-disable-next-line no-await-in-loop
       await base.collection('mail').add({ to: courriel.destinataires, message: { subject: courriel.sujet, html: courriel.html } });
       details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
+      // L'échéance appelée s'affiche aussi sur l'espace du colocataire (accueil).
+      const email = String(locataires.find((l) => l.id === courriel.locataireId)?.email || '').trim().toLowerCase();
+      if (email) {
+        // eslint-disable-next-line no-await-in-loop
+        await base.doc(`portail/${email}`).set({ email, echeance: {
+          annee: vise.annee, mois: vise.mois, montant: courriel.montantDu, dateLimite: courriel.dateLimite,
+          logement: bien.nom, libelle: `Loyer ${nomMois(vise.mois)} ${courriel.nom}`, appeleLe: dateIso,
+        } }, { merge: true }).catch((erreur) => console.warn('Échéance sur l’espace :', email, erreur.message));
+      }
     }
     if (courriels.length && reglage.copieBailleur && bailleurs.length) {
       // eslint-disable-next-line no-await-in-loop

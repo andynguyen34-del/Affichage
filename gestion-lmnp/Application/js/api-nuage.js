@@ -492,6 +492,27 @@ export async function lireMonPortail() {
   return lirePortail(utilisateurEmail());
 }
 
+// portail/{e-mail}/reponses/{edlId} : les réponses du colocataire à l'état des
+// lieux contradictoire (d'accord / remarque par point). Écrites par lui
+// pendant la fenêtre ; lues par lui et les gérants.
+export async function lireReponsesContradictoire(email, edlId) {
+  const photo = await getDoc(doc(base, 'portail', cleEmail(email), 'reponses', String(edlId)));
+  return photo.exists() ? photo.data() : null;
+}
+
+export async function ecrireMesReponses(edlId, reponses) {
+  await setDoc(doc(base, 'portail', cleEmail(utilisateurEmail()), 'reponses', String(edlId)), {
+    edlId: String(edlId),
+    reponses,
+    majLe: new Date().toISOString(),
+  });
+}
+
+/** Le gérant complète un espace colocataire (échéance du mois, fenêtre…) sans toucher au reste. */
+export async function completerPortail(email, complement) {
+  await setDoc(doc(base, 'portail', cleEmail(email)), { ...complement, email: cleEmail(email), majLe: new Date().toISOString() }, { merge: true });
+}
+
 export async function supprimerPortail(email) {
   try { await deleteDoc(doc(base, 'portail', cleEmail(email))); } catch { /* déjà absent */ }
 }

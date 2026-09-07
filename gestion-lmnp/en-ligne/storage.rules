@@ -37,6 +37,16 @@ service firebase.storage {
       allow update, delete: if estGerant();
     }
 
+    // Espace « partage » : copies des photos de l'état des lieux publiées
+    // pour le contradictoire. Lecture par les gérants et par tout compte
+    // colocataire de la résidence (un espace portail à son nom) ; écriture
+    // par les gérants.
+    match /partage/{reste=**} {
+      allow read: if estGerant() || (connecte()
+        && firestore.exists(/databases/(default)/documents/portail/$(request.auth.token.email.lower())));
+      allow write: if estGerant();
+    }
+
     // Documents publiés pour un colocataire : lecture par lui seul (et les
     // gérants), écriture par les gérants.
     match /portail/{email}/{reste=**} {

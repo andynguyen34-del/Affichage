@@ -10,7 +10,8 @@ import { date, aujourdhui, taille, nomFichierTelechargement } from '../format.js
 import { estCourteDuree, bienDeEdl } from '../logements.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
-import { publierDocument, ouvrirFenetreContradictoire } from '../portail-publication.js';
+import { publierDocument, ouvrirFenetreContradictoire, destinatairesDe } from '../portail-publication.js';
+import { apercuPourColocataire, annexeContradictoire, cheminPartage, finDeFenetre, finEnMillisecondes, DUREE_PAR_DEFAUT, libelleEtat } from '../contradictoire.js';
 import { compresserPhoto } from '../photos.js';
 
 const PIECES_PROPOSEES = ['Séjour', 'Cuisine', 'Chambre 1', 'Chambre 2', 'Chambre 3',
@@ -519,73 +520,176 @@ function cartePlan(edl) {
   });
 }
 
-// ----------------------------------------------- photos contradictoires
-
-const ajouterJours = (dateIso, jours) => {
-  const d = new Date(`${dateIso}T12:00:00`);
-  d.setDate(d.getDate() + jours);
-  return d.toISOString().slice(0, 10);
-};
+// ----------------------------------------------- état des lieux contradictoire
 
 /**
- * Fenêtre contradictoire : pendant 3 semaines après l'état des lieux, chaque
- * colocataire peut déposer ses propres photos depuis son espace. Ici, côté
- * gérant : ouverture de la fenêtre et relevé des photos déposées.
+ * Fenêtre contradictoire : pendant une durée réglable (21 jours par défaut)
+ * après l'état des lieux, chaque colocataire consulte l'état des lieux sur
+ * son espace (postes, observations, mobilier, photos), répond point par
+ * point (d'accord / remarque) et dépose ses propres photos. Ici, côté
+ * gérant : publication, réglage de la date de fin, relevé des réponses,
+ * rappel, rapport avec annexe.
  */
-function carteContradictoire(edl, donnees) {
+function carteContradictoire(edl, donnees, contexte) {
   const locataires = (edl.locataireIds || []).map((id) => donnees.locataires.find((l) => l.id === id)).filter(Boolean);
+  const bien = bienDeEdl(contexte?.tout || donnees, edl);
   const zone = h('div');
+  const apercu = apercuPourColocataire(edl);
 
-  const ouvrir = async () => {
-    const finLe = ajouterJours(edl.date, 21);
+  /** Copie les photos de l'état des lieux dans l'espace partagé (lisible par les colocataires). */
+  const partagerPhotos = async () => {
+    const photos = (edl.pieces || []).flatMap((p) => [...(p.photos || []), ...(p.meubles || []).flatMap((m) => m.photos || [])]);
+    let copiees = 0;
+    for (const photo of photos) {
+      try {
+        /* eslint-disable no-await-in-loop */
+        const octets = await api.lireOctets('etats-des-lieux', photo.chemin);
+        await api.deposerOctets('partage', cheminPartage(photo.chemin), octets, 'image/jpeg');
+        copiees += 1;
+      } catch (erreur) { console.warn('Copie de photo :', photo.chemin, erreur); }
+    }
+    return { copiees, total: photos.length };
+  };
+
+  /** Publie (ou republie) l'état des lieux sur l'espace de chaque colocataire. */
+  const publier = async ({ finLe, dureeJours, envoyerEmail }) => {
+    notifier('Publication : copie des photos pour les colocataires…');
+    const copie = await partagerPhotos();
     const pieces = (edl.pieces || []).map((p, i) => ({ numero: i + 1, nom: p.nom }));
     let ouverts = 0;
     for (const locataire of locataires) {
       try {
-        /* eslint-disable no-await-in-loop */
         await ouvrirFenetreContradictoire({
-          locataire, edl, finLe, pieces, bailleur: donnees.parametres.bailleurs?.[0],
+          locataire, edl, finLe, dureeJours, pieces, apercu, bailleur: donnees.parametres.bailleurs?.[0], notifier: envoyerEmail,
+          logement: bien ? { nom: bien.nom, adresse: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') } : null,
         });
         ouverts += 1;
       } catch (erreur) { notifier(erreur.message, 'erreur'); }
     }
     if (ouverts) {
-      await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => { e.contradictoireFinLe = finLe; }),
-        `Fenêtre ouverte jusqu'au ${date(finLe)} pour ${ouverts} colocataire(s), e-mails envoyés.`);
-      edl.contradictoireFinLe = finLe;
+      await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => {
+        e.contradictoireFinLe = finLe; e.contradictoireDuree = dureeJours; e.contradictoirePublieLe = aujourdhui();
+      }), `État des lieux publié pour ${ouverts} colocataire(s) (${copie.copiees}/${copie.total} photos), fenêtre ouverte jusqu'au ${date(finLe)}${envoyerEmail ? ', e-mails envoyés' : ''}.`);
+      Object.assign(edl, { contradictoireFinLe: finLe, contradictoireDuree: dureeJours });
       dessiner();
     }
   };
 
-  const relever = async () => {
-    zone.querySelector('.releve-contradictoire')?.remove();
-    const bloc = h('div', { class: 'releve-contradictoire', style: 'margin-top: .8rem' });
-    zone.append(bloc);
+  const ouvrir = async () => {
+    const dureeInitiale = edl.contradictoireDuree || DUREE_PAR_DEFAUT;
+    const saisie = await formulaire({
+      titre: 'Ouvrir la fenêtre contradictoire',
+      aide: 'L’état des lieux (postes, observations, mobilier, photos) est publié sur l’espace de chaque colocataire, qui répond point par point et dépose ses photos jusqu’à la date de fin incluse. Il en est informé par e-mail.',
+      champs: [
+        { cle: 'dureeJours', libelle: 'Durée de la fenêtre (jours après l’état des lieux)', type: 'entier', min: 1, max: 365, requis: true },
+        { cle: 'finLe', libelle: 'Date de fin (calculée d’après la durée ; modifiable)', type: 'date', requis: true },
+        { cle: 'email', libelle: 'Prévenir chaque colocataire par e-mail', type: 'case' },
+      ],
+      valeurs: { dureeJours: dureeInitiale, finLe: finDeFenetre(edl.date, dureeInitiale), email: true },
+      libelleValider: 'Publier et ouvrir',
+    });
+    if (!saisie) return;
+    const dureeJours = Math.max(1, Number(saisie.dureeJours) || DUREE_PAR_DEFAUT);
+    // La durée saisie prime ; une date de fin modifiée à la main prime sur les deux.
+    const finLe = saisie.finLe && saisie.finLe !== finDeFenetre(edl.date, dureeInitiale) ? saisie.finLe : finDeFenetre(edl.date, dureeJours);
+    await publier({ finLe, dureeJours, envoyerEmail: Boolean(saisie.email) });
+  };
+
+  const modifierFin = async () => {
+    const saisie = await formulaire({
+      titre: 'Date de fin de la fenêtre contradictoire',
+      aide: 'Prolonger ou raccourcir la période pendant laquelle les colocataires peuvent répondre. Les espaces sont mis à jour (sans nouvel e-mail).',
+      champs: [{ cle: 'finLe', libelle: 'Réponses possibles jusqu’au (inclus)', type: 'date', requis: true }],
+      valeurs: { finLe: edl.contradictoireFinLe },
+    });
+    if (!saisie?.finLe) return;
     for (const locataire of locataires) {
       const email = String(locataire.email || '').trim().toLowerCase();
       if (!email) continue;
-      let fichiers = [];
       try {
         /* eslint-disable no-await-in-loop */
-        fichiers = await api.listerFichiers('portail', `${email}/contradictoire/${edl.id}`);
-      } catch { /* pas de dossier : aucune photo */ }
-      bloc.append(h('div', { style: 'margin-bottom:.6rem' }, [
-        h('div', { style: 'font-weight:600', texte: `${nomDe(locataire)} — ${fichiers.length} photo(s)` }),
-        fichiers.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' },
-          fichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true }))) : null,
-      ]));
+        const actuel = (await api.lirePortail(email)) || {};
+        if (actuel.contradictoire?.edlId === edl.id) {
+          await api.completerPortail(email, { contradictoire: { ...actuel.contradictoire, finLe: saisie.finLe, finLeMs: finEnMillisecondes(saisie.finLe) } });
+        }
+      } catch (erreur) { notifier(`${nomDe(locataire)} : ${erreur.message}`, 'erreur'); }
     }
-    if (!bloc.children.length) bloc.append(h('p', { class: 'legende', texte: 'Aucune photo contradictoire déposée pour l\'instant.' }));
+    await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => { e.contradictoireFinLe = saisie.finLe; }), `Fenêtre ouverte jusqu'au ${date(saisie.finLe)}.`);
+    edl.contradictoireFinLe = saisie.finLe;
+    dessiner();
+  };
+
+  /** Les réponses et photos de chaque colocataire. */
+  const chargerReponses = async () => {
+    const resultats = [];
+    for (const locataire of locataires) {
+      const email = String(locataire.email || '').trim().toLowerCase();
+      let reponses = null;
+      let fichiers = [];
+      if (email) {
+        try { reponses = await api.lireReponsesContradictoire(email, edl.id); } catch { reponses = null; }
+        try { fichiers = await api.listerFichiers('portail', `${email}/contradictoire/${edl.id}`); } catch { fichiers = []; }
+      }
+      resultats.push({ locataire, email, reponses, fichiers });
+    }
+    return resultats;
+  };
+
+  const relever = async () => {
+    zone.querySelector('.releve-contradictoire')?.remove();
+    const bloc = h('div', { class: 'releve-contradictoire', style: 'margin-top: .8rem' }, h('p', { class: 'legende', texte: 'Relevé en cours…' }));
+    zone.append(bloc);
+    const resultats = await chargerReponses();
+    const annexe = annexeContradictoire(apercu, resultats.map((r) => ({ nom: nomDe(r.locataire), reponses: r.reponses?.reponses || {}, majLe: r.reponses?.majLe || '' })));
+    bloc.replaceChildren(...resultats.map((r, i) => {
+      const a = annexe[i];
+      const repondu = Boolean(r.reponses);
+      return h('div', { class: 'reponse-colocataire', style: 'margin-bottom:.7rem;padding:.55rem .7rem;border:1px solid var(--bordure);border-radius:8px' }, [
+        h('div', { style: 'display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-weight:600' }, [
+          nomDe(r.locataire),
+          repondu ? badge(`répondu le ${date(a.repondLe)}`, 'info') : badge(r.email ? 'pas encore répondu' : 'sans adresse e-mail', 'attente'),
+          repondu ? badge(a.bilan.complet ? (a.remarques.length ? `${a.remarques.length} remarque(s)` : 'tout d’accord') : `${a.bilan.repondus}/${a.bilan.total} points vus`, a.remarques.length ? 'attention' : 'succes') : null,
+          r.fichiers.length ? badge(`${r.fichiers.length} photo(s)`, 'info') : null,
+        ]),
+        a.remarques.length ? h('ul', { style: 'margin:.3rem 0 0;padding-left:1.2rem;font-size:.9rem' }, a.remarques.map((rem) => h('li', {}, [
+          h('strong', { texte: `${rem.piece} · ${rem.libelle}` }), rem.etat ? ` (${libelleEtat(rem.etat)})` : '', ` : ${rem.texte || 'remarque sans texte'}`,
+        ]))) : null,
+        r.fichiers.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' },
+          r.fichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true }))) : null,
+      ]);
+    }));
+    if (!resultats.length) bloc.append(h('p', { class: 'legende', texte: 'Aucun colocataire rattaché à cet état des lieux.' }));
+  };
+
+  const rappeler = async () => {
+    const resultats = await chargerReponses();
+    const retardataires = resultats.filter((r) => r.email && !r.reponses);
+    if (!retardataires.length) { notifier('Tous les colocataires ont répondu.'); return; }
+    const ok = await confirmer({
+      titre: 'Rappel par e-mail',
+      message: `Envoyer un rappel à ${retardataires.map((r) => nomDe(r.locataire)).join(', ')} (réponses possibles jusqu'au ${date(edl.contradictoireFinLe)}) ?`,
+      libelleValider: 'Envoyer le rappel',
+    });
+    if (!ok) return;
+    for (const r of retardataires) {
+      /* eslint-disable no-await-in-loop */
+      await api.envoyerCourriel({
+        destinataires: destinatairesDe(r.locataire),
+        sujet: 'Rappel : état des lieux à valider sur votre espace',
+        html: `<p>Bonjour ${r.locataire.prenom || ''},</p><p>L'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du <strong>${date(edl.date)}</strong> attend vos réponses sur votre espace, jusqu'au <strong>${date(edl.contradictoireFinLe)}</strong> inclus :</p>`
+          + `<p><a href="${window.location.origin}/colocataire">${window.location.origin}/colocataire</a></p><p>Sans réponse, l'état des lieux sera réputé accepté en l'état.</p><p>Bien cordialement,<br>${donnees.parametres.bailleurs?.[0]?.nom || ''}</p>`,
+      });
+    }
+    notifier(`Rappel envoyé à ${retardataires.length} colocataire(s).`, 'succes');
   };
 
   const dessiner = () => {
     zone.replaceChildren();
     if (!edl.contradictoireFinLe) {
       zone.append(
-        h('p', { class: 'legende', texte: 'Après la visite et les signatures, ouvrez la fenêtre contradictoire : '
-          + 'chaque colocataire disposera de 3 semaines pour déposer ses propres photos des pièces depuis son espace. '
-          + 'Il en sera informé par e-mail, avec la date limite.' }),
-        bouton('Ouvrir la fenêtre contradictoire (3 semaines)', () => ouvrir().catch(signalerErreur), { type: 'primaire' }),
+        h('p', { class: 'legende', texte: 'Après la visite et les signatures, ouvrez la fenêtre contradictoire : l’état des lieux est publié sur l’espace de chaque colocataire, '
+          + `qui y répond point par point (d’accord ou remarque) et dépose ses propres photos pendant la durée choisie (${DUREE_PAR_DEFAUT} jours par défaut). Il en est informé par e-mail, avec la date limite.` }),
+        bouton('Ouvrir la fenêtre contradictoire…', () => ouvrir().catch(signalerErreur), { type: 'primaire' }),
       );
       return;
     }
@@ -593,17 +697,26 @@ function carteContradictoire(edl, donnees) {
     zone.append(
       h('p', {}, [
         close ? badge(`Close depuis le ${date(edl.contradictoireFinLe)}`, 'attente')
-          : badge(`Ouverte jusqu'au ${date(edl.contradictoireFinLe)}`, 'succes'),
+          : badge(`Ouverte jusqu'au ${date(edl.contradictoireFinLe)} inclus`, 'succes'),
+        h('span', { class: 'legende', texte: `  Publié le ${date(edl.contradictoirePublieLe || edl.date)} · ${edl.contradictoireDuree || DUREE_PAR_DEFAUT} jours` }),
       ]),
       h('div', { class: 'groupe-boutons', style: 'margin-top:.5rem' }, [
-        bouton('Relever les photos déposées', () => relever().catch(signalerErreur), { petit: true, type: 'primaire' }),
+        bouton('Relever les réponses', () => relever().catch(signalerErreur), { petit: true, type: 'primaire', titre: 'Réponses point par point et photos de chaque colocataire' }),
+        bouton('Rappel par e-mail', () => rappeler().catch(signalerErreur), { petit: true, titre: 'Aux colocataires qui n’ont pas encore répondu' }),
+        bouton('Modifier la date de fin', () => modifierFin().catch(signalerErreur), { petit: true }),
+        bouton('Republier l’état des lieux', async () => {
+          const ok = await confirmer({ titre: 'Republier', message: 'Mettre à jour l’état des lieux publié sur les espaces (postes, observations, photos) avec sa version actuelle, sans nouvel e-mail ? Les réponses déjà données sont conservées.', libelleValider: 'Republier' });
+          if (ok) await publier({ finLe: edl.contradictoireFinLe, dureeJours: edl.contradictoireDuree || DUREE_PAR_DEFAUT, envoyerEmail: false }).catch(signalerErreur);
+        }, { petit: true }),
+        bouton('Rapport PDF avec annexe contradictoire', () => genererRapport(edl, donnees, { annexe: true }).catch(signalerErreur), { petit: true, titre: 'Regénère le rapport avec les réponses et photos des colocataires en annexe, et le republie' }),
       ]),
     );
   };
   dessiner();
 
   return carte({
-    titre: 'Photos contradictoires des colocataires',
+    titre: 'État des lieux contradictoire',
+    aide: 'Les colocataires consultent l’état des lieux sur leur espace et y répondent point par point.',
     corps: zone,
   });
 }
@@ -735,7 +848,7 @@ function partiesAttendues(edl, donnees) {
   return parties;
 }
 
-async function genererRapport(edl, donnees) {
+async function genererRapport(edl, donnees, { annexe = false } = {}) {
   const manquantes = partiesAttendues(edl, donnees)
     .filter((p) => !(edl.signatures || []).some((s) => s.cle === p.cle));
   if (manquantes.length) {
@@ -791,10 +904,33 @@ async function genererRapport(edl, donnees) {
     } catch { /* plan indisponible : le rapport se génère sans lui */ }
   }
 
+  // Annexe contradictoire : réponses (d'accord / remarques) et photos de chaque colocataire.
+  let annexeDonnees = null;
+  if (annexe) {
+    const apercu = apercuPourColocataire(edl);
+    const entrees = [];
+    for (const locataire of locataires) {
+      const email = String(locataire.email || '').trim().toLowerCase();
+      let reponses = null;
+      const photos = [];
+      if (email) {
+        try { reponses = await api.lireReponsesContradictoire(email, edl.id); } catch { reponses = null; }
+        let fichiers = [];
+        try { fichiers = await api.listerFichiers('portail', `${email}/contradictoire/${edl.id}`); } catch { fichiers = []; }
+        for (const fichier of fichiers) {
+          try { photos.push({ octets: await api.lireOctets('portail', fichier.chemin), legende: fichier.nom.replace(/\.jpe?g$/i, '') }); } catch { /* photo illisible */ }
+        }
+      }
+      entrees.push({ nom: nomDe(locataire), reponses: reponses?.reponses || {}, majLe: reponses?.majLe || '', photos });
+    }
+    annexeDonnees = annexeContradictoire(apercu, entrees);
+  }
+
   const octets = await pdfEtatDesLieux({
     edl, bien, bailleur: donnees.parametres.bailleurs?.[0], locataires, photosParPiece, photosParMeuble, signatures, plan,
+    annexe: annexeDonnees,
   });
-  const nomFichier = `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} ${edl.date}.pdf`;
+  const nomFichier = `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} ${edl.date}${annexe ? ' avec annexe contradictoire' : ''}.pdf`;
 
   await api.deposerOctets('documents', `États des lieux/${nomFichier}`, octets, 'application/pdf');
 
@@ -882,7 +1018,7 @@ function editeur(edl, donnees, contexte) {
     { cle: 'plan', libelle: '🗺️ Plan', titre: 'Plan du logement et repères' },
     { cle: 'releves', libelle: '🔢 Relevés', titre: 'Relevés des compteurs, clés, observations générales' },
     { cle: 'signatures', libelle: `✍️ Signatures ${(edl.signatures || []).length}/${partiesAttendues(edl, donnees).length}`, titre: 'Signatures des parties' },
-    { cle: 'contradictoire', libelle: '📷 Contradictoire', titre: 'Photos contradictoires des colocataires' },
+    { cle: 'contradictoire', libelle: '📷 Contradictoire', titre: 'État des lieux contradictoire : réponses et photos des colocataires' },
   ];
   let actif = ongletsActifs.get(edl.id);
   if (!onglets.some((o) => o.cle === actif)) actif = onglets[0].cle;
@@ -898,7 +1034,7 @@ function editeur(edl, donnees, contexte) {
     else if (onglet.cle === 'plan') contenu = cartePlan(edl);
     else if (onglet.cle === 'releves') contenu = carteReleves(edl);
     else if (onglet.cle === 'signatures') contenu = carteSignatures(edl, donnees);
-    else contenu = carteContradictoire(edl, donnees);
+    else contenu = carteContradictoire(edl, donnees, contexte);
     zone.replaceChildren(contenu);
     for (const b of barre.querySelectorAll('.onglet')) {
       const estActif = b.dataset.onglet === actif;

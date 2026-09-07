@@ -223,7 +223,7 @@ const LIBELLES_ETAT = { neuf: 'Neuf', 'tres-bon': 'Très bon état', bon: 'Bon �
  * chaque pièce à ses photos déjà chargées ({octets, legende}) ;
  * `photosParMeuble` fait de même pour chaque meuble de l'inventaire.
  */
-export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, photosParMeuble, signatures, plan }) {
+export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, photosParMeuble, signatures, plan, annexe = null }) {
   const { document_, page } = await nouvellePage();
 
   page.titre(`État des lieux ${edl.type === 'sortie' ? 'de sortie' : 'd\'entrée'}`);
@@ -367,6 +367,32 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
       page.texte('(non signé)', { couleur: DOUX });
     }
     page.espace(6);
+  }
+
+  // Annexe contradictoire : pour chaque colocataire, ses points d'accord,
+  // ses remarques (pièce, poste, texte) et ses photos, avec sa date de réponse.
+  if (annexe && annexe.length) {
+    page.besoin(120);
+    page.titre('Annexe — observations contradictoires des colocataires');
+    page.texte(`Réponses données par chaque colocataire sur son espace, point par point, jusqu'au ${dateLongue(edl.contradictoireFinLe || edl.date)}. `
+      + 'Un point sans réponse vaut accord.', { taille: 9, couleur: DOUX });
+    for (const entree of annexe) {
+      page.besoin(60);
+      page.sousTitre(entree.nom);
+      if (!entree.repondLe && !entree.photos?.length) { page.texte('Aucune réponse déposée : état des lieux réputé accepté en l\'état.', { couleur: DOUX }); continue; }
+      page.texte(`${entree.repondLe ? `Réponses du ${dateLongue(entree.repondLe)} — ` : ''}${entree.bilan.accords} point(s) d'accord, ${entree.remarques.length} remarque(s)`
+        + `${entree.bilan.total ? ` sur ${entree.bilan.total}` : ''}.`, { taille: 9.5 });
+      for (const remarque of entree.remarques) {
+        page.texte(`- ${remarque.piece} · ${remarque.libelle}${remarque.etat ? ` (${LIBELLES_ETAT[remarque.etat] || remarque.etat})` : ''} : ${remarque.texte || 'remarque sans texte'}`, { taille: 9.5 });
+      }
+      if (entree.photos?.length) {
+        page.espace(2);
+        page.besoin(14 + 130 + 20);
+        page.texte(`Photos déposées par ${entree.nom} (${entree.photos.length}) :`, { taille: 9.5, police: 'grasse', couleur: DOUX });
+        // eslint-disable-next-line no-await-in-loop
+        await rangeesPhotos(entree.photos, entree.nom, { hauteurMax: 130 });
+      }
+    }
   }
 
   return document_.save();
