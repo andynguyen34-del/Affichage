@@ -24,13 +24,24 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v27)** : la livraison contient un
+**Important pour cette mise à jour (v28)** : la livraison contient un
 dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer, voir
-plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`. La
-commande de déploiement habituelle la publie avec le reste ; au premier
-déploiement, le terminal demande d'activer quelques services Google (Cloud
-Functions, Cloud Build, Artifact Registry, Cloud Scheduler, Eventarc) :
-répondez **Y** à chaque question. Comptez 3 à 5 minutes de plus.
+plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
+**avec ses bibliothèques déjà installées** (`node_modules/`, 5 500 petits
+fichiers : c'est normal, et c'est indispensable — la CLI Firebase charge le
+code de la fonction sur votre PC pour l'analyser avant de l'envoyer ; sans
+ce dossier elle s'arrête sur « Couldn't find firebase-functions package »).
+La commande de déploiement habituelle publie tout ; au premier déploiement,
+le terminal demande d'activer quelques services Google (Cloud Functions,
+Cloud Build, Artifact Registry, Cloud Scheduler, Eventarc) : répondez **Y**
+à chaque question. Comptez 3 à 5 minutes de plus. Si jamais le message
+« Couldn't find firebase-functions package » apparaissait quand même,
+exécutez `npm install` dans le dossier `functions-appel-loyer` puis
+relancez le déploiement.
+
+La page est désormais servie avec une consigne de revalidation : après un
+déploiement, la nouvelle version apparaît dès le rechargement suivant, sans
+Ctrl+F5.
 
 Cette fonction **cohabite** avec toute autre fonction déjà déployée dans le
 projet (par exemple `envoiMail`, la fonction d'envoi des courriels par
