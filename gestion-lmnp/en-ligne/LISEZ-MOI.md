@@ -24,7 +24,7 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v32)** : la livraison contient un
+**Important pour cette mise à jour (v33)** : la livraison contient un
 dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer et
 relais de fichiers, voir plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
 **avec ses bibliothèques déjà installées** (`node_modules/`, 5 500 petits
@@ -156,6 +156,13 @@ Quand une nouvelle version est livrée : remplacer le dossier `public/`
 L'adresse ne change pas.
 
 ## Plein écran et installation sur la tablette (v31)
+
+Deux icônes d'installation, une par entrée : la maison verte « LMNP »
+(espace propriétaires, `manifest.webmanifest`, ouvre la page d'accueil) et
+les silhouettes bleues « ANIKA » (espace colocataires,
+`manifest-colocataire.webmanifest`, ouvre `/colocataire`). La page choisit
+le manifeste selon l'entrée affichée (adresse, sélecteur, rôle du compte) ;
+les deux applications cohabitent sur un même écran d'accueil.
 
 L'application est **installable** : sur la tablette, menu du navigateur →
 « Ajouter à l'écran d'accueil » (ou Paramètres → « Affichage sur cet

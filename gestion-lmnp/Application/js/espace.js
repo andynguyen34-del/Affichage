@@ -55,10 +55,24 @@ export function appliquerEspace(espace) {
   if (message) message.textContent = e.message;
   if (note) note.textContent = e.note;
   document.title = e.documentTitre;
+  appliquerManifeste(espace);
   for (const bouton of document.querySelectorAll('#connexion-espaces [data-espace]')) {
     bouton.classList.toggle('actif', bouton.dataset.espace === espace);
     bouton.setAttribute('aria-selected', bouton.dataset.espace === espace ? 'true' : 'false');
   }
+}
+
+/** Manifeste, couleur et icône d'installation de l'espace (deux applications installables distinctes). */
+export function appliquerManifeste(espace) {
+  const coloc = espace === 'colocataire';
+  const lien = document.getElementById('lien-manifeste');
+  const theme = document.getElementById('meta-theme');
+  const titreApple = document.getElementById('meta-titre-apple');
+  const iconeApple = document.getElementById('lien-icone-apple');
+  if (lien) lien.href = coloc ? '/manifest-colocataire.webmanifest' : '/manifest.webmanifest';
+  if (theme) theme.content = coloc ? '#2f5fa8' : '#1d6a5a';
+  if (titreApple) titreApple.content = coloc ? 'ANIKA' : 'LMNP';
+  if (iconeApple) iconeApple.href = coloc ? '/icones/icone-colocataire-180.png' : '/icones/icone-180.png';
 }
 
 /** Affiche le sélecteur et branche ses boutons. */

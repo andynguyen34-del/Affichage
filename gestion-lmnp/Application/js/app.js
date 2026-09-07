@@ -19,7 +19,7 @@ import { VERSION_APP } from './version.js';
 import { nomMois } from './format.js';
 import { verifierAppelAutomatique } from './appel-loyer-client.js';
 import { armerPleinEcranAuLancement, brancherBoutonPleinEcran, enregistrerServiceWorker } from './plein-ecran.js';
-import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES } from './espace.js';
+import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES, appliquerManifeste } from './espace.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -293,6 +293,7 @@ async function entrerSelonRole() {
   const espaceReel = role === 'colocataire' ? 'colocataire' : 'proprietaire';
   const espaceDemande = espaceChoisi();
   memoriserEspace(espaceReel);
+  appliquerManifeste(espaceReel);
   if (role === 'colocataire') {
     document.getElementById('connexion').hidden = true;
     document.getElementById('chargement').hidden = true;

@@ -144,6 +144,7 @@ export default {
         liste([
           'Sur tablette ou téléphone, l’application passe en plein écran au premier toucher après le lancement (réglable dans Paramètres → « Affichage sur cet appareil ») ; le bouton ⛶ en haut à droite le bascule à tout moment.',
           'Mieux : installez-la sur l’écran d’accueil (Paramètres → « Installer l’application », ou menu du navigateur → « Ajouter à l’écran d’accueil ») : elle a alors son icône et s’ouvre sans barre d’adresse, comme une application.',
+          'Deux icônes existent, une par entrée : la maison verte « LMNP » (espace propriétaires, ouvre la page d’accueil) et les silhouettes bleues « ANIKA » (espace colocataires, ouvre …/colocataire). L’icône proposée dépend de l’entrée affichée au moment de l’installation ; les deux peuvent cohabiter sur une même tablette.',
         ]),
       ]),
     }));

@@ -1,5 +1,6 @@
 {
-  "name": "Gestion LMNP ANIKA",
+  "id": "/",
+  "name": "Gestion LMNP ANIKA — propriétaires",
   "short_name": "LMNP",
   "description": "Gestion locative de la colocation : loyers, cautions, charges, états des lieux.",
   "lang": "fr",

@@ -6,6 +6,7 @@ import * as api from '../api.js';
 import { h, vider, signalerErreur, choisirFichier, notifier } from '../ui.js';
 import { date, dateLongue, taille, aujourdhui } from '../format.js';
 import { compresserPhoto } from '../photos.js';
+import { estInstallee, installable, proposerInstallation, consigneInstallation } from '../plein-ecran.js';
 import { CATEGORIES_JUSTIFICATIFS, libelleCategorie, categorieDuChemin } from '../justificatifs.js';
 import { ouvrirChangementMotDePasse } from '../compte.js';
 
@@ -220,6 +221,13 @@ export async function rendrePortail({ seDeconnecter }) {
         h('button', { class: 'bouton', type: 'button', onclick: () => { ouvrirChangementMotDePasse().catch(signalerErreur); } }, 'Mot de passe'),
         h('button', { class: 'bouton', type: 'button', onclick: () => { seDeconnecter().catch(signalerErreur); } }, 'Se déconnecter'),
       ]),
+    ]),
+    // Installation sur l'écran d'accueil (icône « Résidence ANIKA »), sauf si déjà installée.
+    estInstallee() ? null : h('div', { class: 'portail-installation', style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.2rem 0 .8rem' }, [
+      h('span', { class: 'legende', texte: '📲 Ajoutez votre espace à l’écran d’accueil : il s’ouvrira comme une application, avec son icône « Résidence ANIKA ».' }),
+      installable()
+        ? h('button', { class: 'bouton bouton-petit bouton-primaire', type: 'button', onclick: (e) => { proposerInstallation().then((r) => { if (r === 'accepted') e.target.closest('.portail-installation')?.remove(); }); } }, 'Installer')
+        : h('span', { class: 'legende', texte: consigneInstallation() }),
     ]),
     erreur
       ? h('div', { class: 'alerte alerte-erreur', texte: `Impossible de charger vos documents : ${erreur.message}. Rechargez la page (F5).` })

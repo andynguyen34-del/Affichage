@@ -7,13 +7,27 @@
 <link rel="stylesheet" href="css/app.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
 <!-- Application installable (écran d'accueil, ouverture sans barre de navigateur). -->
-<link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#1d6a5a">
+<link rel="manifest" id="lien-manifeste" href="/manifest.webmanifest">
+<meta name="theme-color" id="meta-theme" content="#1d6a5a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="LMNP">
-<link rel="apple-touch-icon" href="/icones/icone-180.png">
+<meta name="apple-mobile-web-app-title" id="meta-titre-apple" content="LMNP">
+<link rel="apple-touch-icon" id="lien-icone-apple" href="/icones/icone-180.png">
+<script>
+// Deux applications installables, une par entrée : le manifeste (nom, icône,
+// couleur, page d'ouverture) est choisi avant que le navigateur ne le lise.
+(function () {
+  var coloc = /\/colocataires?\/?$/.test(location.pathname);
+  try { coloc = coloc || (!/\/proprietaires?\/?$/.test(location.pathname) && localStorage.getItem('lmnp-espace') === 'colocataire'); } catch (e) {}
+  if (coloc) {
+    document.getElementById('lien-manifeste').href = '/manifest-colocataire.webmanifest';
+    document.getElementById('meta-theme').content = '#2f5fa8';
+    document.getElementById('meta-titre-apple').content = 'ANIKA';
+    document.getElementById('lien-icone-apple').href = '/icones/icone-colocataire-180.png';
+  }
+})();
+</script>
 </head>
 <body>
 
