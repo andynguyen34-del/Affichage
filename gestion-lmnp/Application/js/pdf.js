@@ -220,9 +220,10 @@ const LIBELLES_ETAT = { neuf: 'Neuf', bon: 'Bon état', usage: 'État d\'usage',
 /**
  * Rapport d'état des lieux : informations, pièces avec photos, compteurs,
  * clés, observations et signatures. `photosParPiece` associe l'identifiant de
- * chaque pièce à ses photos déjà chargées ({octets, legende}).
+ * chaque pièce à ses photos déjà chargées ({octets, legende}) ;
+ * `photosParMeuble` fait de même pour chaque meuble de l'inventaire.
  */
-export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, signatures, plan }) {
+export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosParPiece, photosParMeuble, signatures, plan }) {
   const { document_, page } = await nouvellePage();
 
   page.titre(`État des lieux ${edl.type === 'sortie' ? 'de sortie' : 'd\'entrée'}`);
@@ -279,27 +280,12 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.texte(edl.cles);
   }
 
-  for (const [indexPiece, piece] of (edl.pieces || []).entries()) {
-    page.sousTitre(`${indexPiece + 1}. ${piece.nom || 'Pièce'}`);
-    if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
-    if (piece.commentaire) page.texte(piece.commentaire);
-    // Inventaire du mobilier de la pièce (obligatoire en location meublée).
-    const meubles = (piece.meubles || []).filter((m) => m.nom);
-    if (meubles.length) {
-      page.espace(2);
-      page.texte('Mobilier :', { taille: 9.5, police: 'grasse', couleur: DOUX });
-      for (const meuble of meubles) {
-        page.texte(`- ${meuble.nom}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
-          + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`, { taille: 9.5 });
-      }
-      page.espace(2);
-    }
-    const photos = photosParPiece?.[piece.id] || [];
-    // Reportage photo : deux photos par ligne.
+  // Reportage photo : deux photos par ligne ; `retrait` décale les photos
+  // d'un meuble sous sa ligne d'inventaire.
+  const rangeesPhotos = async (photos, { hauteurMax = 150, retrait = 0 } = {}) => {
     for (let i = 0; i < photos.length; i += 2) {
       const paire = photos.slice(i, i + 2);
-      const hauteurMax = 150;
-      const largeurMax = (A4.largeur - 2 * MARGE - 14) / 2;
+      const largeurMax = (A4.largeur - 2 * MARGE - retrait - 14) / 2;
       page.besoin(hauteurMax + 20);
       const yDepart = page.y;
       let yBas = page.y;
@@ -307,12 +293,33 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
         page.y = yDepart;
         // eslint-disable-next-line no-await-in-loop
         await page.image(paire[j], {
-          largeurMax, hauteurMax, x: MARGE + j * (largeurMax + 14), legende: paire[j].legende || '',
+          largeurMax, hauteurMax, x: MARGE + retrait + j * (largeurMax + 14), legende: paire[j].legende || '',
         });
         yBas = Math.min(yBas, page.y);
       }
       page.y = yBas;
     }
+  };
+
+  for (const [indexPiece, piece] of (edl.pieces || []).entries()) {
+    page.sousTitre(`${indexPiece + 1}. ${piece.nom || 'Pièce'}`);
+    if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
+    if (piece.commentaire) page.texte(piece.commentaire);
+    // Inventaire du mobilier de la pièce (obligatoire en location meublée),
+    // chaque meuble suivi de ses propres photos.
+    const meubles = (piece.meubles || []).filter((m) => m.nom || (photosParMeuble?.[m.id] || []).length);
+    if (meubles.length) {
+      page.espace(2);
+      page.texte('Mobilier :', { taille: 9.5, police: 'grasse', couleur: DOUX });
+      for (const meuble of meubles) {
+        page.texte(`- ${meuble.nom || 'Meuble'}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
+          + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`, { taille: 9.5 });
+        // eslint-disable-next-line no-await-in-loop
+        await rangeesPhotos(photosParMeuble?.[meuble.id] || [], { hauteurMax: 110, retrait: 14 });
+      }
+      page.espace(2);
+    }
+    await rangeesPhotos(photosParPiece?.[piece.id] || []);
   }
 
   if (edl.observations) {

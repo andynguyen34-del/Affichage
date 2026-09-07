@@ -7,7 +7,8 @@ dépenses réelles d'eau et de taxe d'enlèvement des ordures ménagères, solde
 par colocataire), quittances et décomptes PDF déposés sur l'espace de chaque
 colocataire avec e-mail de mise à disposition, bail joint au dossier et
 signé à l'écran (tablette) puis mis à disposition de chaque colocataire,
-états des lieux avec reportage photo, plan du logement à repères numérotés
+états des lieux avec reportage photo (chaque meuble de l'inventaire porte
+aussi ses propres photos), plan du logement à repères numérotés
 et signatures — suivis d'une fenêtre de 3 semaines pendant laquelle chaque
 colocataire dépose ses photos contradictoires depuis son espace. La
 comptabilité, elle, se fait dans votre outil comptable en ligne.
@@ -23,7 +24,8 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v15)** : les règles de sécurité du
+**Important pour cette mise à jour (v20)** : si vous venez d'une version
+antérieure à la v15, les règles de sécurité du
 Storage changent (dépôt des photos contradictoires et des justificatifs
 par les colocataires). La commande de déploiement habituelle les publie
 en même temps que l'application — rien de plus à faire.

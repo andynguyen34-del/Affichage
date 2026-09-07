@@ -69,7 +69,9 @@ export default {
             + 'bouton « 📷 Caméra » pour l’appareil photo de la tablette, « + Photos » pour la galerie '
             + '(compression automatique) : état général, observations, compteurs, clés.',
           'Dans chaque pièce, « + Meuble » constitue l’inventaire du mobilier (nom, quantité, état) : '
-            + 'c’est l’annexe obligatoire du bail meublé, reprise dans le rapport PDF.',
+            + 'c’est l’annexe obligatoire du bail meublé, reprise dans le rapport PDF. Chaque meuble reçoit '
+            + 'ses propres photos (bouton « 📷 » de sa ligne, ou « + Photos » depuis la galerie) : elles '
+            + 'apparaissent sous sa ligne d’inventaire, à l’écran comme dans le rapport.',
           'Ajoutez le plan du logement (photo ou croquis) et posez d’un clic le numéro de chaque pièce dessus : '
             + 'le rapport PDF reprend le plan et ses repères.',
           'Chaque partie signe l’état des lieux à la main sur l’écran de la tablette (les deux bailleurs, '
