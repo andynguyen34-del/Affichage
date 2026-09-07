@@ -31,6 +31,9 @@ plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
 fichiers : c'est normal, et c'est indispensable — la CLI Firebase charge le
 code de la fonction sur votre PC pour l'analyser avant de l'envoyer ; sans
 ce dossier elle s'arrête sur « Couldn't find firebase-functions package »).
+Les lanceurs du dossier `node_modules/.bin` sont préparés pour Windows par
+`Application/corriger-bin-fonctions.mjs` (les liens créés par npm ne
+survivent pas à un zip).
 La commande de déploiement habituelle publie tout ; au premier déploiement,
 le terminal demande d'activer quelques services Google (Cloud Functions,
 Cloud Build, Artifact Registry, Cloud Scheduler, Eventarc) : répondez **Y**
