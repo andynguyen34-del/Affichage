@@ -310,6 +310,12 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.besoin(110);
     page.sousTitre(`${indexPiece + 1}. ${nomPiece}`);
     if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
+    // Postes évalués (murs, plafond, sol, prises et interrupteurs, fenêtres, porte).
+    const elements = (piece.elements || []).filter((e) => e.etat || e.commentaire);
+    for (const element of elements) {
+      page.texte(`${element.nom} : ${LIBELLES_ETAT[element.etat] || element.etat || 'non évalué'}`
+        + (element.commentaire ? ` — ${element.commentaire}` : ''), { taille: 9.5 });
+    }
     if (piece.commentaire) page.texte(piece.commentaire);
     // Photos de la pièce, juste après son descriptif.
     const photosPiece = photosParPiece?.[piece.id] || [];

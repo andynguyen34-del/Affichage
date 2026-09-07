@@ -67,7 +67,9 @@ export default {
         liste([
           'Créez-le depuis la page « États des lieux » (entrée ou sortie), puis photographiez chaque pièce — '
             + 'bouton « 📷 Caméra » pour l’appareil photo de la tablette, « + Photos » pour la galerie '
-            + '(compression automatique) : état général, observations, compteurs, clés.',
+            + '(compression automatique). Chaque pièce présente d’office six postes à évaluer — murs, plafond, sol, '
+            + 'prises et interrupteurs, fenêtres et volets, porte — avec un état et une observation, repris dans le rapport ; '
+            + 'plus l’état général, les observations libres, les compteurs et les clés.',
           'Dans chaque pièce, « + Meuble » constitue l’inventaire du mobilier (nom, quantité, état) : '
             + 'c’est l’annexe obligatoire du bail meublé, reprise dans le rapport PDF. Chaque meuble reçoit '
             + 'ses propres photos (bouton « 📷 » de sa ligne, ou « + Photos » depuis la galerie) : elles '

@@ -19,6 +19,22 @@ const COMPTEURS_PAR_DEFAUT = [
   { nom: 'Eau froide', valeur: '', unite: 'm³' },
   { nom: 'Gaz', valeur: '', unite: 'm³' },
 ];
+// Les postes évalués d'office dans chaque pièce (état + observation).
+const ELEMENTS_PAR_DEFAUT = [
+  { cle: 'murs', nom: 'Murs' },
+  { cle: 'plafond', nom: 'Plafond' },
+  { cle: 'sol', nom: 'Sol' },
+  { cle: 'prises', nom: 'Prises et interrupteurs' },
+  { cle: 'fenetres', nom: 'Fenêtres et volets' },
+  { cle: 'porte', nom: 'Porte' },
+];
+const elementsParDefaut = () => ELEMENTS_PAR_DEFAUT.map((e) => ({ ...e, etat: '', commentaire: '' }));
+/** Les postes d'une pièce, complétés des postes de base manquants (états des lieux créés avant cette version). */
+const elementsDe = (piece) => {
+  const existants = piece.elements || [];
+  return [...ELEMENTS_PAR_DEFAUT.map((e) => existants.find((x) => x.cle === e.cle) || { ...e, etat: '', commentaire: '' }),
+    ...existants.filter((x) => !ELEMENTS_PAR_DEFAUT.some((e) => e.cle === x.cle))];
+};
 const ETATS = [
   { valeur: '', libelle: '—' },
   { valeur: 'neuf', libelle: 'Neuf' },
@@ -72,7 +88,7 @@ async function creerEtatDesLieux(donnees, contexte) {
     date: saisie.date,
     bailId: saisie.bailId,
     locataireIds,
-    pieces: PIECES_PROPOSEES.slice(0, 6).map((nom) => ({ id: crypto.randomUUID(), nom, etatGeneral: '', commentaire: '', photos: [] })),
+    pieces: PIECES_PROPOSEES.slice(0, 6).map((nom) => ({ id: crypto.randomUUID(), nom, etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] })),
     compteurs: COMPTEURS_PAR_DEFAUT.map((c) => ({ ...c })),
     cles: '',
     observations: '',
@@ -195,8 +211,9 @@ function blocPiece(edl, piece, numero) {
         }), 'Pièce retirée.');
       }, { petit: true, type: 'danger' }),
     ]),
+    blocElements(edl, piece),
     h('textarea', {
-      rows: 2, style: 'width:100%', placeholder: 'Observations sur cette pièce (sols, murs, équipements…)',
+      rows: 2, style: 'width:100%;margin-top:.5rem', placeholder: 'Autres observations sur cette pièce (équipements, chauffage, éclairage…)',
       'data-focus': `piece-${piece.id}-commentaire`,
       onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
         const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.commentaire = e.target.value;
@@ -415,6 +432,35 @@ function carteContradictoire(edl, donnees) {
 }
 
 /**
+ * Évaluation des postes de la pièce (murs, plafond, sol, prises et
+ * interrupteurs, fenêtres, porte) : un état et une observation par poste,
+ * repris dans le rapport PDF.
+ */
+function blocElements(edl, piece) {
+  const majElement = (cle, transformation) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+    const cible = x.pieces.find((p) => p.id === piece.id);
+    if (!cible) return;
+    cible.elements = elementsDe(cible);
+    const element = cible.elements.find((e) => e.cle === cle);
+    if (element) transformation(element);
+  }).catch(signalerErreur);
+
+  return h('div', { style: 'display:grid;grid-template-columns:auto minmax(7rem,9rem) 1fr;gap:.3rem .5rem;align-items:center;margin-top:.2rem' },
+    elementsDe(piece).flatMap((element) => [
+      h('span', { style: 'font-size:.9rem', texte: element.nom }),
+      h('select', {
+        'data-focus': `piece-${piece.id}-${element.cle}-etat`, title: `État : ${element.nom.toLowerCase()}`,
+        onchange: (e) => majElement(element.cle, (x) => { x.etat = e.target.value; }),
+      }, ETATS.map((o) => h('option', { value: o.valeur, selected: o.valeur === (element.etat || '') }, o.libelle))),
+      h('input', {
+        value: element.commentaire || '', placeholder: 'observation (trace, fissure, rayure…)',
+        'data-focus': `piece-${piece.id}-${element.cle}-commentaire`, style: 'min-width:0',
+        onchange: (e) => majElement(element.cle, (x) => { x.commentaire = e.target.value; }),
+      }),
+    ]));
+}
+
+/**
  * Inventaire du mobilier de la pièce : chaque meuble avec sa quantité et son
  * état — c'est l'inventaire obligatoire du meublé (annexe du bail), repris
  * dans le rapport PDF.
@@ -602,7 +648,7 @@ function editeur(edl, donnees, contexte) {
     bouton('+ Pièce', async () => {
       const id = crypto.randomUUID();
       await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-        x.pieces = [...(x.pieces || []), { id, nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', photos: [], meubles: [] }];
+        x.pieces = [...(x.pieces || []), { id, nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] }];
       }), 'Pièce ajoutée.');
       focaliser(`piece-${id}-nom`, { selectionner: true });
     }),
