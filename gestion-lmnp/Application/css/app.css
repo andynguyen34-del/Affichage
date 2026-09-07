@@ -389,20 +389,28 @@ textarea { min-height: 4.5rem; resize: vertical; }
   .portail-cadre { padding-top: .8rem; }
 }
 
-/* Éditeur d'état des lieux : un onglet par pièce, puis les sections. */
-.onglets { display: flex; flex-wrap: wrap; gap: .35rem; padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1px solid var(--bordure); }
-.onglet { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .7rem; border: 1px solid var(--bordure-forte); border-radius: 999px;
-  background: var(--fond-carte, #fff); color: inherit; font: inherit; font-size: .92rem; cursor: pointer; max-width: 16rem; }
+/* Éditeur d'état des lieux : bandeau compact fixé en haut de la zone
+   (retour, titre, actions, onglets sur une ligne), puis le détail de l'onglet. */
+.edl-bandeau { position: sticky; top: -1.3rem; z-index: 5; margin: -1.3rem -1.4rem .8rem; padding: .55rem 1.4rem .45rem;
+  background: var(--fond); border-bottom: 1px solid var(--bordure); box-shadow: 0 2px 6px rgba(0, 0, 0, .04); }
+.edl-bandeau-ligne { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.edl-titre { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
+.edl-titre strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.edl-bandeau .onglets { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 0; padding-bottom: .2rem; border-bottom: 0; scrollbar-width: thin; }
+.onglets { display: flex; flex-wrap: wrap; gap: .3rem; padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1px solid var(--bordure); }
+.onglet { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .6rem; border: 1px solid var(--bordure-forte); border-radius: 999px;
+  background: var(--fond-carte, #fff); color: inherit; font: inherit; font-size: .88rem; cursor: pointer; max-width: 14rem; flex: 0 0 auto; }
 .onglet span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .onglet:hover { border-color: var(--accent); }
 .onglet.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
-.onglet-numero { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35rem; height: 1.35rem; border-radius: 50%;
+.onglet-numero { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; border-radius: 50%;
   background: var(--accent-clair); color: var(--accent-fonce); font-size: .78rem; font-weight: 700; }
 .onglet.actif .onglet-numero { background: #fff; color: var(--accent); }
 .onglet-section { margin-left: auto; }
 .onglet-section ~ .onglet-section { margin-left: 0; }
 .piece-detail { padding: .2rem 0; }
-@media (max-width: 700px) { .onglet-section { margin-left: 0; } }
+@media (max-width: 700px) { .onglet-section { margin-left: 0; } .edl-bandeau { margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; } }
+@media print { .edl-bandeau { position: static; } }
 
 /* Page de connexion : choix de l'espace (propriétaires / colocataires). */
 .espaces { display: flex; gap: .4rem; margin: .8rem 0 .2rem; }
