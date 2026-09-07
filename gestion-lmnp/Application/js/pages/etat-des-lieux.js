@@ -186,7 +186,15 @@ function galerie(photos, { cle, surLegende, surRetrait, retrait = false }) {
       h('button', {
         class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer cette photo',
         style: 'position:absolute;top:2px;right:2px;padding:0 .35rem',
-        onclick: () => surRetrait(photo),
+        onclick: async (e) => {
+          e.stopPropagation();
+          const ok = await confirmer({
+            titre: 'Retirer la photo',
+            message: `Retirer la photo ${index + 1}${photo.legende ? ` (« ${photo.legende} »)` : ''} de l’état des lieux ? Elle ne figurera plus dans le rapport.`,
+            libelleValider: 'Retirer la photo', danger: true,
+          });
+          if (ok) surRetrait(photo);
+        },
       }, '✕'),
       h('input', {
         value: photo.legende || '', placeholder: `photo ${index + 1}`, title: 'Légende de la photo (reprise dans le rapport)',
@@ -218,18 +226,28 @@ function vignette(chemin, { surClic = null } = {}) {
     style: 'width:110px;height:82px;border-radius:6px;border:1px solid var(--bordure);overflow:hidden;'
       + `background:#f1f3f5;display:flex;align-items:center;justify-content:center;${surClic ? 'cursor:zoom-in' : ''}`,
   });
+  if (surClic) cadre.addEventListener('click', surClic);
   const charger = () => {
-    cadre.replaceChildren(h('span', { class: 'legende', style: 'font-size:.7rem', texte: '…' }));
+    cadre.replaceChildren(h('span', { class: 'legende', style: 'font-size:.7rem', texte: 'chargement…' }));
     chargerImage(chemin).then((url) => {
       const image = h('img', { src: url, alt: 'photo', style: 'width:110px;height:82px;object-fit:cover;display:block' });
-      if (surClic) image.addEventListener('click', surClic);
+      // Si le navigateur refuse l'adresse locale (blob:), on repasse en data:.
+      image.addEventListener('error', () => {
+        if (image.dataset.repli) { image.replaceWith(h('span', { class: 'legende', style: 'font-size:.68rem', texte: 'image illisible' })); return; }
+        image.dataset.repli = '1';
+        api.lireOctets('etats-des-lieux', chemin).then((octets) => new Promise((resoudre) => {
+          const lecteur = new FileReader();
+          lecteur.onload = () => resoudre(lecteur.result);
+          lecteur.readAsDataURL(new Blob([octets], { type: 'image/jpeg' }));
+        })).then((dataUrl) => { vignettes.set(chemin, dataUrl); image.src = dataUrl; }).catch(() => { image.replaceWith(h('span', { class: 'legende', texte: 'illisible' })); });
+      }, { once: false });
       cadre.replaceChildren(image);
     }).catch((erreur) => {
       const code = erreur?.code || '';
       cadre.title = `${erreur?.message || erreur} ${code}`.trim();
       cadre.replaceChildren(h('div', { style: 'text-align:center;padding:.2rem;line-height:1.2' }, [
         h('div', { style: 'font-size:.68rem;color:var(--danger, #b3261e)', texte: `Photo indisponible${code ? ` (${code.replace('storage/', '')})` : ''}` }),
-        h('button', { class: 'bouton bouton-petit', type: 'button', style: 'margin-top:.2rem;font-size:.7rem', onclick: charger }, 'Réessayer'),
+        h('button', { class: 'bouton bouton-petit', type: 'button', style: 'margin-top:.2rem;font-size:.7rem', onclick: (e) => { e.stopPropagation(); charger(); } }, 'Réessayer'),
       ]));
     });
   };
@@ -272,7 +290,36 @@ function ouvrirVisionneuse(photos, indexDepart, sujet = 'Photo') {
     style: `position:absolute;${style};background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:50%;`
       + 'width:2.8rem;height:2.8rem;font-size:1.4rem;cursor:pointer',
   }, texte);
+  // Enregistrer la photo sur l'appareil : sur tablette/téléphone, la feuille
+  // de partage propose Google Photos (« Importer dans Photos ») ; sinon, téléchargement.
+  const partageDisponible = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+  const enregistrer = async () => {
+    try {
+      const photo = photos[index];
+      const url = await chargerImage(photo.chemin);
+      const blob = await (await fetch(url)).blob();
+      const nom = `${nomFichierTelechargement(`${sujet} ${index + 1}${photo.legende ? ` ${photo.legende}` : ''}`)}.jpg`;
+      const fichier = new File([blob], nom, { type: 'image/jpeg' });
+      if (partageDisponible && navigator.canShare({ files: [fichier] })) {
+        await navigator.share({ files: [fichier], title: nom });
+        return;
+      }
+      const lien = h('a', { href: url, download: nom, style: 'display:none' });
+      document.body.append(lien);
+      lien.click();
+      setTimeout(() => lien.remove(), 1000);
+    } catch (erreur) {
+      if (erreur?.name !== 'AbortError') notifier(`Enregistrement impossible : ${erreur?.message || erreur}`, 'erreur');
+    }
+  };
+  const boutonEnregistrer = h('button', {
+    type: 'button', class: 'bouton bouton-petit visionneuse-enregistrer',
+    style: 'position:absolute;top:.9rem;left:.9rem;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4)',
+    title: partageDisponible ? 'Envoyer la photo vers Google Photos ou une autre application' : 'Télécharger la photo sur cet appareil',
+    onclick: (e) => { e.stopPropagation(); enregistrer(); },
+  }, partageDisponible ? '📤 Enregistrer dans Google Photos…' : '⬇ Télécharger la photo');
   fond.append(
+    boutonEnregistrer,
     boutonFlottant('✕', fermer, 'top:.8rem;right:.8rem'),
     photos.length > 1 ? boutonFlottant('‹', precedent, 'left:.6rem;top:50%;transform:translateY(-50%)') : null,
     photos.length > 1 ? boutonFlottant('›', suivant, 'right:.6rem;top:50%;transform:translateY(-50%)') : null,

@@ -104,7 +104,17 @@ export function ligneTotal(colonnes, valeurs) {
 
 // ---------------------------------------------------------------- messages
 
+// Journal des dernières erreurs (les notifications disparaissent vite ; le
+// journal reste consultable dans Paramètres → Stockage).
+const journal = [];
+export const journalErreurs = () => journal.slice().reverse();
+const consigner = (message, code = '') => {
+  journal.push({ quand: new Date().toISOString().slice(11, 19), message: String(message), code });
+  if (journal.length > 30) journal.shift();
+};
+
 export function notifier(message, ton = '') {
+  if (ton === 'erreur') consigner(message);
   const zone = document.getElementById('notifications');
   const element = h('div', { class: `notification ${ton}`.trim(), texte: message });
   zone.append(element);
@@ -117,7 +127,8 @@ export function notifier(message, ton = '') {
 
 export const signalerErreur = (erreur) => {
   console.error(erreur);
-  notifier(erreur?.message || String(erreur), 'erreur');
+  const code = erreur?.code ? ` [${erreur.code}]` : '';
+  notifier(`${erreur?.message || String(erreur)}${code}`, 'erreur');
 };
 
 // ---------------------------------------------------------------- modales

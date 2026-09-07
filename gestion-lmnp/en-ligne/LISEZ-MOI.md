@@ -24,7 +24,7 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v24)** : si vous venez d'une version
+**Important pour cette mise à jour (v25)** : si vous venez d'une version
 antérieure à la v15, les règles de sécurité du
 Storage changent (dépôt des photos contradictoires et des justificatifs
 par les colocataires). La commande de déploiement habituelle les publie

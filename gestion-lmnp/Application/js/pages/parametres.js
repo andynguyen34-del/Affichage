@@ -5,15 +5,21 @@ import { ouvrirChangementMotDePasse } from '../compte.js';
 import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
-  barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
+  barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs } from '../ui.js';
 import { date } from '../format.js';
+import { VERSION_APP } from '../version.js';
 
 const EXPLICATIONS_STOCKAGE = {
+  'reseau/bloque': 'Le serveur de stockage ne répond pas depuis ce poste, alors que la base de données répond : le réseau '
+    + '(pare-feu ou proxy d’entreprise) bloque firebasestorage.googleapis.com. Les photos et documents s’affichent depuis un '
+    + 'autre réseau (tablette en 4G, connexion personnelle). Si ce poste doit absolument y accéder, demandez l’autorisation '
+    + 'de ce domaine, ou signalez-le pour qu’un relais par l’adresse de l’application soit mis en place.',
+  'storage/retry-limit-exceeded': 'Le serveur de stockage n’a pas répondu à temps (20 s) : réseau lent, coupé, ou qui bloque '
+    + 'firebasestorage.googleapis.com. Réessayez depuis un autre réseau (tablette en 4G, connexion personnelle).',
   'storage/unauthorized': 'Refusé par les règles de sécurité du stockage. Soit ce compte n’est pas reconnu comme gérant '
     + '(Paramètres → Accès), soit l’autorisation croisée Storage → Firestore n’a pas été accordée au déploiement : '
     + 'relancez « firebase deploy --only storage --project gestion-lmnp-anika » et répondez Y à la question « Grant the new role? ».',
   'storage/unauthenticated': 'Session expirée : déconnectez-vous puis reconnectez-vous.',
-  'storage/retry-limit-exceeded': 'Réseau trop lent ou coupé : réessayez avec une meilleure connexion.',
   'storage/quota-exceeded': 'Quota de stockage dépassé (plan Firebase).',
   'storage/unknown': 'Erreur inconnue côté stockage : réessayez ; si elle persiste, envoyez le code ci-dessus.',
 };
@@ -38,15 +44,38 @@ async function testerStockage(zone) {
       return false;
     }
   };
-  const ecrit = await essayer('Écriture d’un fichier de test', async () => { await api.deposerOctets('diagnostic', 'test-stockage.txt', contenu, 'text/plain'); });
+  const joignable = await essayer('Serveur de stockage joignable depuis ce poste', () => api.sonderStockage());
+  const ecrit = joignable && await essayer('Écriture d’un fichier de test', async () => { await api.deposerOctets('diagnostic', 'test-stockage.txt', contenu, 'text/plain'); });
   if (ecrit) {
     await essayer('Relecture du fichier', async () => {
       const lu = await api.lireOctets('diagnostic', 'test-stockage.txt');
       if (lu.length !== contenu.length) throw new Error(`taille lue ${lu.length} ≠ ${contenu.length}`);
       return `${lu.length} octets`;
     });
+    // Exactement le chemin des photos d'état des lieux : une image JPEG
+    // fabriquée sur place, déposée comme une photo, puis relue et affichée.
+    await essayer('Dépôt puis affichage d’une image (comme une photo d’état des lieux)', async () => {
+      const canevas = document.createElement('canvas');
+      canevas.width = 64; canevas.height = 48;
+      const ctx = canevas.getContext('2d');
+      ctx.fillStyle = '#1d6f5c'; ctx.fillRect(0, 0, 64, 48);
+      ctx.fillStyle = '#fff'; ctx.fillRect(8, 8, 48, 32);
+      const image = await new Promise((resoudre) => { canevas.toBlob(resoudre, 'image/jpeg', 0.8); });
+      if (!image) throw new Error('le navigateur n’a pas pu produire l’image JPEG');
+      const depose = await api.deposerFichier('diagnostic', 'test-photo.jpg', image);
+      const octets = await api.lireOctets('diagnostic', depose.chemin);
+      const url = URL.createObjectURL(new Blob([octets], { type: 'image/jpeg' }));
+      await new Promise((resoudre, rejeter) => {
+        const img = new Image();
+        img.onload = () => resoudre();
+        img.onerror = () => rejeter(new Error('image relue mais illisible'));
+        img.src = url;
+      });
+      return `${octets.length} octets, image affichable (${depose.chemin})`;
+    });
   }
   const codes = etapes.filter((e) => !e.ok).map((e) => e.code).filter(Boolean);
+  if (!joignable) codes.unshift('reseau/bloque');
   zone.replaceChildren(
     h('ul', { style: 'margin:.3rem 0 .5rem;padding-left:1.2rem' }, etapes.map((e) => h('li', {}, [
       h('span', { texte: `${e.ok ? '✓' : '✗'} ${e.libelle}` }),
@@ -55,8 +84,20 @@ async function testerStockage(zone) {
     codes.length
       ? h('div', { class: 'alerte alerte-erreur', texte: EXPLICATIONS_STOCKAGE[codes[0]] || `Code d’erreur : ${codes[0]}.` })
       : h('div', { class: 'alerte alerte-info', texte: '✓ Le stockage fonctionne : les photos et documents peuvent être enregistrés et relus depuis ce compte.' }),
-    h('p', { class: 'legende', style: 'margin-top:.5rem', texte: `Compte : ${api.utilisateurEmail() || '—'} · Espace de stockage : ${api.nomStockage() || '—'} · Fichier de test : ${chemin}` }),
+    h('p', { class: 'legende', style: 'margin-top:.5rem', texte: `Compte : ${api.utilisateurEmail() || '—'} · Espace de stockage : ${api.nomStockage() || '—'} · Fichier de test : ${chemin} · Navigateur : ${navigator.userAgent.replace(/\).*$/, ')')}` }),
+    blocJournal(),
   );
+}
+
+/** Les dernières erreurs affichées à l'écran depuis l'ouverture de la page. */
+function blocJournal() {
+  const lignes = journalErreurs();
+  return h('div', { style: 'margin-top:.6rem' }, [
+    h('div', { style: 'font-weight:600;font-size:.9rem', texte: `Dernières erreurs signalées (${lignes.length})` }),
+    lignes.length
+      ? h('ul', { style: 'margin:.3rem 0 0;padding-left:1.2rem;font-size:.85rem' }, lignes.map((l) => h('li', { texte: `${l.quand} — ${l.message}` })))
+      : h('p', { class: 'legende', texte: 'Aucune erreur depuis l’ouverture de l’application.' }),
+  ]);
 }
 
 function carteStockage() {
@@ -258,7 +299,8 @@ export default {
         ['Nom de l’activité', parametres.nomActivite || '—'],
         ['Lieu de signature', parametres.lieuSignature || '—'],
         ['Connecté en tant que', infos.dossier || '—'],
-        ['Version de l’application', infos.version || '—'],
+        ['Version de l’application', `v${VERSION_APP}`],
+        ['Version du format des données', infos.version || '—'],
       ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', { texte: valeur })])))),
     }));
 

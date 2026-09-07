@@ -48,6 +48,11 @@ export async function initialiser() {
   auth = getAuth(app);
   base = getFirestore(app);
   stockage = getStorage(app);
+  // Une lecture qui ne répond pas (serveur de stockage bloqué par un réseau
+  // d'entreprise, par exemple) doit échouer vite et visiblement, pas rester
+  // muette deux minutes : 20 s de tentatives en lecture. Les envois gardent
+  // leur patience par défaut (réseau mobile lent).
+  stockage.maxOperationRetryTime = 20000;
   if (window.__EMULATEURS__) {
     const e = window.__EMULATEURS__;
     connectAuthEmulator(auth, `http://${e.hote}:${e.auth}`, { disableWarnings: true });
@@ -91,6 +96,28 @@ export async function seDeconnecter() { await signOut(auth); }
 export const utilisateurEmail = () => auth?.currentUser?.email || '';
 /** Nom du bucket de stockage (diagnostic). */
 export const nomStockage = () => stockage?.app?.options?.storageBucket || '';
+
+/**
+ * Le serveur de stockage répond-il depuis ce poste ? (diagnostic) Une réponse
+ * HTTP, même « non autorisé », prouve qu'il est joignable ; une absence de
+ * réponse en 8 s signale un réseau qui le bloque.
+ */
+export async function sonderStockage() {
+  const bucket = nomStockage();
+  const emul = window.__EMULATEURS__;
+  const base = emul ? `http://${emul.hote}:${emul.stockage}` : 'https://firebasestorage.googleapis.com';
+  const controleur = new AbortController();
+  const minuterie = setTimeout(() => controleur.abort(), 8000);
+  const depart = performance.now();
+  try {
+    const reponse = await fetch(`${base}/v0/b/${encodeURIComponent(bucket)}/o?maxResults=1`, { signal: controleur.signal, cache: 'no-store' });
+    return `réponse HTTP ${reponse.status} en ${Math.round(performance.now() - depart)} ms`;
+  } catch (erreur) {
+    throw new Error(erreur?.name === 'AbortError'
+      ? 'aucune réponse en 8 secondes : ce réseau bloque probablement le serveur de stockage (firebasestorage.googleapis.com)'
+      : `injoignable (${erreur?.message || erreur}) : ce réseau bloque probablement le serveur de stockage`);
+  } finally { clearTimeout(minuterie); }
+}
 
 /**
  * Envoie l'e-mail « définir / réinitialiser le mot de passe » : le compte
