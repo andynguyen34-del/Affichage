@@ -1,9 +1,10 @@
 {
   "hosting": {
     "public": "public",
-    "ignore": ["firebase.json", "**/.*"],
+    "ignore": ["firebase.json", "**/.*", "functions/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
   "firestore": { "rules": "firestore.rules" },
-  "storage": { "rules": "storage.rules" }
+  "storage": { "rules": "storage.rules" },
+  "functions": { "source": "functions", "runtime": "nodejs20" }
 }

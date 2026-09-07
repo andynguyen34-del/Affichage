@@ -25,6 +25,10 @@ export async function seDeconnecter() { /* rien */ }
 export async function detecterRole() { return 'admin'; }
 export async function lireRoles() { return { admins: [], colocataires: {} }; }
 export async function ecrireRoles() { /* sans objet */ }
+export async function lireDocumentSysteme(nom) {
+  try { return JSON.parse(localStorage.getItem(`lmnp-systeme-${nom}`) || 'null'); } catch { return null; }
+}
+export async function ecrireDocumentSysteme(nom, contenu) { localStorage.setItem(`lmnp-systeme-${nom}`, JSON.stringify(contenu)); }
 export async function publierPortail() { /* sans objet */ }
 export async function lirePortail() { return null; }
 export async function lireMonPortail() { return null; }

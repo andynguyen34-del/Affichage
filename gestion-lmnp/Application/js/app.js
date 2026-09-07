@@ -16,6 +16,8 @@ import { rendrePortail } from './pages/portail.js';
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
 import { VERSION_APP } from './version.js';
+import { nomMois } from './format.js';
+import { verifierAppelAutomatique } from './appel-loyer-client.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -524,6 +526,14 @@ async function ouvrirApplication() {
   document.getElementById('application').hidden = false;
   dessinerSelecteurAnnee();
   dessiner();
+
+  // Appel de loyer automatique : si c'est le jour et que le mois n'a pas encore
+  // été appelé (par la fonction planifiée ou un autre poste), on envoie.
+  if (api.MODE === 'nuage') {
+    verifierAppelAutomatique().then((resultat) => {
+      if (resultat?.envoyes) notifier(`Appel de loyer ${nomMois(resultat.vise.mois)} ${resultat.vise.annee} envoyé à ${resultat.envoyes} colocataire(s).`, 'succes');
+    }).catch((erreur) => console.error('Appel de loyer automatique :', erreur));
+  }
 
   // Qui utilise ce poste ? On le demande une fois, pour tracer « modifié par ».
   if (!localStorage.getItem('lmnp-utilisateur')) {

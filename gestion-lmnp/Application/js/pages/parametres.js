@@ -8,6 +8,9 @@ import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs } from '../ui.js';
 import { date } from '../format.js';
 import { VERSION_APP } from '../version.js';
+import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppels } from '../appel-loyer-client.js';
+import { moisVise, jourEnvoi } from '../appel-loyer.js';
+import { aujourdhui, nomMois, montant } from '../format.js';
 
 const EXPLICATIONS_STOCKAGE = {
   'reseau/bloque': 'Le serveur de stockage ne répond pas depuis ce poste, alors que la base de données répond : le réseau '
@@ -98,6 +101,116 @@ function blocJournal() {
       ? h('ul', { style: 'margin:.3rem 0 0;padding-left:1.2rem;font-size:.85rem' }, lignes.map((l) => h('li', { texte: `${l.quand} — ${l.message}` })))
       : h('p', { class: 'legende', texte: 'Aucune erreur depuis l’ouverture de l’application.' }),
   ]);
+}
+
+async function modifierAppelLoyer() {
+  const actuel = reglageAppel();
+  const saisie = await formulaire({
+    titre: 'Appel de loyer automatique',
+    large: true,
+    aide: 'Chaque colocataire reçoit, au jour choisi, un e-mail avec le montant de sa part du mois, la date limite et vos coordonnées de paiement. '
+      + 'Variables utilisables dans les textes : {prenom} {nom} {mois} {annee} {montant} {date} {logement}.',
+    champs: [
+      { cle: 'actif', libelle: 'Envoi automatique activé', type: 'case' },
+      { cle: 'jour', libelle: 'Jour du mois de l’envoi (1 à 28)', type: 'entier', min: 1, max: 28, requis: true },
+      { cle: 'cible', libelle: 'Loyer appelé', type: 'liste', options: [
+        { valeur: 'courant', libelle: 'celui du mois de l’envoi (ex. : le 1er octobre pour octobre)' },
+        { valeur: 'suivant', libelle: 'celui du mois suivant (ex. : le 25 septembre pour octobre)' },
+      ] },
+      { cle: 'objet', libelle: 'Objet de l’e-mail', type: 'texte', largeur: 'pleine' },
+      { cle: 'paiement', libelle: 'Coordonnées de paiement (IBAN, libellé du virement…)', type: 'zone' },
+      { cle: 'message', libelle: 'Message complémentaire (facultatif)', type: 'zone' },
+      { cle: 'copieBailleur', libelle: 'M’envoyer une copie récapitulative à chaque envoi', type: 'case' },
+    ],
+    valeurs: actuel,
+  });
+  if (!saisie) return;
+  const jour = Math.min(28, Math.max(1, Number(saisie.jour) || 1));
+  await executer(etat.enregistrerParametres({ appelLoyer: { ...actuel, ...saisie, jour } }), null);
+  if (saisie.actif) {
+    const ref = aujourdhui();
+    const vise = moisVise(ref, saisie.cible);
+    const d = new Date(`${ref}T12:00:00`);
+    // Prochain envoi : le jour réglé, ce mois-ci s'il n'est pas passé (fenêtre de 7 jours), sinon le mois prochain.
+    let prochain = new Date(d.getFullYear(), d.getMonth(), jourEnvoi({ jour }, d.getFullYear(), d.getMonth() + 1), 12);
+    if (d.getDate() > prochain.getDate() + 7) prochain = new Date(d.getFullYear(), d.getMonth() + 1, jourEnvoi({ jour }, d.getFullYear(), d.getMonth() + 2), 12);
+    notifier(`Appel de loyer activé : prochain envoi automatique le ${date(prochain.toISOString().slice(0, 10))} (loyer ${saisie.cible === 'suivant' ? 'du mois suivant' : 'du mois en cours'}).`, 'succes');
+  } else notifier('Appel de loyer enregistré (envoi automatique désactivé).', 'succes');
+}
+
+async function testerAppelLoyer() {
+  const saisie = await formulaire({
+    titre: 'Envoyer un e-mail de test',
+    aide: 'L’exemplaire préparé pour le premier colocataire concerné est envoyé à cette adresse, avec la mention [TEST].',
+    champs: [{ cle: 'adresse', libelle: 'Adresse de réception', type: 'texte', requis: true, largeur: 'pleine' }],
+    valeurs: { adresse: api.utilisateurEmail() || '' },
+    libelleValider: 'Envoyer le test',
+  });
+  if (!saisie) return;
+  const modele = await executer(envoyerTest(saisie.adresse.trim()), null);
+  if (modele) notifier(`E-mail de test (exemplaire de ${modele.nom}) déposé pour ${saisie.adresse.trim()} — il part dès que l’extension d’envoi le prend en charge.`, 'succes');
+}
+
+async function envoyerAppelMaintenant(rafraichir = () => {}) {
+  const vise = moisVise(aujourdhui(), reglageAppel().cible);
+  const { courriels, ecartes } = apercuAppels(vise);
+  const journal = await lireJournalAppels();
+  const deja = journal.envois?.[`${vise.annee}-${String(vise.mois).padStart(2, '0')}`];
+  const ok = await confirmer({
+    titre: `${deja ? 'Renvoyer' : 'Envoyer'} l’appel de loyer de ${nomMois(vise.mois)} ${vise.annee}`,
+    message: (deja ? `Cet appel a déjà été envoyé le ${date(deja.le?.slice(0, 10))} (${deja.origine || '?'}). Le renvoyer quand même ? ` : '')
+      + (courriels.length
+        ? `${courriels.length} e-mail(s) : ${courriels.map((c) => `${c.nom} — ${montant(c.montantDu)}`).join(' ; ')}.`
+          + (ecartes.length ? ` Non concernés : ${ecartes.map((e) => `${e.nom} (${e.raison})`).join(', ')}.` : '')
+        : `Aucun e-mail à envoyer (${ecartes.map((e) => `${e.nom} : ${e.raison}`).join(' ; ') || 'pas d’échéance ce mois-ci'}).`),
+    libelleValider: deja ? 'Renvoyer quand même' : 'Envoyer maintenant',
+    danger: Boolean(deja),
+  });
+  if (!ok || !courriels.length) return;
+  const resultat = await executer(envoyerAppels({ ...vise, origine: deja ? 'manuel (renvoi)' : 'manuel', force: Boolean(deja) }), null);
+  if (resultat) notifier(`${resultat.envoyes} appel(s) de loyer envoyé(s) pour ${nomMois(vise.mois)} ${vise.annee}.`, 'succes');
+  rafraichir();
+}
+
+function carteAppelLoyer() {
+  const reglage = reglageAppel();
+  const vise = moisVise(aujourdhui(), reglage.cible);
+  const zone = h('div');
+  const { courriels, ecartes } = apercuAppels(vise);
+  zone.append(
+    h('table', {}, h('tbody', {}, [
+      ['Envoi automatique', reglage.actif ? badge('Activé', 'succes') : badge('Désactivé', 'attente')],
+      ['Jour d’envoi', `le ${jourEnvoi(reglage, vise.annee, vise.mois)} de chaque mois, pour le loyer ${reglage.cible === 'suivant' ? 'du mois suivant' : 'du mois en cours'}`],
+      ['Prochain appel', `${nomMois(vise.mois)} ${vise.annee} — ${courriels.length} colocataire(s) : ${courriels.map((c) => `${c.nom} ${montant(c.montantDu)}`).join(', ') || 'aucun'}`
+        + (ecartes.length ? ` (non concernés : ${ecartes.map((e) => `${e.nom}, ${e.raison}`).join(' ; ')})` : '')],
+    ].map(([libelle, valeur]) => h('tr', {}, [h('td', { texte: libelle }), h('td', {}, valeur)])))),
+    h('div', { class: 'journal-appels', style: 'margin-top:.6rem' }, h('p', { class: 'legende', texte: 'Historique : chargement…' })),
+  );
+  const chargerJournal = () => lireJournalAppels().then((journal) => {
+    const envois = Object.entries(journal.envois || {}).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12);
+    const bloc = zone.querySelector('.journal-appels');
+    bloc.replaceChildren(
+      h('div', { style: 'font-weight:600;font-size:.9rem', texte: 'Historique des envois' }),
+      envois.length
+        ? h('ul', { style: 'margin:.3rem 0 0;padding-left:1.2rem;font-size:.9rem' }, envois.map(([cle, e]) => h('li', {
+          texte: `${nomMois(Number(cle.slice(5, 7)))} ${cle.slice(0, 4)} — envoyé le ${date(e.le?.slice(0, 10))} (${e.origine || '?'}) à ${e.nombre} colocataire(s)`
+            + (e.ecartes?.length ? ` ; non concernés : ${e.ecartes.map((x) => `${x.nom} (${x.raison})`).join(', ')}` : ''),
+        })))
+        : h('p', { class: 'legende', texte: 'Aucun appel envoyé pour l’instant.' }),
+    );
+  }).catch((erreur) => { zone.querySelector('.journal-appels').replaceChildren(h('p', { class: 'legende', texte: `Historique illisible : ${erreur.message}` })); });
+  chargerJournal();
+  return carte({
+    titre: 'Appel de loyer automatique',
+    aide: 'Un e-mail à chaque colocataire avec sa part du mois, la date limite et vos coordonnées de paiement. '
+      + 'L’envoi part le jour réglé, par la fonction planifiée du serveur ou à la première ouverture de l’application ce jour-là.',
+    actions: [
+      bouton('Réglages', () => modifierAppelLoyer().catch(signalerErreur), { petit: true }),
+      bouton('E-mail de test…', () => testerAppelLoyer().catch(signalerErreur), { petit: true }),
+      bouton('Envoyer maintenant…', () => envoyerAppelMaintenant(chargerJournal).catch(signalerErreur), { petit: true, type: 'primaire' }),
+    ],
+    corps: zone,
+  });
 }
 
 function carteStockage() {
@@ -333,6 +446,7 @@ export default {
     }));
 
     if (api.MODE === 'nuage') conteneur.append(carteAcces(donnees));
+    if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer());
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
     conteneur.append(carte({

@@ -24,8 +24,13 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v25)** : si vous venez d'une version
-antérieure à la v15, les règles de sécurité du
+**Important pour cette mise à jour (v26)** : la livraison contient
+désormais un dossier `functions/` (fonction planifiée d'appel de loyer, voir
+plus bas). La commande de déploiement habituelle la publie avec le reste ;
+au premier déploiement, le terminal demande d'activer quelques services
+Google (Cloud Functions, Cloud Build, Artifact Registry, Cloud Scheduler,
+Eventarc) : répondez **Y** à chaque question. Comptez 3 à 5 minutes de
+plus. Si vous venez d'une version antérieure à la v15, les règles de sécurité du
 Storage changent (dépôt des photos contradictoires et des justificatifs
 par les colocataires). La commande de déploiement habituelle les publie
 en même temps que l'application — rien de plus à faire.
@@ -155,6 +160,37 @@ l'extension officielle **Trigger Email from Firestore** :
 
 Tant que l'extension n'est pas installée, les courriels restent en file :
 rien n'est perdu, ils partiront après l'installation.
+
+## L'appel de loyer automatique (v26)
+
+Dans l'application : Paramètres → **Appel de loyer automatique** →
+« Réglages » : activez l'envoi, choisissez le jour du mois (par exemple
+le 1er), le loyer appelé (celui du mois de l'envoi, ou du mois suivant),
+l'objet, vos coordonnées de paiement (IBAN…) et un message facultatif.
+Chaque colocataire reçoit alors, ce jour-là, un e-mail avec sa part du
+mois (loyer + charges, au prorata si le bail commence en cours de mois),
+le reste à régler s'il a déjà versé une partie, la date limite et vos
+coordonnées de paiement. Le second destinataire (garant, parent) reçoit
+copie, et vous recevez un récapitulatif.
+
+- **« E-mail de test… »** envoie un exemplaire à l'adresse de votre choix,
+  tout de suite, sans toucher aux colocataires.
+- **« Envoyer maintenant… »** déclenche l'appel du mois à la main.
+- L'**historique** évite tout doublon : un mois appelé ne l'est jamais deux
+  fois, quel que soit le poste ou le mécanisme qui l'a fait.
+
+Deux mécanismes d'envoi se complètent :
+1. la **fonction planifiée** du dossier `functions/`, exécutée sur le
+   serveur chaque jour à 8 h 10 (heure de Paris), qui envoie si c'est le jour
+   — sans qu'il soit besoin d'ouvrir l'application ;
+2. à défaut (fonction non déployée, ou coupure), l'application envoie
+   elle-même à sa **première ouverture** à partir du jour réglé.
+
+Les e-mails partent par l'extension Trigger Email (voir ci-dessus) : tant
+qu'elle n'est pas installée, ils restent en file dans la collection `mail`.
+
+Coût : la fonction tourne quelques secondes par jour ; avec Cloud Scheduler
+(3 tâches gratuites) cela reste à 0 €/mois sur le plan Blaze.
 
 ## Reprendre les données après cette mise à jour
 

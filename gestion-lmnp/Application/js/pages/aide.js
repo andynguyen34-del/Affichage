@@ -24,6 +24,10 @@ export default {
           'Les quittances, décomptes de régularisation et restitutions de dépôt sont édités à l’identité '
             + 'visuelle ANIKA (polices, cachet). Chaque colocataire peut avoir un second destinataire '
             + '(parent, garant…) qui reçoit copie des notifications — champ « Courriel — 2e destinataire ».',
+          ['Un ', h('strong', { texte: 'appel de loyer' }),
+            ' part automatiquement par e-mail à chaque colocataire au jour choisi (Paramètres → « Appel de loyer automatique ») : '
+            + 'sa part du mois, la date limite, vos coordonnées de paiement. « E-mail de test… » vous en envoie un exemplaire ; '
+            + '« Envoyer maintenant… » déclenche l’appel du mois à la main. L’historique évite tout doublon.'],
           ['Quand le mois est soldé : bouton ', h('strong', { texte: 'Quittance' }),
             ' — le PDF est déposé sur l’espace du colocataire, téléchargeable, et un clic envoie '
             + 'l’e-mail de mise à disposition. « Imprimer » édite la version papier.'],

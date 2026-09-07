@@ -1,0 +1,12 @@
+{
+  "name": "gestion-lmnp-fonctions",
+  "description": "Fonction planifiée : appel de loyer mensuel par e-mail (dépôt dans la collection « mail », envoyée par l'extension Trigger Email).",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

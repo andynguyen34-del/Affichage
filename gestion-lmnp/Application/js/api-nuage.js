@@ -375,6 +375,16 @@ export async function ecrireRoles(roles) {
   await setDoc(documentRoles(), roles);
 }
 
+// systeme/{nom} : petits documents de fonctionnement (journal des appels de
+// loyer…), réservés aux gérants.
+export async function lireDocumentSysteme(nom) {
+  const photo = await getDoc(doc(base, 'systeme', nom));
+  return photo.exists() ? photo.data() : null;
+}
+export async function ecrireDocumentSysteme(nom, contenu) {
+  await setDoc(doc(base, 'systeme', nom), contenu);
+}
+
 // portail/{e-mail} : ce que voit un colocataire connecté — son nom et la liste
 // de ses documents. Écrit par les gérants, lu par le colocataire concerné.
 const cleEmail = (email) => String(email || '').trim().toLowerCase();
