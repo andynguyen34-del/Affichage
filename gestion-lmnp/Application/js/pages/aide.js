@@ -134,8 +134,10 @@ export default {
     conteneur.append(carte({
       titre: 'L’envoi des e-mails',
       corps: h('div', { class: 'aide-bloc' }, [
-        p('Les notifications partent par l’extension Firebase « Trigger Email » (installation en 4 clics, '
-          + 'voir le guide de livraison). Tant qu’elle n’est pas installée, les envois restent en file — rien n’est perdu.'),
+        p('L’application dépose chaque e-mail (quittance, décompte, bail, état des lieux, rappels, appels de loyer) '
+          + 'dans la file « mail » de la base ; la fonction d’envoi du projet (envoiMail, via Gmail, expéditeur a-nguyen@sfr.fr) '
+          + 'le fait partir dans les secondes qui suivent et inscrit le résultat (delivery : SUCCESS ou ERROR). '
+          + 'Tant que cette fonction n’est pas déployée, les envois restent en file — rien n’est perdu.'),
       ]),
     }));
 

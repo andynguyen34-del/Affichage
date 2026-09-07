@@ -148,7 +148,7 @@ async function testerAppelLoyer() {
   });
   if (!saisie) return;
   const modele = await executer(envoyerTest(saisie.adresse.trim()), null);
-  if (modele) notifier(`E-mail de test (exemplaire de ${modele.nom}) déposé pour ${saisie.adresse.trim()} — il part dès que l’extension d’envoi le prend en charge.`, 'succes');
+  if (modele) notifier(`E-mail de test (exemplaire de ${modele.nom}) déposé pour ${saisie.adresse.trim()} — il part dans les secondes qui suivent par la fonction d’envoi (envoiMail).`, 'succes');
 }
 
 async function envoyerAppelMaintenant(rafraichir = () => {}) {

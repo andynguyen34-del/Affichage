@@ -413,8 +413,9 @@ export async function supprimerPortail(email) {
 // --------------------------------------------------------------------- courriel
 
 /**
- * Met un courriel en file d'envoi (collection « mail », lue par l'extension
- * Firebase « Trigger Email » — voir le guide de mise en place). Les pièces
+ * Met un courriel en file d'envoi (collection « mail », lue par la fonction
+ * envoiMail du projet, qui expédie via Gmail et inscrit le résultat dans le
+ * champ delivery — même format que l'extension Trigger Email). Les pièces
  * jointes sont passées en base64.
  */
 export async function envoyerCourriel({ destinataires, sujet, html, piecesJointes = [] }) {

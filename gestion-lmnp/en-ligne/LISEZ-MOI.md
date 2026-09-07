@@ -152,21 +152,28 @@ Il se connecte alors à la même adresse que vous et ne voit que son espace :
 ses quittances, l'état des lieux, son bail. Les règles de sécurité lui
 interdisent tout le reste.
 
-## L'envoi des quittances par e-mail (une fois)
+## L'envoi des e-mails (fonction `envoiMail`)
 
-L'application dépose chaque notification de mise à disposition (avec le
-lien vers l'espace colocataire) dans la collection Firestore « mail ». Pour que l'envoi parte réellement, installez
-l'extension officielle **Trigger Email from Firestore** :
+L'application dépose chaque e-mail (quittances, décomptes, bail, état des
+lieux, rappels, appels de loyer) dans la collection Firestore « mail », au
+format `{ to, message: { subject, html, attachments } }`. C'est la fonction
+**`envoiMail`** du projet — déployée séparément, depuis le dossier
+`deploiementLMNPv23/functions/` (codebase « default », Node 22, région
+europe-west9) — qui l'expédie par Gmail (expéditeur « Andy Nguyen
+<a-nguyen@sfr.fr> », mot de passe d'application dans le secret
+`GMAIL_APP_PASSWORD`) et inscrit le résultat dans le champ `delivery` du
+document (`state` : SUCCESS ou ERROR, avec le détail).
 
-1. Console Firebase → Extensions → rechercher « Trigger Email » → Installer.
-2. « Email documents collection » : `mail`.
-3. « SMTP connection URI » : votre compte d'envoi. Le plus simple :
-   un compte gratuit Brevo (300 courriels/jour) — l'URI est de la forme
-   `smtps://IDENTIFIANT:CLE@smtp-relay.brevo.com:465`.
-4. Laissez le reste par défaut et validez.
+L'extension « Trigger Email » n'est plus utilisée : ne l'installez pas, les
+courriels partiraient en double.
 
-Tant que l'extension n'est pas installée, les courriels restent en file :
-rien n'est perdu, ils partiront après l'installation.
+Cette livraison ne contient pas `envoiMail` et ne la modifie pas : son
+`firebase.json` ne déclare que le codebase `appel-loyer` (voir ci-dessous),
+et la CLI Firebase ne supprime jamais une fonction d'un autre codebase.
+Il n'est donc pas nécessaire de recopier le dossier `functions/` de la v23
+dans les livraisons suivantes ; si vous le faites quand même, il est ignoré.
+Pour mettre à jour `envoiMail`, déployez depuis son propre dossier avec
+`firebase deploy --only functions`.
 
 ## L'appel de loyer automatique (v26, dossier `functions-appel-loyer/`)
 
@@ -194,9 +201,8 @@ Deux mécanismes d'envoi se complètent :
    elle-même à sa **première ouverture** à partir du jour réglé.
 
 Les e-mails sont déposés dans la collection Firestore `mail`, comme
-toutes les notifications de l'application : ils partent par le mécanisme
-d'envoi en place (fonction `envoiMail` par Gmail, ou extension Trigger
-Email — un seul des deux, sinon chaque courriel partirait en double).
+toutes les notifications de l'application : la fonction `envoiMail` les
+expédie (voir la section précédente).
 
 Coût : la fonction tourne quelques secondes par jour ; avec Cloud Scheduler
 (3 tâches gratuites) cela reste à 0 €/mois sur le plan Blaze.
