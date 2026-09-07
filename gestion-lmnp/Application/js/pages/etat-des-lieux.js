@@ -45,6 +45,9 @@ const ETATS = [
 
 // Identifiant de l'état des lieux ouvert en édition (état de la page).
 let edlOuvert = null;
+// Onglet ouvert dans l'éditeur, par état des lieux : 'piece:<id>', 'plan',
+// 'releves', 'signatures' ou 'contradictoire'.
+const ongletsActifs = new Map();
 
 // Vignettes déjà chargées : chemin → URL d'objet.
 const vignettes = new Map();
@@ -341,7 +344,7 @@ function ouvrirVisionneuse(photos, indexDepart, sujet = 'Photo') {
 }
 
 function blocPiece(edl, piece, numero) {
-  return h('div', { style: 'border:1px solid var(--bordure);border-radius:8px;padding: .8rem;margin-bottom:.8rem' }, [
+  return h('div', { class: 'piece-detail' }, [
     h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem' }, [
       h('span', {
         class: 'badge badge-attente', title: 'Numéro de la pièce sur le plan',
@@ -365,9 +368,12 @@ function blocPiece(edl, piece, numero) {
       bouton('+ Photos', () => ajouterPhotos(edl, piece), { petit: true, titre: 'Choisir des photos dans la galerie' }),
       bouton('✕ Pièce', async () => {
         const ok = await confirmer({ titre: 'Retirer la pièce', message: `Retirer « ${piece.nom} » et ses photos du rapport ?`, libelleValider: 'Retirer', danger: true });
-        if (ok) await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-          x.pieces = x.pieces.filter((p) => p.id !== piece.id);
-        }), 'Pièce retirée.');
+        if (ok) {
+          ongletsActifs.delete(edl.id);
+          await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+            x.pieces = x.pieces.filter((p) => p.id !== piece.id);
+          }), 'Pièce retirée.');
+        }
       }, { petit: true, type: 'danger' }),
     ]),
     blocElements(edl, piece),
@@ -806,60 +812,37 @@ async function genererRapport(edl, donnees) {
     : 'Rapport généré, téléchargé et rangé dans Documents.', 'succes');
 }
 
-function editeur(edl, donnees, contexte) {
-  const conteneur = h('div');
-  conteneur.append(barreOutils([
-    bouton('← Retour à la liste', () => { edlOuvert = null; contexte.allerA('etat-des-lieux'); }),
-    bouton('+ Pièce', async () => {
-      const id = crypto.randomUUID();
-      await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-        x.pieces = [...(x.pieces || []), { id, nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] }];
-      }), 'Pièce ajoutée.');
-      focaliser(`piece-${id}-nom`, { selectionner: true });
-    }),
-    bouton('Générer le rapport PDF', () => genererRapport(edl, donnees).catch(signalerErreur), { type: 'primaire' }),
-  ]));
-
-  conteneur.append(carte({
-    titre: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${date(edl.date)}`,
-    aide: edl.statut === 'finalise' ? 'Rapport déjà généré — toute modification demandera une nouvelle génération.' : 'Brouillon — tout est modifiable.',
-    corps: h('div', {}, (edl.pieces || []).map((piece, index) => blocPiece(edl, piece, index + 1))),
-  }));
-
-  conteneur.append(cartePlan(edl));
-  conteneur.append(carteContradictoire(edl, donnees));
-
-  conteneur.append(carte({
-    titre: 'Relevés des compteurs et clés',
-    corps: h('div', {}, [
-      ...(edl.compteurs || []).map((compteur, index) => h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem' }, [
-        h('span', { style: 'min-width:7rem', texte: compteur.nom }),
-        h('input', {
-          value: compteur.valeur || '', placeholder: 'relevé', 'data-focus': `compteur-${index}`,
-          onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-            if (x.compteurs?.[index]) x.compteurs[index].valeur = e.target.value;
-          }).catch(signalerErreur),
-        }),
-        h('span', { class: 'legende', texte: compteur.unite || '' }),
-      ])),
-      h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-top:.6rem' }, [
-        h('span', { style: 'min-width:7rem', texte: 'Clés remises' }),
-        h('input', {
-          value: edl.cles || '', placeholder: 'ex. : 3 clés d’entrée, 1 badge, 1 clé boîte aux lettres', style: 'flex:1', 'data-focus': 'cles',
-          onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.cles = e.target.value; }).catch(signalerErreur),
-        }),
-      ]),
-      h('textarea', {
-        rows: 2, style: 'width:100%;margin-top:.6rem', placeholder: 'Observations générales', 'data-focus': 'observations',
-        onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.observations = e.target.value; }).catch(signalerErreur),
-      }, edl.observations || ''),
+function carteReleves(edl) {
+  return h('div', {}, [
+    h('p', { class: 'legende', texte: 'Relevés des compteurs le jour de l’état des lieux, clés remises et observations générales.' }),
+    ...(edl.compteurs || []).map((compteur, index) => h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem' }, [
+      h('span', { style: 'min-width:7rem', texte: compteur.nom }),
+      h('input', {
+        value: compteur.valeur || '', placeholder: 'relevé', 'data-focus': `compteur-${index}`,
+        onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+          if (x.compteurs?.[index]) x.compteurs[index].valeur = e.target.value;
+        }).catch(signalerErreur),
+      }),
+      h('span', { class: 'legende', texte: compteur.unite || '' }),
+    ])),
+    h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-top:.6rem' }, [
+      h('span', { style: 'min-width:7rem', texte: 'Clés remises' }),
+      h('input', {
+        value: edl.cles || '', placeholder: 'ex. : 3 clés d’entrée, 1 badge, 1 clé boîte aux lettres', style: 'flex:1', 'data-focus': 'cles',
+        onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.cles = e.target.value; }).catch(signalerErreur),
+      }),
     ]),
-  }));
+    h('textarea', {
+      rows: 3, style: 'width:100%;margin-top:.6rem', placeholder: 'Observations générales', 'data-focus': 'observations',
+      onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.observations = e.target.value; }).catch(signalerErreur),
+    }, edl.observations || ''),
+  ]);
+}
 
-  conteneur.append(carte({
-    titre: 'Signatures des parties',
-    aide: 'Chaque partie signe à l’écran, au doigt ou à la souris — idéalement sur place, le jour de l’état des lieux.',
-    corps: h('div', { style: 'display:flex;gap:1rem;flex-wrap:wrap' },
+function carteSignatures(edl, donnees) {
+  return h('div', {}, [
+    h('p', { class: 'legende', texte: 'Chaque partie signe à l’écran, au doigt ou à la souris — idéalement sur place, le jour de l’état des lieux.' }),
+    h('div', { style: 'display:flex;gap:1rem;flex-wrap:wrap' },
       partiesAttendues(edl, donnees).map((partie) => {
         const signature = (edl.signatures || []).find((s) => s.cle === partie.cle);
         return h('div', { style: 'border:1px solid var(--bordure);border-radius:8px;padding:.7rem;min-width:14rem' }, [
@@ -872,7 +855,80 @@ function editeur(edl, donnees, contexte) {
           ]),
         ]);
       })),
+  ]);
+}
+
+/**
+ * L'éditeur : un onglet par pièce (tout le détail de la pièce sur un seul
+ * écran, sans ascenseur), puis les onglets Plan, Relevés & clés, Signatures
+ * et Photos contradictoires.
+ */
+function editeur(edl, donnees, contexte) {
+  const conteneur = h('div');
+  const pieces = edl.pieces || [];
+  const onglets = [
+    ...pieces.map((piece, index) => ({ cle: `piece:${piece.id}`, numero: index + 1, libelle: piece.nom || 'Pièce', piece })),
+    { cle: 'plan', libelle: '🗺️ Plan' },
+    { cle: 'releves', libelle: '🔢 Relevés & clés' },
+    { cle: 'signatures', libelle: `✍️ Signatures (${(edl.signatures || []).length}/${partiesAttendues(edl, donnees).length})` },
+    { cle: 'contradictoire', libelle: '📷 Photos contradictoires' },
+  ];
+  let actif = ongletsActifs.get(edl.id);
+  if (!onglets.some((o) => o.cle === actif)) actif = onglets[0].cle;
+  ongletsActifs.set(edl.id, actif);
+
+  const zone = h('div', { class: 'onglet-contenu' });
+  const barre = h('div', { class: 'onglets', role: 'tablist' });
+
+  const rendreContenu = () => {
+    const onglet = onglets.find((o) => o.cle === actif) || onglets[0];
+    let contenu;
+    if (onglet.piece) contenu = blocPiece(edl, onglet.piece, onglet.numero);
+    else if (onglet.cle === 'plan') contenu = cartePlan(edl);
+    else if (onglet.cle === 'releves') contenu = carteReleves(edl);
+    else if (onglet.cle === 'signatures') contenu = carteSignatures(edl, donnees);
+    else contenu = carteContradictoire(edl, donnees);
+    zone.replaceChildren(contenu);
+    for (const b of barre.querySelectorAll('.onglet')) b.classList.toggle('actif', b.dataset.onglet === actif);
+  };
+  const choisir = (cle) => {
+    actif = cle;
+    ongletsActifs.set(edl.id, cle);
+    rendreContenu();
+    zone.scrollIntoView({ block: 'nearest' });
+  };
+
+  for (const onglet of onglets) {
+    barre.append(h('button', {
+      type: 'button', role: 'tab', class: `onglet${onglet.piece ? ' onglet-piece' : ' onglet-section'}`,
+      'data-onglet': onglet.cle, 'data-focus': `onglet-${onglet.cle}`,
+      title: onglet.piece ? `Pièce ${onglet.numero} : ${onglet.libelle}` : onglet.libelle,
+      onclick: () => choisir(onglet.cle),
+    }, onglet.piece
+      ? [h('span', { class: 'onglet-numero', texte: String(onglet.numero) }), h('span', { texte: onglet.libelle })]
+      : onglet.libelle));
+  }
+
+  conteneur.append(barreOutils([
+    bouton('← Retour à la liste', () => { edlOuvert = null; contexte.allerA('etat-des-lieux'); }),
+    bouton('+ Pièce', async () => {
+      const id = crypto.randomUUID();
+      ongletsActifs.set(edl.id, `piece:${id}`);
+      await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+        x.pieces = [...(x.pieces || []), { id, nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] }];
+      }), 'Pièce ajoutée.');
+      focaliser(`piece-${id}-nom`, { selectionner: true });
+    }),
+    bouton('Générer le rapport PDF', () => genererRapport(edl, donnees).catch(signalerErreur), { type: 'primaire' }),
+  ]));
+
+  conteneur.append(carte({
+    titre: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${date(edl.date)}`,
+    aide: (edl.statut === 'finalise' ? 'Rapport déjà généré — toute modification demandera une nouvelle génération. ' : 'Brouillon — tout est modifiable. ')
+      + 'Un onglet par pièce ; puis le plan, les relevés et clés, les signatures et les photos contradictoires.',
+    corps: h('div', {}, [barre, zone]),
   }));
+  rendreContenu();
 
   return conteneur;
 }

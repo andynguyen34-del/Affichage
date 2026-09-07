@@ -69,7 +69,7 @@ export default {
       titre: 'L’état des lieux — le déroulé de la visite',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Créez-le depuis la page « États des lieux » (entrée ou sortie), puis photographiez chaque pièce — '
+          'Créez-le depuis la page « États des lieux » (entrée ou sortie) : un onglet par pièce (tout son détail sur un écran), puis les onglets Plan, Relevés & clés, Signatures et Photos contradictoires. Photographiez chaque pièce — '
             + 'bouton « 📷 Caméra » pour l’appareil photo de la tablette, « + Photos » pour la galerie '
             + '(compression automatique). Chaque pièce présente d’office six postes à évaluer — murs, plafond, sol, '
             + 'prises et interrupteurs, fenêtres et volets, porte — avec un état et une observation, repris dans le rapport ; '

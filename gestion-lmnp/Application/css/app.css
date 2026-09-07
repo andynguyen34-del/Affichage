@@ -388,3 +388,18 @@ textarea { min-height: 4.5rem; resize: vertical; }
   .portail-entete { flex-direction: column; padding: 1.1rem 1.2rem; }
   .portail-cadre { padding-top: .8rem; }
 }
+
+/* Éditeur d'état des lieux : un onglet par pièce, puis les sections. */
+.onglets { display: flex; flex-wrap: wrap; gap: .35rem; padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1px solid var(--bordure); }
+.onglet { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .7rem; border: 1px solid var(--bordure-forte); border-radius: 999px;
+  background: var(--fond-carte, #fff); color: inherit; font: inherit; font-size: .92rem; cursor: pointer; max-width: 16rem; }
+.onglet span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onglet:hover { border-color: var(--accent); }
+.onglet.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
+.onglet-numero { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35rem; height: 1.35rem; border-radius: 50%;
+  background: var(--accent-clair); color: var(--accent-fonce); font-size: .78rem; font-weight: 700; }
+.onglet.actif .onglet-numero { background: #fff; color: var(--accent); }
+.onglet-section { margin-left: auto; }
+.onglet-section ~ .onglet-section { margin-left: 0; }
+.piece-detail { padding: .2rem 0; }
+@media (max-width: 700px) { .onglet-section { margin-left: 0; } }
