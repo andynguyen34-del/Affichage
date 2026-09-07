@@ -32,8 +32,11 @@
       "port": 5001
     }
   },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs20"
-  }
+  "functions": [
+    {
+      "source": "functions-appel-loyer",
+      "codebase": "appel-loyer",
+      "runtime": "nodejs22"
+    }
+  ]
 }

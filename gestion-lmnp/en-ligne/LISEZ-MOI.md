@@ -24,13 +24,20 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v26)** : la livraison contient
-désormais un dossier `functions/` (fonction planifiée d'appel de loyer, voir
-plus bas). La commande de déploiement habituelle la publie avec le reste ;
-au premier déploiement, le terminal demande d'activer quelques services
-Google (Cloud Functions, Cloud Build, Artifact Registry, Cloud Scheduler,
-Eventarc) : répondez **Y** à chaque question. Comptez 3 à 5 minutes de
-plus. Si vous venez d'une version antérieure à la v15, les règles de sécurité du
+**Important pour cette mise à jour (v27)** : la livraison contient un
+dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer, voir
+plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`. La
+commande de déploiement habituelle la publie avec le reste ; au premier
+déploiement, le terminal demande d'activer quelques services Google (Cloud
+Functions, Cloud Build, Artifact Registry, Cloud Scheduler, Eventarc) :
+répondez **Y** à chaque question. Comptez 3 à 5 minutes de plus.
+
+Cette fonction **cohabite** avec toute autre fonction déjà déployée dans le
+projet (par exemple `envoiMail`, la fonction d'envoi des courriels par
+Gmail) : chaque codebase est déployé et nettoyé séparément, déployer ce
+dossier ne touche pas aux autres. Si malgré tout le terminal proposait de
+supprimer une fonction que vous n'avez pas dans ce dossier, répondez **N**.
+Si vous venez d'une version antérieure à la v15, les règles de sécurité du
 Storage changent (dépôt des photos contradictoires et des justificatifs
 par les colocataires). La commande de déploiement habituelle les publie
 en même temps que l'application — rien de plus à faire.
@@ -161,7 +168,7 @@ l'extension officielle **Trigger Email from Firestore** :
 Tant que l'extension n'est pas installée, les courriels restent en file :
 rien n'est perdu, ils partiront après l'installation.
 
-## L'appel de loyer automatique (v26)
+## L'appel de loyer automatique (v26, dossier `functions-appel-loyer/`)
 
 Dans l'application : Paramètres → **Appel de loyer automatique** →
 « Réglages » : activez l'envoi, choisissez le jour du mois (par exemple
@@ -180,14 +187,16 @@ copie, et vous recevez un récapitulatif.
   fois, quel que soit le poste ou le mécanisme qui l'a fait.
 
 Deux mécanismes d'envoi se complètent :
-1. la **fonction planifiée** du dossier `functions/`, exécutée sur le
+1. la **fonction planifiée** du dossier `functions-appel-loyer/`, exécutée sur le
    serveur chaque jour à 8 h 10 (heure de Paris), qui envoie si c'est le jour
    — sans qu'il soit besoin d'ouvrir l'application ;
 2. à défaut (fonction non déployée, ou coupure), l'application envoie
    elle-même à sa **première ouverture** à partir du jour réglé.
 
-Les e-mails partent par l'extension Trigger Email (voir ci-dessus) : tant
-qu'elle n'est pas installée, ils restent en file dans la collection `mail`.
+Les e-mails sont déposés dans la collection Firestore `mail`, comme
+toutes les notifications de l'application : ils partent par le mécanisme
+d'envoi en place (fonction `envoiMail` par Gmail, ou extension Trigger
+Email — un seul des deux, sinon chaque courriel partirait en double).
 
 Coût : la fonction tourne quelques secondes par jour ; avec Cloud Scheduler
 (3 tâches gratuites) cela reste à 0 €/mois sur le plan Blaze.

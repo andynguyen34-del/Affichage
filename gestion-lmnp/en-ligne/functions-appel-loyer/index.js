@@ -3,6 +3,9 @@
 // dépose un e-mail par colocataire dans la collection « mail » (envoyée par
 // l'extension Trigger Email) et l'inscrit au journal systeme/appels-loyer.
 // Le calcul et le texte sont ceux de l'application (lib/appel-loyer.js).
+// Codebase « appel-loyer », indépendant de toute autre fonction du projet
+// (par exemple une fonction d'envoi de courriels déployée séparément) :
+// déployer ce dossier ne modifie ni ne supprime les autres fonctions.
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { initializeApp } from 'firebase-admin/app';

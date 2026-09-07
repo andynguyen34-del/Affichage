@@ -1,19 +1,19 @@
 // Construit la bibliothèque partagée de la fonction planifiée (appel de
 // loyer) : le module appel-loyer.js et ses dépendances (calculs, formats)
-// regroupés en un seul fichier ESM pour Node, dans en-ligne/functions/lib/.
+// regroupés en un seul fichier ESM pour Node, dans en-ligne/functions-appel-loyer/lib/.
 import esbuild from 'esbuild';
 import path from 'node:path';
 import fs from 'node:fs';
 
 const ici = path.dirname(new URL(import.meta.url).pathname);
-const sortie = path.join(path.dirname(ici), 'en-ligne', 'functions', 'lib', 'appel-loyer.js');
+const sortie = path.join(path.dirname(ici), 'en-ligne', 'functions-appel-loyer', 'lib', 'appel-loyer.js');
 fs.mkdirSync(path.dirname(sortie), { recursive: true });
 await esbuild.build({
   entryPoints: [path.join(ici, 'js/appel-loyer.js')],
   bundle: true,
   format: 'esm',
   platform: 'node',
-  target: 'node20',
+  target: 'node22',
   charset: 'utf8',
   outfile: sortie,
   banner: { js: '// Fichier généré par Application/construire-fonctions.mjs — ne pas modifier à la main.' },
