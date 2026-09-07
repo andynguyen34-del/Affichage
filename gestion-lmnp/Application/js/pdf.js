@@ -341,6 +341,7 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
         if (photosMeuble.length) page.besoin(14 + 110 + 20);
         page.texte(`- ${nomMeuble}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
           + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`
+          + (meuble.commentaire ? ` — ${meuble.commentaire}` : '')
           + (photosMeuble.length ? ` — ${photosMeuble.length} photo${photosMeuble.length > 1 ? 's' : ''} ci-dessous` : ''), { taille: 9.5 });
         // eslint-disable-next-line no-await-in-loop
         await rangeesPhotos(photosMeuble, nomMeuble, { hauteurMax: 110, retrait: 14 });

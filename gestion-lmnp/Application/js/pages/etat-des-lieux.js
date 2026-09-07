@@ -480,7 +480,7 @@ function blocMeubles(edl, piece) {
         const id = crypto.randomUUID();
         await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
           const cible = x.pieces.find((p) => p.id === piece.id);
-          if (cible) cible.meubles = [...(cible.meubles || []), { id, nom: '', quantite: 1, etat: 'bon', photos: [] }];
+          if (cible) cible.meubles = [...(cible.meubles || []), { id, nom: '', quantite: 1, etat: 'bon', commentaire: '', photos: [] }];
         }), null);
         focaliser(`meuble-${id}-nom`);
       }, { petit: true }),
@@ -515,6 +515,12 @@ function blocMeubles(edl, piece) {
           }), 'Meuble retiré.'),
         }, '✕'),
       ]),
+      h('input', {
+        value: meuble.commentaire || '', placeholder: 'Observation sur ce meuble (rayure, tache, pied abîmé…)',
+        'data-focus': `meuble-${meuble.id}-commentaire`,
+        style: 'display:block;width:calc(100% - 1rem);margin:.25rem 0 0 1rem;font-size:.9rem;box-sizing:border-box',
+        onchange: (e) => majMeuble(meuble.id, (m) => { m.commentaire = e.target.value; }),
+      }),
       galerie(meuble.photos || [], {
         cle: `meuble-${meuble.id}`, retrait: true,
         surLegende: (photo, texte) => majMeuble(meuble.id, (m) => {
