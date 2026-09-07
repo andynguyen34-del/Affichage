@@ -25,3 +25,12 @@ if (!/export\s*\{[^}]*\bnomMois\b/.test(code)) {
   fs.writeFileSync(sortie, code, 'utf8');
 }
 console.log(`Écrit : ${sortie} (${(fs.statSync(sortie).size / 1024).toFixed(0)} Ko)`);
+
+// Module du contradictoire (bilan des réponses) pour la signature à distance.
+const sortieContradictoire = path.join(path.dirname(sortie), 'contradictoire.js');
+await esbuild.build({
+  entryPoints: [path.join(ici, 'js/contradictoire.js')],
+  bundle: true, format: 'esm', platform: 'node', target: 'node22', charset: 'utf8', outfile: sortieContradictoire,
+  banner: { js: '// Fichier généré par Application/construire-fonctions.mjs — ne pas modifier à la main.' },
+});
+console.log(`Écrit : ${sortieContradictoire}`);

@@ -17,6 +17,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import { traiterSignature } from './signature-distante.js';
 
 const TAILLE_MAX_COLOCATAIRE = 10 * 1024 * 1024;
 
@@ -93,6 +94,13 @@ export async function traiter(req, res) {
 
   if (op === 'sonde') {
     res.json({ ok: true, email: qui.email, gerant: qui.gerant, bucket: bucket.name });
+    return;
+  }
+
+  // Signature à distance de l'état des lieux (colocataire) : voir signature-distante.js.
+  if (op === 'signature-envoyer' || op === 'signature-confirmer') {
+    try { await traiterSignature(op, req, res, qui); }
+    catch (erreur) { if (erreur?.statut) throw refus(erreur.statut, erreur.message); throw erreur; }
     return;
   }
 

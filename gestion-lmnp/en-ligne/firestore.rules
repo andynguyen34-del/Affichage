@@ -39,6 +39,15 @@ service cloud.firestore {
           && fenetreOuverte();
         allow delete: if estGerant();
       }
+
+      // Signature à distance : écrite par la fonction serveur seulement
+      // (code e-mail validé) ; lue par le colocataire et les gérants.
+      match /signatures/{edlId} {
+        allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+        allow write: if false;
+      }
+      // Codes de signature : serveur seulement.
+      match /codes/{edlId} { allow read, write: if false; }
     }
 
     // File d'envoi des courriels (extension Trigger Email) : dépôt par les

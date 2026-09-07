@@ -33,6 +33,9 @@ export async function publierPortail() { /* sans objet */ }
 export async function lirePortail() { return null; }
 export async function lireMonPortail() { return null; }
 export async function lireReponsesContradictoire() { return null; }
+export async function lireSignatureContradictoire() { return null; }
+export async function envoyerCodeSignature() { throw new Error('Signature à distance : version en ligne seulement.'); }
+export async function confirmerSignature() { throw new Error('Signature à distance : version en ligne seulement.'); }
 export async function ecrireMesReponses() { /* sans objet */ }
 export async function completerPortail() { /* sans objet */ }
 export async function supprimerPortail() { /* sans objet */ }

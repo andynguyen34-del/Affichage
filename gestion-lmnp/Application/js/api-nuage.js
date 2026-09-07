@@ -7,7 +7,7 @@ import { initializeApp } from 'firebase/app';
 import { nomFichierTelechargement } from './format.js';
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
-  connectAuthEmulator, setPersistence, browserLocalPersistence,
+  connectAuthEmulator, setPersistence, browserSessionPersistence,
   sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider,
 } from 'firebase/auth';
 import {
@@ -59,7 +59,8 @@ export async function initialiser() {
     connectFirestoreEmulator(base, e.hote, e.firestore);
     connectStorageEmulator(stockage, e.hote, e.stockage);
   }
-  try { await setPersistence(auth, browserLocalPersistence); } catch { /* session seulement */ }
+  // Session limitée à la fenêtre : fermer l'onglet ou l'application déconnecte (v38).
+  try { await setPersistence(auth, browserSessionPersistence); } catch { /* mémoire seulement */ }
   // Le serveur de stockage est-il joignable d'ici ? Sinon, on passe tout de
   // suite par le relais de l'application, sans attendre un premier échec.
   if (!relais) sonderStockage().catch((erreur) => activerRelais(erreur.message));
@@ -507,6 +508,28 @@ export async function ecrireMesReponses(edlId, reponses) {
     majLe: new Date().toISOString(),
   });
 }
+
+/** Signature à distance d'un colocataire (portail/{email}/signatures/{edlId}), écrite par le serveur. */
+export async function lireSignatureContradictoire(email, edlId) {
+  const photo = await getDoc(doc(base, 'portail', cleEmail(email), 'signatures', String(edlId)));
+  return photo.exists() ? photo.data() : null;
+}
+
+async function appelSignature(op, corps) {
+  const jeton = await auth?.currentUser?.getIdToken();
+  if (!jeton) throw new Error('Connexion requise.');
+  const reponse = await fetch(`/api/fichiers?op=${op}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
+  });
+  const donnees = await reponse.json().catch(() => ({}));
+  if (!reponse.ok) throw new Error(donnees.erreur || `Signature : erreur ${reponse.status}.`);
+  return donnees;
+}
+
+/** Demande l'envoi du code de signature à l'adresse du colocataire connecté. */
+export const envoyerCodeSignature = (edlId) => appelSignature('signature-envoyer', { edlId });
+/** Confirme la signature avec le code reçu ; l'image est la signature tracée (data URL PNG). */
+export const confirmerSignature = (edlId, code, image) => appelSignature('signature-confirmer', { edlId, code, image });
 
 /** Le gérant complète un espace colocataire (échéance du mois, fenêtre…) sans toucher au reste. */
 export async function completerPortail(email, complement) {

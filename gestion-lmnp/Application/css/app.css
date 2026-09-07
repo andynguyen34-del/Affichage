@@ -454,6 +454,10 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .edl-bloc-titre { font-size: .82rem; font-weight: 600; margin-top: .2rem; }
 .edl-releves { padding: .6rem .8rem; border: 1px solid var(--bordure); border-radius: 9px; margin-bottom: .5rem; display: grid; gap: .4rem; }
 .edl-pied { display: flex; justify-content: space-between; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .6rem .2rem 0; }
+.edl-signature { margin-top: .8rem; padding: .7rem .8rem; border: 1px solid var(--bordure); border-radius: 9px; background: var(--fond-carte); display: grid; gap: .45rem; }
+.edl-signature-faite { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.edl-signature-image { width: 180px; height: 70px; object-fit: contain; background: #fff; border: 1px solid var(--bordure); border-radius: 6px; }
+.edl-code-champ { width: 9rem; font-size: 1.2rem; letter-spacing: .3em; text-align: center; }
 .badge-etat { background: var(--succes-clair); color: var(--succes); }
 .badge-etat.etat-usage { background: var(--attention-clair); color: var(--attention); }
 .badge-etat.etat-mauvais { background: var(--alerte-clair); color: var(--alerte); }

@@ -24,6 +24,17 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Logements & baux → Justificatifs des colocataires ».
 
+**Nouveau en v38 — signature des colocataires depuis leur espace, rapport
+PDF recomposé, déconnexion à la fermeture.** Après ses réponses
+contradictoires, le colocataire signe au doigt sur son espace et confirme
+avec un code à 6 chiffres reçu par e-mail (15 minutes) ; la signature est
+enregistrée par la fonction serveur (`/api/fichiers?op=signature-…`, dans la
+fonction `fichiers` existante) et reprise dans l'onglet « Signatures » et le
+rapport. Le rapport PDF est plus dense (en-tête sur deux blocs, plan réduit,
+tableaux par pièce, photos sur trois colonnes, pages numérotées). Fermer la
+fenêtre ou l'application déconnecte. À déployer : hébergement, règles
+Firestore, fonctions (commande habituelle).
+
 **Nouveau en v37 — état des lieux contradictoire sur l'espace colocataire,
 espace réorganisé.** À l'ouverture de la fenêtre contradictoire (durée
 réglable, 21 jours par défaut), l'état des lieux complet est publié sur
@@ -231,7 +242,20 @@ confortable.
    « Rapport PDF avec annexe contradictoire » : le rapport est regénéré avec
    une annexe par colocataire (date de réponse, points d'accord, remarques,
    photos) et republié sur les espaces.
-4. Sécurité : le colocataire n'écrit que dans ses propres réponses
+4. **Signature à distance (v38)** : une fois ses réponses complètes, le
+   colocataire signe au doigt sur son espace, reçoit un code à 6 chiffres à
+   son adresse (valable 15 minutes, 5 essais) et le saisit. La fonction
+   serveur vérifie le code et écrit `portail/{email}/signatures/{edlId}`
+   (image, date et heure, mode « e-mail », adresse masquée, empreinte du
+   code) — le navigateur du colocataire ne peut ni antidater ni modifier.
+   Il peut encore compléter ses remarques et photos jusqu'à la fin de la
+   fenêtre. Côté gérant, l'onglet « Signatures » affiche « signé à distance »
+   avec date, heure et adresse masquée, propose « Rappel par e-mail » aux
+   colocataires qui n'ont pas signé, et le compteur du bandeau en tient
+   compte ; le rapport PDF indique le mode de chaque signature. Les
+   bailleurs signent toujours sur la tablette, et un colocataire peut aussi
+   signer sur la tablette.
+5. Sécurité : le colocataire n'écrit que dans ses propres réponses
    (`portail/{email}/reponses/{edlId}`), uniquement pendant la fenêtre (règle
    Firestore) ; il ne lit que son espace et les photos partagées.
 
@@ -244,6 +268,24 @@ marqué « réglé » dès que la quittance est publiée), **État des lieux**
 (contradictoire), **Quittances** et **Bail & documents** (rangés par année),
 **Justificatifs**, **Mon compte** (mot de passe, icône « Résidence ANIKA »,
 adresse de connexion, déconnexion). Une pastille signale ce qui attend.
+
+## Le rapport PDF d'état des lieux (v38)
+
+En-tête sur deux blocs (Logement | Parties), ligne de résumé (pièces, postes,
+meubles, photos, relevés, clés), plan réduit à droite avec sa légende et les
+observations générales à gauche ; une bande de titre par pièce avec l'état
+général, tableau Poste / État / Observation, photos de la pièce sur trois
+colonnes, tableau Mobilier / Qté / État / Observation puis photos du
+mobilier ; pièce sans évaluation ni photo : « Rien à signaler » ; signatures
+sur trois colonnes (mode et date) ; annexe contradictoire en tableau par
+colocataire ; pied de page « page n / N » avec le titre du document.
+
+## Connexion et fermeture (v38)
+
+La session ne vaut que pour la fenêtre : fermer l'onglet, la fenêtre ou
+l'application installée déconnecte (bailleurs et colocataires), et le verrou
+« un seul poste » est libéré. Un nouvel onglet ouvert à la main demande une
+connexion.
 
 ## Icônes de lancement, une par entrée (v36)
 

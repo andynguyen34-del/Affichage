@@ -12,6 +12,7 @@ import { estInstallee, installable, proposerInstallation, consigneInstallation }
 import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js';
 import { ouvrirChangementMotDePasse } from '../compte.js';
 import { pointsDe, bilanReponses, toutDaccord, estRepondu, libelleEtat } from '../contradictoire.js';
+import { demanderSignature } from '../signature.js';
 
 const LIBELLES_TYPE = {
   quittance: { libelle: 'Quittance de loyer', pluriel: 'Quittances de loyer', icone: '🧾' },
@@ -91,8 +92,10 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
   const points = pointsDe(apercu);
   const conteneur = h('section', { class: 'portail-section portail-edl' });
   let reponses = {};
+  let signature = null; // portail/{email}/signatures/{edlId}, écrite par le serveur
   let minuterie = null;
   let enregistrement = Promise.resolve();
+  const etatPourAccueil = () => ({ ...bilanReponses(apercu, reponses), signe: Boolean(signature) });
 
   const enregistrer = () => {
     clearTimeout(minuterie);
@@ -109,7 +112,8 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
     reponses = { ...reponses, [cle]: { accord, texte: texte !== undefined ? texte : (accord ? '' : (actuel.texte || '')) } };
     enregistrer();
     dessinerEntete();
-    surChangement(bilanReponses(apercu, reponses));
+    dessinerSignature();
+    surChangement(etatPourAccueil());
   };
 
   // Photos du colocataire, par pièce (nom de fichier « {numéro}-{pièce} {horodatage}.jpg »).
@@ -264,19 +268,88 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
         enregistrer();
         dessinerEntete();
         dessinerPieces();
-        surChangement(bilanReponses(apercu, reponses));
+        dessinerSignature();
+        surChangement(etatPourAccueil());
         notifier('Tous les points restants marqués « d’accord ».', 'succes');
       } }, 'Tout est d’accord pour le reste'),
     ]) : null);
   };
 
-  conteneur.append(h('h2', { texte: '📷 État des lieux contradictoire' }), entete, zonePieces);
+  // ---- signature à distance : tracé, code reçu par e-mail, enregistrement côté serveur
+  const zoneSignature = h('div', { class: 'edl-signature' });
+  const dessinerSignature = () => {
+    const bilan = bilanReponses(apercu, reponses);
+    const heure = (iso) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    let corps;
+    if (signature) {
+      corps = [
+        h('div', { class: 'edl-signature-faite' }, [
+          h('img', { src: signature.image, alt: 'Votre signature', class: 'edl-signature-image' }),
+          h('div', {}, [
+            h('div', { style: 'font-weight:600', texte: `✓ Signé le ${date(signature.signeLe.slice(0, 10))} à ${heure(signature.signeLe)} depuis votre espace` }),
+            h('div', { class: 'legende', texte: `Validation par code envoyé à ${signature.emailMasque || 'votre adresse'}. ${ouverte ? 'Vous pouvez encore compléter vos remarques et photos jusqu’à la fin de la période ; votre signature porte sur l’état des lieux.' : ''}` }),
+          ]),
+        ]),
+      ];
+    } else if (!ouverte) {
+      corps = [h('p', { class: 'legende', texte: 'La période de réponse est terminée : la signature n’est plus possible depuis votre espace. Votre bailleur peut vous faire signer sur sa tablette.' })];
+    } else if (!apercu || (bilan.total > 0 && !bilan.complet)) {
+      corps = [h('p', { class: 'legende', texte: `Répondez d’abord à tous les points (${bilan.total - bilan.repondus} restant${bilan.total - bilan.repondus > 1 ? 's' : ''}), ou utilisez « Tout est d’accord pour le reste » : la signature devient alors possible.` })];
+    } else {
+      let image = null;
+      const zoneCode = h('div', { class: 'edl-code', hidden: true });
+      const champCode = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, placeholder: '6 chiffres', class: 'edl-code-champ', 'aria-label': 'Code reçu par e-mail' });
+      const message = h('p', { class: 'legende' });
+      const demanderCode = async () => {
+        message.textContent = 'Envoi du code…';
+        try {
+          const r = await api.envoyerCodeSignature(contradictoire.edlId);
+          message.textContent = `Un code à 6 chiffres vient d’être envoyé à ${r.envoyeA} (valable 15 minutes). Saisissez-le pour confirmer votre signature.`;
+          zoneCode.hidden = false; champCode.focus();
+        } catch (erreur) { message.textContent = ''; notifier(erreur.message, 'erreur'); }
+      };
+      const confirmer = async () => {
+        const code = champCode.value.replace(/\D/g, '');
+        if (code.length !== 6) { notifier('Saisissez les 6 chiffres du code.', 'erreur'); return; }
+        try {
+          const r = await api.confirmerSignature(contradictoire.edlId, code, image);
+          signature = { image, signeLe: r.signeLe, mode: r.mode, emailMasque: r.emailMasque };
+          notifier('Signature enregistrée. Merci !', 'succes');
+          dessinerSignature();
+          surChangement(etatPourAccueil());
+        } catch (erreur) { notifier(erreur.message, 'erreur'); }
+      };
+      const boutonSigner = h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: async () => {
+        const tracee = await demanderSignature({ titre: 'Signer l’état des lieux', nom: '' });
+        if (!tracee) return;
+        image = tracee;
+        boutonSigner.textContent = '✓ Signature tracée — refaire';
+        await demanderCode();
+      } }, '✍️ Signer l’état des lieux');
+      zoneCode.append(
+        h('div', { style: 'display:flex;gap:.5rem;align-items:center;flex-wrap:wrap' }, [
+          champCode,
+          h('button', { class: 'bouton bouton-primaire bouton-petit', type: 'button', onclick: () => confirmer().catch(signalerErreur) }, 'Confirmer'),
+          h('button', { class: 'bouton bouton-petit', type: 'button', onclick: () => demanderCode().catch(signalerErreur) }, 'Renvoyer un code'),
+        ]),
+      );
+      corps = [
+        h('p', { class: 'legende', texte: 'Vos réponses sont complètes. En signant, vous reconnaissez l’exactitude de l’état des lieux, photographies comprises, sous réserve de vos remarques. Un code vous sera envoyé par e-mail pour confirmer.' }),
+        h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap' }, [boutonSigner]),
+        message, zoneCode,
+      ];
+    }
+    zoneSignature.replaceChildren(h('div', { class: 'edl-bloc-titre', texte: '✍️ Votre signature' }), ...corps);
+  };
+
+  conteneur.append(h('h2', { texte: '📷 État des lieux contradictoire' }), entete, zonePieces, zoneSignature);
   dessinerEntete();
   zonePieces.append(h('p', { class: 'legende', texte: 'Chargement…' }));
   Promise.all([
     api.lireReponsesContradictoire(email, contradictoire.edlId).then((d) => { reponses = d?.reponses || {}; }).catch(() => {}),
+    api.lireSignatureContradictoire(email, contradictoire.edlId).then((d) => { signature = d || null; }).catch(() => {}),
     rechargerFichiers(),
-  ]).then(() => { dessinerEntete(); dessinerPieces(); surChangement(bilanReponses(apercu, reponses)); });
+  ]).then(() => { dessinerEntete(); dessinerPieces(); dessinerSignature(); surChangement(etatPourAccueil()); });
   return conteneur;
 }
 
@@ -377,10 +450,17 @@ function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, a
   if (contradictoire && contradictoire.finLe >= aujourdhui()) {
     const bilan = etatEdl;
     const fait = bilan && bilan.complet;
+    const signe = Boolean(bilan && bilan.signe);
     taches.push({ icone: '📷', urgent: !fait, fait,
       titre: fait ? `État des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : 'd’entrée'} : vos réponses sont complètes` : `Répondre à l’état des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : 'd’entrée'} du ${date(contradictoire.dateEdl)}`,
       detail: `${bilan && bilan.total ? `${bilan.total - bilan.repondus} point(s) à voir · ` : ''}jusqu'au ${dateLongue(contradictoire.finLe)} inclus`,
       action: fait ? 'Revoir' : 'Continuer', rubrique: 'edl' });
+    if (fait) {
+      taches.push({ icone: '✍️', urgent: !signe, fait: signe,
+        titre: signe ? 'État des lieux signé depuis votre espace' : 'Signer l’état des lieux',
+        detail: signe ? 'Validé par code e-mail' : `Signature au doigt puis code reçu par e-mail · jusqu'au ${dateLongue(contradictoire.finLe)} inclus`,
+        action: signe ? 'Voir' : 'Signer', rubrique: 'edl' });
+    }
   }
   for (const categorie of justificatifsManquants || []) {
     taches.push({ icone: '📎', titre: `Fournir : ${categorie.libelle.toLowerCase()}`, detail: categorie.periodicite || '', action: 'Déposer', rubrique: 'justificatifs' });
@@ -470,7 +550,7 @@ export async function rendrePortail({ seDeconnecter }) {
   const pastilles = () => {
     const p = { accueil: 0, edl: 0, quittances: 0, documents: 0, justificatifs: 0, compte: 0 };
     const c = portail?.contradictoire;
-    if (c && c.finLe >= aujourdhui() && !(etatPortail.edl && etatPortail.edl.complet)) p.edl = 1;
+    if (c && c.finLe >= aujourdhui() && !(etatPortail.edl && etatPortail.edl.complet && etatPortail.edl.signe)) p.edl = 1;
     p.justificatifs = etatPortail.justificatifsManquants.length;
     p.accueil = p.edl + p.justificatifs;
     return p;

@@ -112,7 +112,7 @@ export default {
           'Chaque partie signe l’état des lieux à la main sur l’écran de la tablette (les deux bailleurs, '
             + 'Andy et Karine, puis chaque colocataire) — et faites signer le bail dans la foulée '
             + '(« Logements & baux » → Bail signé).',
-          'Le rapport PDF (plan, photos, signatures) se télécharge et est déposé sur l’espace de chaque colocataire.',
+          'Le rapport PDF (en-tête sur deux blocs, plan réduit, une bande par pièce avec tableaux des postes et du mobilier, photos sur trois colonnes, signatures, annexe contradictoire, pages numérotées) se télécharge et est déposé sur l’espace de chaque colocataire.',
           'Les photos et documents sont stockés dans l’espace Firebase Storage du projet (Google Cloud, Europe) : '
             + 'dossier « etats-des-lieux » pour les photos, « documents » pour les PDF, « portail » pour ce qui est remis aux colocataires. '
             + 'Depuis un réseau qui bloque ce serveur (poste professionnel), l’application les fait transiter par sa propre adresse, sans rien changer pour vous ; '
@@ -123,6 +123,11 @@ export default {
             + 'La durée se règle à l’ouverture (21 jours par défaut) et la date de fin reste modifiable ensuite. '
             + '« Relever les réponses » les affiche côté gérant, « Rappel par e-mail » relance ceux qui n’ont pas répondu, '
             + '« Rapport PDF avec annexe contradictoire » regénère le rapport avec les réponses et photos de chacun et le republie.'],
+          ['Les colocataires ', h('strong', { texte: 'signent depuis leur espace' }),
+            ', une fois leurs réponses complètes : signature au doigt, puis code à 6 chiffres reçu par e-mail (valable 15 minutes). '
+            + 'La signature, sa date et la preuve du code sont enregistrées par le serveur ; l’onglet « Signatures » la montre « signée à distance », '
+            + 'avec un rappel par e-mail pour ceux qui n’ont pas signé, et le rapport PDF l’indique. Le colocataire peut encore compléter ses remarques jusqu’à la fin de la fenêtre. '
+            + 'Vous pouvez toujours le faire signer sur la tablette.'],
         ]),
       ]),
     }));
@@ -159,6 +164,16 @@ export default {
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
             + '« Logements & baux » → « Justificatifs des colocataires » → Relever, avec rappel par e-mail de ce qui manque.',
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
+      titre: 'Connexion et fermeture',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          'Fermer la fenêtre, l’onglet ou l’application (balayage sur tablette) déconnecte : à la prochaine ouverture, la page de connexion s’affiche. Le verrou « un seul poste » est libéré aussitôt. Cela vaut pour les bailleurs et les colocataires.',
+          'Un nouvel onglet ouvert à la main demande aussi une connexion : la session ne vaut que pour la fenêtre où elle a été ouverte.',
         ]),
       ]),
     }));

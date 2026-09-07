@@ -48,6 +48,35 @@ const ETATS = [
 
 // Identifiant de l'état des lieux ouvert en édition (état de la page).
 let edlOuvert = null;
+// Signatures données à distance par les colocataires (portail/{email}/signatures/{edlId}),
+// chargées par état des lieux : { locataireId → { image, signeLe, mode, emailMasque } }.
+const signaturesDistantes = new Map();
+
+/** Charge (ou recharge) les signatures à distance des colocataires d'un état des lieux. */
+async function chargerSignaturesDistantes(edl, donnees) {
+  const resultat = new Map();
+  for (const id of edl.locataireIds || []) {
+    const locataire = donnees.locataires.find((l) => l.id === id);
+    const email = String(locataire?.email || '').trim().toLowerCase();
+    if (!email) continue;
+    try {
+      /* eslint-disable no-await-in-loop */
+      const signature = await api.lireSignatureContradictoire(email, edl.id);
+      if (signature?.image) resultat.set(id, signature);
+    } catch { /* espace non lisible : rien */ }
+  }
+  signaturesDistantes.set(edl.id, resultat);
+  return resultat;
+}
+
+/** Signature d'une partie : sur la tablette (edl.signatures) ou à distance (colocataire). */
+function signatureDe(edl, partie) {
+  const locale = (edl.signatures || []).find((s) => s.cle === partie.cle);
+  if (locale) return { ...locale, mode: 'tablette' };
+  const distante = partie.locataireId ? signaturesDistantes.get(edl.id)?.get(partie.locataireId) : null;
+  return distante ? { ...distante, cle: partie.cle, nom: partie.nom, mode: 'distance' } : null;
+}
+const nombreSignatures = (edl, donnees) => partiesAttendues(edl, donnees).filter((p) => signatureDe(edl, p)).length;
 // Onglet ouvert dans l'éditeur, par état des lieux : 'piece:<id>', 'plan',
 // 'releves', 'signatures' ou 'contradictoire'.
 const ongletsActifs = new Map();
@@ -849,8 +878,8 @@ function partiesAttendues(edl, donnees) {
 }
 
 async function genererRapport(edl, donnees, { annexe = false } = {}) {
-  const manquantes = partiesAttendues(edl, donnees)
-    .filter((p) => !(edl.signatures || []).some((s) => s.cle === p.cle));
+  await chargerSignaturesDistantes(edl, donnees);
+  const manquantes = partiesAttendues(edl, donnees).filter((p) => !signatureDe(edl, p));
   if (manquantes.length) {
     const ok = await confirmer({
       titre: 'Signatures manquantes',
@@ -884,10 +913,16 @@ async function genererRapport(edl, donnees, { annexe = false } = {}) {
     }
   }
 
-  const signatures = partiesAttendues(edl, donnees).map((partie) => ({
-    nom: partie.nom,
-    image: (edl.signatures || []).find((s) => s.cle === partie.cle)?.image || null,
-  }));
+  const signatures = partiesAttendues(edl, donnees).map((partie) => {
+    const signature = signatureDe(edl, partie);
+    return {
+      nom: partie.nom,
+      image: signature?.image || null,
+      signeLe: signature?.signeLe || '',
+      mode: signature?.mode || '',
+      emailMasque: signature?.emailMasque || '',
+    };
+  });
 
   // Plan avec repères, s'il a été fourni.
   let plan = null;
@@ -987,22 +1022,50 @@ function carteReleves(edl) {
 }
 
 function carteSignatures(edl, donnees) {
-  return h('div', {}, [
-    h('p', { class: 'legende', texte: 'Chaque partie signe à l’écran, au doigt ou à la souris — idéalement sur place, le jour de l’état des lieux.' }),
-    h('div', { style: 'display:flex;gap:1rem;flex-wrap:wrap' },
-      partiesAttendues(edl, donnees).map((partie) => {
-        const signature = (edl.signatures || []).find((s) => s.cle === partie.cle);
-        return h('div', { style: 'border:1px solid var(--bordure);border-radius:8px;padding:.7rem;min-width:14rem' }, [
-          h('div', { style: 'font-weight:600;margin-bottom:.4rem', texte: partie.nom }),
-          signature
-            ? h('img', { src: signature.image, alt: 'signature', style: 'width:170px;height:64px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--bordure)' })
-            : h('div', { class: 'legende', texte: 'Pas encore signé' }),
-          h('div', { style: 'margin-top:.5rem' }, [
-            bouton(signature ? 'Signer à nouveau' : 'Signer', () => signer(edl, donnees, partie), { petit: true, type: signature ? undefined : 'primaire' }),
-          ]),
-        ]);
-      })),
-  ]);
+  const zone = h('div');
+  const heure = (iso) => (iso && iso.includes('T') ? ` à ${new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : '');
+  const dessiner = () => {
+    zone.replaceChildren(
+      h('p', { class: 'legende', texte: 'Les bailleurs signent à l’écran, au doigt ou à la souris, idéalement sur place le jour de l’état des lieux. '
+        + 'Chaque colocataire signe depuis son espace, à la fin de ses réponses contradictoires, avec un code reçu par e-mail ; il peut aussi signer ici, sur la tablette.' }),
+      h('div', { style: 'display:flex;gap:1rem;flex-wrap:wrap' },
+        partiesAttendues(edl, donnees).map((partie) => {
+          const signature = signatureDe(edl, partie);
+          const locataire = partie.locataireId ? donnees.locataires.find((l) => l.id === partie.locataireId) : null;
+          return h('div', { class: 'signature-partie', style: 'border:1px solid var(--bordure);border-radius:8px;padding:.7rem;min-width:14rem;max-width:20rem' }, [
+            h('div', { style: 'font-weight:600;margin-bottom:.4rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap' }, [
+              partie.nom,
+              signature?.mode === 'distance' ? badge('signé à distance', 'info') : null,
+            ]),
+            signature
+              ? h('img', { src: signature.image, alt: 'signature', style: 'width:170px;height:64px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--bordure)' })
+              : h('div', { class: 'legende', texte: partie.locataireId
+                ? (edl.contradictoireFinLe ? `Pas encore signé · peut signer depuis son espace jusqu'au ${date(edl.contradictoireFinLe)}` : 'Pas encore signé')
+                : 'Pas encore signé' }),
+            signature ? h('div', { class: 'legende', style: 'margin-top:.3rem', texte: signature.mode === 'distance'
+              ? `Depuis son espace le ${date(String(signature.signeLe).slice(0, 10))}${heure(signature.signeLe)} · code e-mail validé (${signature.emailMasque || ''})`
+              : `Sur la tablette le ${date(String(signature.signeLe).slice(0, 10))}` }) : null,
+            h('div', { style: 'margin-top:.5rem', class: 'groupe-boutons' }, [
+              bouton(signature ? 'Signer à nouveau ici' : 'Signer ici', () => signer(edl, donnees, partie), { petit: true, type: signature ? undefined : 'primaire' }),
+              !signature && locataire?.email && edl.contradictoireFinLe && edl.contradictoireFinLe >= aujourdhui()
+                ? bouton('Rappel par e-mail', () => rappelerSignature(edl, donnees, locataire).catch(signalerErreur), { petit: true }) : null,
+            ]),
+          ]);
+        })),
+    );
+  };
+  dessiner();
+  chargerSignaturesDistantes(edl, donnees).then(() => { dessiner(); const compteur = document.querySelector('.onglet[data-onglet="signatures"]'); if (compteur) compteur.textContent = `✍️ Signatures ${nombreSignatures(edl, donnees)}/${partiesAttendues(edl, donnees).length}`; });
+  return zone;
+}
+
+async function rappelerSignature(edl, donnees, locataire) {
+  await executer(api.envoyerCourriel({
+    destinataires: destinatairesDe(locataire),
+    sujet: 'Rappel : signature de l’état des lieux sur votre espace',
+    html: `<p>Bonjour ${locataire.prenom || ''},</p><p>L'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du <strong>${date(edl.date)}</strong> attend votre signature sur votre espace (rubrique « État des lieux », après vos réponses), jusqu'au <strong>${date(edl.contradictoireFinLe)}</strong> inclus :</p>`
+      + `<p><a href="${window.location.origin}/colocataire">${window.location.origin}/colocataire</a></p><p>Bien cordialement,<br>${donnees.parametres.bailleurs?.[0]?.nom || ''}</p>`,
+  }), `Rappel envoyé à ${nomDe(locataire)}.`);
 }
 
 /**
@@ -1017,7 +1080,7 @@ function editeur(edl, donnees, contexte) {
     ...pieces.map((piece, index) => ({ cle: `piece:${piece.id}`, numero: index + 1, libelle: piece.nom || 'Pièce', piece })),
     { cle: 'plan', libelle: '🗺️ Plan', titre: 'Plan du logement et repères' },
     { cle: 'releves', libelle: '🔢 Relevés', titre: 'Relevés des compteurs, clés, observations générales' },
-    { cle: 'signatures', libelle: `✍️ Signatures ${(edl.signatures || []).length}/${partiesAttendues(edl, donnees).length}`, titre: 'Signatures des parties' },
+    { cle: 'signatures', libelle: `✍️ Signatures ${nombreSignatures(edl, donnees)}/${partiesAttendues(edl, donnees).length}`, titre: 'Signatures des parties (tablette ou à distance depuis l’espace colocataire)' },
     { cle: 'contradictoire', libelle: '📷 Contradictoire', titre: 'État des lieux contradictoire : réponses et photos des colocataires' },
   ];
   let actif = ongletsActifs.get(edl.id);
