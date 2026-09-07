@@ -24,7 +24,7 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v31)** : la livraison contient un
+**Important pour cette mise à jour (v32)** : la livraison contient un
 dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer et
 relais de fichiers, voir plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
 **avec ses bibliothèques déjà installées** (`node_modules/`, 5 500 petits
@@ -177,9 +177,20 @@ confortable.
    Authentication → Users → « Add user » (même adresse + un mot de passe
    que vous lui communiquez).
 
-Il se connecte alors à la même adresse que vous et ne voit que son espace :
-ses quittances, l'état des lieux, son bail. Les règles de sécurité lui
-interdisent tout le reste.
+Donnez-lui l'adresse de son espace :
+
+```
+https://gestion-lmnp-anika.web.app/colocataire
+```
+
+La page de connexion s'ouvre alors directement sur « Colocataires »
+(titre « Résidence ANIKA — Espace colocataires », consignes de première
+connexion). Le sélecteur Propriétaires / Colocataires en haut de la page
+permet de changer d'entrée, et l'espace utilisé est mémorisé sur
+l'appareil. Quel que soit le bouton choisi, le rôle du compte décide de
+l'écran ouvert : un colocataire ne voit que son espace (quittances, bail,
+état des lieux, dépôts), les règles de sécurité lui interdisent tout le
+reste.
 
 ## L'envoi des e-mails (fonction `envoiMail`)
 

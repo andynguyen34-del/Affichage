@@ -26,7 +26,12 @@
 
 <div id="connexion" class="chargement" hidden>
   <div class="connexion-boite">
-    <div class="chargement-titre">🏠 Gestion LMNP</div>
+    <div class="chargement-titre" id="connexion-titre">🏠 Gestion LMNP</div>
+    <p id="connexion-sous-titre" class="connexion-sous-titre" hidden></p>
+    <div id="connexion-espaces" class="espaces" role="tablist" aria-label="Choisir son espace" hidden>
+      <button type="button" data-espace="proprietaire" role="tab">🏠 Propriétaires</button>
+      <button type="button" data-espace="colocataire" role="tab">👥 Colocataires</button>
+    </div>
     <p id="connexion-message" class="connexion-message"></p>
     <button id="bouton-connexion" class="bouton bouton-primaire bouton-connexion" type="button"></button>
     <button id="bouton-connexion-autre" class="bouton-lien bouton-connexion-autre" type="button" hidden>Choisir un autre dossier…</button>
@@ -38,7 +43,7 @@
         Première connexion ou mot de passe oublié ?</button>
     </form>
     <p id="connexion-erreur" class="connexion-erreur" hidden></p>
-    <p class="connexion-note">Accès réservé : seuls les comptes créés par le bailleur peuvent se connecter. Données hébergées en Europe, sur un espace privé.</p>
+    <p class="connexion-note" id="connexion-note">Accès réservé : seuls les comptes créés par le bailleur peuvent se connecter. Données hébergées en Europe, sur un espace privé.</p>
     <p class="connexion-version" id="connexion-version"></p>
   </div>
 </div>

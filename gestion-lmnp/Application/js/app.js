@@ -19,6 +19,7 @@ import { VERSION_APP } from './version.js';
 import { nomMois } from './format.js';
 import { verifierAppelAutomatique } from './appel-loyer-client.js';
 import { armerPleinEcranAuLancement, brancherBoutonPleinEcran, enregistrerServiceWorker } from './plein-ecran.js';
+import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES } from './espace.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -239,7 +240,8 @@ async function demarrerNuage() {
   chargement.hidden = true;
   connexion.hidden = false;
   formulaireConnexion.hidden = false;
-  message.innerHTML = 'Connectez-vous avec votre adresse e-mail et votre mot de passe.';
+  // Espace propriétaires ou colocataires : présentation adaptée, choix mémorisé.
+  brancherSelecteurEspace();
 
   formulaireConnexion.onsubmit = async (evenement) => {
     evenement.preventDefault();
@@ -286,15 +288,22 @@ async function demarrerNuage() {
  */
 async function entrerSelonRole() {
   const role = await api.detecterRole();
+  // Le rôle du compte décide de l'écran ; l'espace mémorisé sur l'appareil
+  // suit ce rôle, pour que la prochaine page de connexion soit la bonne.
+  const espaceReel = role === 'colocataire' ? 'colocataire' : 'proprietaire';
+  const espaceDemande = espaceChoisi();
+  memoriserEspace(espaceReel);
   if (role === 'colocataire') {
     document.getElementById('connexion').hidden = true;
     document.getElementById('chargement').hidden = true;
     await rendrePortail({
       seDeconnecter: async () => { await api.seDeconnecter(); location.reload(); },
     });
+    if (espaceDemande !== espaceReel) notifier(`Ce compte est un compte colocataire : vous êtes dans l’${ESPACES.colocataire.sousTitre.toLowerCase()}.`);
     return;
   }
   await demarrerAvecDossier();
+  if (espaceDemande !== espaceReel) notifier(`Ce compte est un compte de bailleur : vous êtes dans l’${ESPACES.proprietaire.sousTitre.toLowerCase()}.`);
 }
 
 /** Écran de connexion : on désigne (ou reconnecte) le dossier partagé avant tout. */

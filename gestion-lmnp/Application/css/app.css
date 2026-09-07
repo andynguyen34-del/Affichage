@@ -403,3 +403,11 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .onglet-section ~ .onglet-section { margin-left: 0; }
 .piece-detail { padding: .2rem 0; }
 @media (max-width: 700px) { .onglet-section { margin-left: 0; } }
+
+/* Page de connexion : choix de l'espace (propriétaires / colocataires). */
+.espaces { display: flex; gap: .4rem; margin: .8rem 0 .2rem; }
+.espaces button { flex: 1; padding: .55rem .6rem; border: 1px solid var(--bordure-forte); border-radius: 8px; background: #fff;
+  color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.espaces button:hover { border-color: var(--accent); }
+.espaces button.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
+.connexion-sous-titre { color: var(--encre-douce); font-weight: 600; margin: 0; }

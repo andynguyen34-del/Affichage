@@ -124,6 +124,9 @@ export default {
         liste([
           'Renseignez l’adresse e-mail du colocataire dans « Bien & baux », puis ouvrez son accès dans '
             + '« Paramètres → Accès à l’application ».',
+          'Donnez-lui l’adresse de son espace : https://gestion-lmnp-anika.web.app/colocataire — la page de connexion '
+            + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
+            + 'Quel que soit le bouton choisi, c’est le rôle du compte qui décide de l’écran ouvert : un colocataire ne voit jamais l’espace propriétaires.',
           'Créez aussi son compte de connexion dans la console Firebase (Authentication → Users → Add user).',
           'À la même adresse que vous, il n’accède qu’à ses documents : quittances et états des lieux, '
             + 'à consulter ou télécharger en PDF.',
