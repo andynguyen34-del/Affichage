@@ -6,6 +6,14 @@
 <title>Gestion LMNP</title>
 <link rel="stylesheet" href="css/app.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<!-- Application installable (écran d'accueil, ouverture sans barre de navigateur). -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#1d6a5a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LMNP">
+<link rel="apple-touch-icon" href="/icones/icone-180.png">
 </head>
 <body>
 
@@ -61,6 +69,7 @@
           <select id="selecteur-annee"></select>
         </label>
         <button class="bouton bouton-discret" id="bouton-rafraichir" type="button" title="Relire les fichiers du dossier partagé">↻ Actualiser</button>
+        <button class="bouton bouton-discret" id="bouton-plein-ecran" type="button" title="Plein écran" hidden>⛶</button>
         <div class="synchro" id="synchro"><span class="pastille"></span><span class="synchro-texte">À jour</span></div>
       </div>
     </header>

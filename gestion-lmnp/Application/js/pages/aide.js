@@ -136,6 +136,16 @@ export default {
     }));
 
     conteneur.append(carte({
+      titre: 'Plein écran et installation sur la tablette',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          'Sur tablette ou téléphone, l’application passe en plein écran au premier toucher après le lancement (réglable dans Paramètres → « Affichage sur cet appareil ») ; le bouton ⛶ en haut à droite le bascule à tout moment.',
+          'Mieux : installez-la sur l’écran d’accueil (Paramètres → « Installer l’application », ou menu du navigateur → « Ajouter à l’écran d’accueil ») : elle a alors son icône et s’ouvre sans barre d’adresse, comme une application.',
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
       titre: 'L’envoi des e-mails',
       corps: h('div', { class: 'aide-bloc' }, [
         p('L’application dépose chaque e-mail (quittance, décompte, bail, état des lieux, rappels, appels de loyer) '

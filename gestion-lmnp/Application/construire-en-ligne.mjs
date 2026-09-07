@@ -46,3 +46,13 @@ fs.mkdirSync(dossierPublic, { recursive: true });
 const sortie = path.join(dossierPublic, 'index.html');
 fs.writeFileSync(sortie, html, 'utf8');
 console.log(`Écrit : ${sortie} (${(fs.statSync(sortie).size / 1024).toFixed(0)} Ko)`);
+
+// 4. Fichiers de l'application installable (manifeste, service worker, icônes).
+const dossierPwa = path.join(ici, 'pwa');
+fs.copyFileSync(path.join(dossierPwa, 'manifest.webmanifest'), path.join(dossierPublic, 'manifest.webmanifest'));
+fs.copyFileSync(path.join(dossierPwa, 'sw.js'), path.join(dossierPublic, 'sw.js'));
+fs.mkdirSync(path.join(dossierPublic, 'icones'), { recursive: true });
+for (const icone of fs.readdirSync(path.join(dossierPwa, 'icones'))) {
+  fs.copyFileSync(path.join(dossierPwa, 'icones', icone), path.join(dossierPublic, 'icones', icone));
+}
+console.log('Copiés : manifest.webmanifest, sw.js, icones/');

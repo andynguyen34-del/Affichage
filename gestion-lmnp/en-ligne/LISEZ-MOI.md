@@ -24,7 +24,7 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v30)** : la livraison contient un
+**Important pour cette mise à jour (v31)** : la livraison contient un
 dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer et
 relais de fichiers, voir plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
 **avec ses bibliothèques déjà installées** (`node_modules/`, 5 500 petits
@@ -67,7 +67,7 @@ Les données vivent dans Firestore, les documents (quittances, rapports
 d'état des lieux, photos) dans Firebase Storage, et l'accès est protégé par
 un compte e-mail + mot de passe. La mise en place initiale (projet,
 Authentication, base, Storage, premier déploiement) est déjà faite : pour
-cette mise à jour, il suffit de remplacer `public/index.html` et de relancer
+cette mise à jour, il suffit de remplacer le dossier `public/` et de relancer
 `firebase deploy` (voir « Mise à jour de l'application »).
 
 ## Sécurité
@@ -149,9 +149,24 @@ dossier utilisant le sien.
 
 ## Mise à jour de l'application
 
-Quand une nouvelle version de `public/index.html` est livrée : remplacer le
-fichier, puis relancer `firebase deploy --account andynguyen34@gmail.com`
-dans ce dossier. L'adresse ne change pas.
+Quand une nouvelle version est livrée : remplacer le dossier `public/`
+(depuis la v31 il contient `index.html`, `manifest.webmanifest`, `sw.js` et
+`icones/` — le terminal indique « found 5 files in public »), puis relancer
+`firebase deploy --account andynguyen34@gmail.com` dans ce dossier.
+L'adresse ne change pas.
+
+## Plein écran et installation sur la tablette (v31)
+
+L'application est **installable** : sur la tablette, menu du navigateur →
+« Ajouter à l'écran d'accueil » (ou Paramètres → « Affichage sur cet
+appareil » → « Installer l'application »). Elle a alors son icône et
+s'ouvre sans barre d'adresse, en plein écran. Sans installation, elle
+demande le plein écran au premier toucher après le lancement (réglable :
+automatique sur écran tactile, toujours, jamais) ; le bouton ⛶ de
+l'en-tête le bascule à tout moment. Un navigateur n'accorde le plein
+écran qu'à la suite d'un geste de l'utilisateur, jamais tout seul au
+chargement : c'est pourquoi l'installation reste la solution la plus
+confortable.
 
 ## Les comptes des colocataires
 

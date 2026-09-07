@@ -18,6 +18,7 @@ import { rendrePortail } from './pages/portail.js';
 import { VERSION_APP } from './version.js';
 import { nomMois } from './format.js';
 import { verifierAppelAutomatique } from './appel-loyer-client.js';
+import { armerPleinEcranAuLancement, brancherBoutonPleinEcran, enregistrerServiceWorker } from './plein-ecran.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -212,6 +213,12 @@ async function demarrerNuage() {
   const message = document.getElementById('connexion-message');
   const formulaireConnexion = document.getElementById('connexion-formulaire');
   const erreur = document.getElementById('connexion-erreur');
+
+  // Plein écran au premier geste (selon le réglage de l'appareil), bouton ⛶
+  // de l'en-tête, et service worker de l'application installable.
+  armerPleinEcranAuLancement();
+  brancherBoutonPleinEcran(document.getElementById('bouton-plein-ecran'));
+  enregistrerServiceWorker();
 
   document.getElementById('bouton-connexion').hidden = true;
   document.getElementById('bouton-connexion-autre').hidden = true;

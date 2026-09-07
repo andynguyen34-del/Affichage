@@ -8,6 +8,8 @@ import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs } from '../ui.js';
 import { date } from '../format.js';
 import { VERSION_APP } from '../version.js';
+import { REGLAGES_PLEIN_ECRAN, reglagePleinEcran, definirReglagePleinEcran, estInstallee, pleinEcranPossible, enPleinEcran,
+  basculerPleinEcran, installable, proposerInstallation, consigneInstallation, tactile } from '../plein-ecran.js';
 import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppels } from '../appel-loyer-client.js';
 import { moisVise, jourEnvoi } from '../appel-loyer.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
@@ -221,6 +223,47 @@ function carteAppelLoyer() {
     ],
     corps: zone,
   });
+}
+
+/** Affichage : plein écran au lancement (réglage par appareil) et installation sur l'écran d'accueil. */
+function carteAffichage() {
+  const zone = h('div');
+  const dessiner = () => {
+    const selecteur = h('select', {
+      style: 'min-width:16rem',
+      onchange: (e) => { definirReglagePleinEcran(e.target.value); notifier('Réglage du plein écran enregistré pour cet appareil.', 'succes'); dessiner(); },
+    }, REGLAGES_PLEIN_ECRAN.map((o) => h('option', { value: o.valeur, selected: o.valeur === reglagePleinEcran() }, o.libelle)));
+    const etatActuel = estInstallee()
+      ? 'Application installée sur cet appareil : elle s’ouvre déjà sans barre de navigateur.'
+      : pleinEcranPossible()
+        ? `Sur cet appareil (${tactile() ? 'écran tactile' : 'ordinateur'}), le plein écran ${reglagePleinEcran() === 'jamais' ? 'ne se déclenche pas tout seul' : reglagePleinEcran() === 'toujours' || tactile() ? 'se déclenche au premier toucher ou clic après le lancement' : 'ne se déclenche pas tout seul (ordinateur en mode automatique)'} ; le bouton ⛶ en haut à droite le bascule à tout moment.`
+        : 'Ce navigateur ne permet pas le plein écran par l’application : installez-la sur l’écran d’accueil (ci-dessous) pour l’ouvrir sans barre de navigateur.';
+    zone.replaceChildren(
+      h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem' }, [
+        h('span', { style: 'min-width:12rem', texte: 'Plein écran au lancement' }), selecteur,
+        pleinEcranPossible() && !estInstallee() ? bouton(enPleinEcran() ? 'Quitter le plein écran' : 'Plein écran maintenant', () => basculerPleinEcran().then(() => setTimeout(dessiner, 300)), { petit: true }) : null,
+      ]),
+      h('p', { class: 'legende', texte: etatActuel }),
+      h('div', { style: 'margin-top:.8rem;font-weight:600', texte: 'Installer sur l’écran d’accueil' }),
+      estInstallee()
+        ? h('p', { class: 'legende', texte: '✓ Déjà installée sur cet appareil.' })
+        : h('div', {}, [
+          h('p', { class: 'legende', texte: 'Installée, l’application a son icône sur l’écran d’accueil et s’ouvre en plein écran, sans barre d’adresse — le plus confortable sur la tablette pour les états des lieux.' }),
+          installable()
+            ? bouton('Installer l’application sur cet appareil', async () => {
+              const resultat = await proposerInstallation();
+              notifier(resultat === 'accepted' ? 'Installation lancée : l’icône apparaît sur l’écran d’accueil.' : 'Installation non effectuée.', resultat === 'accepted' ? 'succes' : '');
+              setTimeout(dessiner, 500);
+            }, { type: 'primaire', petit: true })
+            : h('p', { class: 'legende', texte: consigneInstallation() }),
+        ]),
+    );
+  };
+  dessiner();
+  document.addEventListener('lmnp-installable', dessiner);
+  document.addEventListener('lmnp-installee', dessiner);
+  document.addEventListener('fullscreenchange', dessiner);
+  return carte({ titre: 'Affichage sur cet appareil', corps: zone });
 }
 
 function carteStockage() {
@@ -457,6 +500,7 @@ export default {
     }));
 
     if (api.MODE === 'nuage') conteneur.append(carteAcces(donnees));
+    conteneur.append(carteAffichage());
     if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer());
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
