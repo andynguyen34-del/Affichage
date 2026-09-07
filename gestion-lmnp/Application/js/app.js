@@ -15,7 +15,7 @@ import { rendrePortail } from './pages/portail.js';
 
 // Numéro affiché sur l'écran de connexion, pour vérifier d'un coup d'œil que
 // le fichier ouvert est bien la dernière version livrée.
-const VERSION_APP = '20 — 7 septembre';
+const VERSION_APP = '21 — 7 septembre';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
@@ -129,7 +129,13 @@ export function collecte() {
   };
 }
 
-function dessiner() {
+/**
+ * Redessine la page. Après une modification de données (et non une
+ * navigation), la position de défilement et le champ qui avait le focus sont
+ * conservés : on ne remonte pas en haut de page à chaque meuble, commentaire
+ * ou pièce ajoutés dans un état des lieux.
+ */
+function dessiner({ conserverPosition = false } = {}) {
   const page = PAGES.find((p) => p.cle === contexte.page) || PAGES[0];
   contexte.donnees = collecte();
   document.getElementById('titre-page').textContent = page.titre || page.libelle;
@@ -139,14 +145,31 @@ function dessiner() {
   dessinerSelecteurAnnee();
   dessinerAlertes();
   dessinerSynchro();
-  const conteneur = vider(document.getElementById('contenu'));
+  const conteneur = document.getElementById('contenu');
+  const defilement = conserverPosition ? conteneur.scrollTop : 0;
+  const actif = document.activeElement;
+  const cleFocus = conserverPosition && actif?.dataset?.focus;
+  const saisieEnCours = cleFocus && (actif.tagName === 'INPUT' || actif.tagName === 'TEXTAREA') ? actif.value : null;
+  const curseur = cleFocus && typeof actif.selectionStart === 'number' ? actif.selectionStart : null;
+  vider(conteneur);
   try {
     conteneur.append(page.rendre(contexte));
   } catch (erreur) {
     signalerErreur(erreur);
     conteneur.append(h('div', { class: 'alerte alerte-erreur', texte: `Affichage impossible : ${erreur.message}` }));
   }
-  conteneur.scrollTop = 0;
+  conteneur.scrollTop = defilement;
+  if (cleFocus) {
+    const cible = conteneur.querySelector(`[data-focus="${CSS.escape(cleFocus)}"]`);
+    if (cible) {
+      // Ce que l'utilisateur tapait pendant l'enregistrement n'est pas perdu.
+      if (saisieEnCours !== null && cible.value !== saisieEnCours) cible.value = saisieEnCours;
+      cible.focus({ preventScroll: true });
+      if (curseur !== null && typeof cible.setSelectionRange === 'function') {
+        try { cible.setSelectionRange(curseur, curseur); } catch { /* type de champ sans curseur */ }
+      }
+    }
+  }
 }
 
 // ------------------------------------------------------------- démarrage
@@ -491,7 +514,7 @@ async function ouvrirApplication() {
 
   etat.abonner((raison) => {
     if (raison === 'synchro') { dessinerSynchro(); return; }
-    dessiner();
+    dessiner({ conserverPosition: true });
   });
 
   window.addEventListener('hashchange', surHachage);

@@ -280,9 +280,10 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
     page.texte(edl.cles);
   }
 
-  // Reportage photo : deux photos par ligne ; `retrait` décale les photos
-  // d'un meuble sous sa ligne d'inventaire.
-  const rangeesPhotos = async (photos, { hauteurMax = 150, retrait = 0 } = {}) => {
+  // Reportage photo : deux photos par ligne, chacune légendée du nom de ce
+  // qu'elle montre (« Séjour — photo 2 », « Lit double — photo 1 ») ou de la
+  // légende saisie ; `retrait` décale les photos d'un meuble sous sa ligne.
+  const rangeesPhotos = async (photos, sujet, { hauteurMax = 150, retrait = 0 } = {}) => {
     for (let i = 0; i < photos.length; i += 2) {
       const paire = photos.slice(i, i + 2);
       const largeurMax = (A4.largeur - 2 * MARGE - retrait - 14) / 2;
@@ -291,9 +292,11 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
       let yBas = page.y;
       for (let j = 0; j < paire.length; j += 1) {
         page.y = yDepart;
+        const numero = photos.length > 1 ? ` — photo ${i + j + 1}` : '';
+        const legende = paire[j].legende ? `${sujet} : ${paire[j].legende}` : `${sujet}${numero}`;
         // eslint-disable-next-line no-await-in-loop
         await page.image(paire[j], {
-          largeurMax, hauteurMax, x: MARGE + retrait + j * (largeurMax + 14), legende: paire[j].legende || '',
+          largeurMax, hauteurMax, x: MARGE + retrait + j * (largeurMax + 14), legende,
         });
         yBas = Math.min(yBas, page.y);
       }
@@ -302,24 +305,42 @@ export async function pdfEtatDesLieux({ edl, bien, bailleur, locataires, photosP
   };
 
   for (const [indexPiece, piece] of (edl.pieces || []).entries()) {
-    page.sousTitre(`${indexPiece + 1}. ${piece.nom || 'Pièce'}`);
+    const nomPiece = piece.nom || 'Pièce';
+    // Le titre de la pièce reste avec le début de son contenu.
+    page.besoin(110);
+    page.sousTitre(`${indexPiece + 1}. ${nomPiece}`);
     if (piece.etatGeneral) page.texte(`État général : ${LIBELLES_ETAT[piece.etatGeneral] || piece.etatGeneral}`);
     if (piece.commentaire) page.texte(piece.commentaire);
+    // Photos de la pièce, juste après son descriptif.
+    const photosPiece = photosParPiece?.[piece.id] || [];
+    if (photosPiece.length) {
+      page.espace(2);
+      // L'en-tête reste avec la première rangée de photos.
+      page.besoin(14 + 150 + 20);
+      page.texte(`Photos de la pièce (${photosPiece.length}) :`, { taille: 9.5, police: 'grasse', couleur: DOUX });
+      await rangeesPhotos(photosPiece, nomPiece);
+    }
     // Inventaire du mobilier de la pièce (obligatoire en location meublée),
-    // chaque meuble suivi de ses propres photos.
+    // chaque meuble suivi de ses propres photos, sur la même page que sa ligne.
     const meubles = (piece.meubles || []).filter((m) => m.nom || (photosParMeuble?.[m.id] || []).length);
     if (meubles.length) {
-      page.espace(2);
-      page.texte('Mobilier :', { taille: 9.5, police: 'grasse', couleur: DOUX });
+      page.espace(4);
+      // L'en-tête « Mobilier » reste avec le premier meuble (et sa première rangée de photos).
+      page.besoin(14 + 14 + ((photosParMeuble?.[meubles[0].id] || []).length ? 130 : 0));
+      page.texte(`Mobilier de la pièce (${meubles.length}) :`, { taille: 9.5, police: 'grasse', couleur: DOUX });
       for (const meuble of meubles) {
-        page.texte(`- ${meuble.nom || 'Meuble'}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
-          + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`, { taille: 9.5 });
+        const photosMeuble = photosParMeuble?.[meuble.id] || [];
+        const nomMeuble = meuble.nom || 'Meuble';
+        // La ligne du meuble et sa première rangée de photos restent ensemble.
+        if (photosMeuble.length) page.besoin(14 + 110 + 20);
+        page.texte(`- ${nomMeuble}${(meuble.quantite || 1) > 1 ? ` (x ${meuble.quantite})` : ''}`
+          + ` — ${LIBELLES_ETAT[meuble.etat] || meuble.etat || 'état non précisé'}`
+          + (photosMeuble.length ? ` — ${photosMeuble.length} photo${photosMeuble.length > 1 ? 's' : ''} ci-dessous` : ''), { taille: 9.5 });
         // eslint-disable-next-line no-await-in-loop
-        await rangeesPhotos(photosParMeuble?.[meuble.id] || [], { hauteurMax: 110, retrait: 14 });
+        await rangeesPhotos(photosMeuble, nomMeuble, { hauteurMax: 110, retrait: 14 });
       }
       page.espace(2);
     }
-    await rangeesPhotos(photosParPiece?.[piece.id] || []);
   }
 
   if (edl.observations) {

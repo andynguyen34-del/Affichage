@@ -35,6 +35,17 @@ const vignettes = new Map();
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : '?');
 
+/** Donne le focus au champ portant cette clé (après le rafraîchissement de la page), sans sauter en haut. */
+function focaliser(cle, { selectionner = false } = {}) {
+  requestAnimationFrame(() => {
+    const champ = document.querySelector(`[data-focus="${cle}"]`);
+    if (!champ) return;
+    champ.focus({ preventScroll: true });
+    champ.scrollIntoView({ block: 'nearest' });
+    if (selectionner && typeof champ.select === 'function') champ.select();
+  });
+}
+
 
 async function creerEtatDesLieux(donnees, contexte) {
   const bailActif = [...donnees.baux].sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)))[0];
@@ -116,6 +127,30 @@ async function ajouterPhotosMeuble(edl, piece, meuble, { camera = false } = {}) 
   notifier('Photos du meuble ajoutées.', 'succes');
 }
 
+/**
+ * Galerie de vignettes avec, sous chacune, une légende modifiable et un ✕.
+ * `surLegende(photo, texte)` et `surRetrait(photo)` enregistrent ; `cle`
+ * sert à retrouver le champ après le rafraîchissement de la page.
+ */
+function galerie(photos, { cle, surLegende, surRetrait, retrait = false }) {
+  if (!photos.length) return null;
+  return h('div', { style: `display:flex;gap:.5rem;flex-wrap:wrap;margin:.4rem 0 0 ${retrait ? '1rem' : '0'}` },
+    photos.map((photo, index) => h('div', { style: 'position:relative;width:110px' }, [
+      vignette(photo.chemin),
+      h('button', {
+        class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer cette photo',
+        style: 'position:absolute;top:2px;right:2px;padding:0 .35rem',
+        onclick: () => surRetrait(photo),
+      }, '✕'),
+      h('input', {
+        value: photo.legende || '', placeholder: `photo ${index + 1}`, title: 'Légende de la photo (reprise dans le rapport)',
+        'data-focus': `${cle}-legende-${index}`,
+        style: 'width:110px;font-size:.78rem;padding:.15rem .3rem;margin-top:.15rem',
+        onchange: (e) => surLegende(photo, e.target.value),
+      }),
+    ])));
+}
+
 function vignette(chemin) {
   const image = h('img', {
     alt: '', style: 'width:110px;height:82px;object-fit:cover;border-radius:6px;border:1px solid var(--bordure)',
@@ -138,13 +173,13 @@ function blocPiece(edl, piece, numero) {
         style: 'min-width:1.6rem;text-align:center', texte: String(numero),
       }),
       h('input', {
-        value: piece.nom, style: 'font-weight:600;flex:2;min-width:9rem',
+        value: piece.nom, style: 'font-weight:600;flex:2;min-width:9rem', 'data-focus': `piece-${piece.id}-nom`,
         onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
           const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.nom = e.target.value;
         }).catch(signalerErreur),
       }),
       h('select', {
-        style: 'flex:1;min-width:8rem',
+        style: 'flex:1;min-width:8rem', 'data-focus': `piece-${piece.id}-etat`,
         onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
           const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.etatGeneral = e.target.value;
         }).catch(signalerErreur),
@@ -162,23 +197,25 @@ function blocPiece(edl, piece, numero) {
     ]),
     h('textarea', {
       rows: 2, style: 'width:100%', placeholder: 'Observations sur cette pièce (sols, murs, équipements…)',
+      'data-focus': `piece-${piece.id}-commentaire`,
       onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
         const cible = x.pieces.find((p) => p.id === piece.id); if (cible) cible.commentaire = e.target.value;
       }).catch(signalerErreur),
     }, piece.commentaire || ''),
+    (piece.photos || []).length ? h('div', { class: 'legende', style: 'margin-top:.5rem', texte: `Photos de la pièce (${piece.photos.length})` }) : null,
+    galerie(piece.photos || [], {
+      cle: `piece-${piece.id}`,
+      surLegende: (photo, texte) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+        const cible = x.pieces.find((p) => p.id === piece.id);
+        const f = cible && (cible.photos || []).find((y) => y.chemin === photo.chemin);
+        if (f) f.legende = texte;
+      }).catch(signalerErreur),
+      surRetrait: (photo) => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+        const cible = x.pieces.find((p) => p.id === piece.id);
+        if (cible) cible.photos = cible.photos.filter((f) => f.chemin !== photo.chemin);
+      }), 'Photo retirée.'),
+    }),
     blocMeubles(edl, piece),
-    (piece.photos || []).length ? h('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem' },
-      piece.photos.map((photo) => h('div', { style: 'position:relative' }, [
-        vignette(photo.chemin),
-        h('button', {
-          class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer cette photo',
-          style: 'position:absolute;top:2px;right:2px;padding:0 .35rem',
-          onclick: () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-            const cible = x.pieces.find((p) => p.id === piece.id);
-            if (cible) cible.photos = cible.photos.filter((f) => f.chemin !== photo.chemin);
-          }), 'Photo retirée.'),
-        }, '✕'),
-      ]))) : null,
   ]);
 }
 
@@ -393,25 +430,29 @@ function blocMeubles(edl, piece) {
   return h('div', { style: 'margin-top:.6rem' }, [
     h('div', { style: 'display:flex;align-items:center;gap:.6rem;margin-bottom:.3rem' }, [
       h('span', { class: 'legende', texte: `Mobilier (${meubles.length})` }),
-      bouton('+ Meuble', () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-        const cible = x.pieces.find((p) => p.id === piece.id);
-        if (cible) cible.meubles = [...(cible.meubles || []), { id: crypto.randomUUID(), nom: '', quantite: 1, etat: 'bon' }];
-      }), null), { petit: true }),
+      bouton('+ Meuble', async () => {
+        const id = crypto.randomUUID();
+        await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+          const cible = x.pieces.find((p) => p.id === piece.id);
+          if (cible) cible.meubles = [...(cible.meubles || []), { id, nom: '', quantite: 1, etat: 'bon', photos: [] }];
+        }), null);
+        focaliser(`meuble-${id}-nom`);
+      }, { petit: true }),
     ]),
     ...meubles.map((meuble) => h('div', { style: 'margin-bottom:.45rem' }, [
       h('div', { style: 'display:flex;gap:.5rem;align-items:center;flex-wrap:wrap' }, [
         h('input', {
           value: meuble.nom || '', placeholder: 'ex. : lit double 160, matelas, table de chevet…',
-          style: 'flex:3;min-width:11rem',
+          style: 'flex:3;min-width:11rem', 'data-focus': `meuble-${meuble.id}-nom`,
           onchange: (e) => majMeuble(meuble.id, (m) => { m.nom = e.target.value; }),
         }),
         h('input', {
           type: 'number', min: '1', step: '1', value: meuble.quantite || 1,
-          style: 'width:4.2rem', title: 'Quantité',
+          style: 'width:4.2rem', title: 'Quantité', 'data-focus': `meuble-${meuble.id}-quantite`,
           onchange: (e) => majMeuble(meuble.id, (m) => { m.quantite = Number(e.target.value) || 1; }),
         }),
         h('select', {
-          style: 'flex:1;min-width:7rem', title: 'État du meuble',
+          style: 'flex:1;min-width:7rem', title: 'État du meuble', 'data-focus': `meuble-${meuble.id}-etat`,
           onchange: (e) => majMeuble(meuble.id, (m) => { m.etat = e.target.value; }),
         }, ETATS.filter((o) => o.valeur).map((o) => h('option', { value: o.valeur, selected: o.valeur === (meuble.etat || 'bon') }, o.libelle))),
         bouton('📷', () => ajouterPhotosMeuble(edl, piece, meuble, { camera: true }), {
@@ -428,19 +469,17 @@ function blocMeubles(edl, piece) {
           }), 'Meuble retiré.'),
         }, '✕'),
       ]),
-      (meuble.photos || []).length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin:.3rem 0 0 1rem' },
-        meuble.photos.map((photo) => h('div', { style: 'position:relative' }, [
-          vignette(photo.chemin),
-          h('button', {
-            class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer cette photo du meuble',
-            style: 'position:absolute;top:2px;right:2px;padding:0 .35rem',
-            onclick: () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-              const cible = x.pieces.find((p) => p.id === piece.id);
-              const m = cible && (cible.meubles || []).find((y) => y.id === meuble.id);
-              if (m) m.photos = (m.photos || []).filter((f) => f.chemin !== photo.chemin);
-            }), 'Photo retirée.'),
-          }, '✕'),
-        ]))) : null,
+      galerie(meuble.photos || [], {
+        cle: `meuble-${meuble.id}`, retrait: true,
+        surLegende: (photo, texte) => majMeuble(meuble.id, (m) => {
+          const f = (m.photos || []).find((y) => y.chemin === photo.chemin); if (f) f.legende = texte;
+        }),
+        surRetrait: (photo) => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+          const cible = x.pieces.find((p) => p.id === piece.id);
+          const m = cible && (cible.meubles || []).find((y) => y.id === meuble.id);
+          if (m) m.photos = (m.photos || []).filter((f) => f.chemin !== photo.chemin);
+        }), 'Photo retirée.'),
+      }),
     ])),
   ]);
 }
@@ -560,9 +599,13 @@ function editeur(edl, donnees, contexte) {
   const conteneur = h('div');
   conteneur.append(barreOutils([
     bouton('← Retour à la liste', () => { edlOuvert = null; contexte.allerA('etat-des-lieux'); }),
-    bouton('+ Pièce', () => executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
-      x.pieces = [...(x.pieces || []), { id: crypto.randomUUID(), nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', photos: [] }];
-    }), 'Pièce ajoutée.')),
+    bouton('+ Pièce', async () => {
+      const id = crypto.randomUUID();
+      await executer(etat.modifierElement('etatsDesLieux', edl.id, (x) => {
+        x.pieces = [...(x.pieces || []), { id, nom: 'Nouvelle pièce', etatGeneral: '', commentaire: '', photos: [], meubles: [] }];
+      }), 'Pièce ajoutée.');
+      focaliser(`piece-${id}-nom`, { selectionner: true });
+    }),
     bouton('Générer le rapport PDF', () => genererRapport(edl, donnees).catch(signalerErreur), { type: 'primaire' }),
   ]));
 
@@ -581,7 +624,7 @@ function editeur(edl, donnees, contexte) {
       ...(edl.compteurs || []).map((compteur, index) => h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem' }, [
         h('span', { style: 'min-width:7rem', texte: compteur.nom }),
         h('input', {
-          value: compteur.valeur || '', placeholder: 'relevé',
+          value: compteur.valeur || '', placeholder: 'relevé', 'data-focus': `compteur-${index}`,
           onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => {
             if (x.compteurs?.[index]) x.compteurs[index].valeur = e.target.value;
           }).catch(signalerErreur),
@@ -591,12 +634,12 @@ function editeur(edl, donnees, contexte) {
       h('div', { style: 'display:flex;gap:.6rem;align-items:center;margin-top:.6rem' }, [
         h('span', { style: 'min-width:7rem', texte: 'Clés remises' }),
         h('input', {
-          value: edl.cles || '', placeholder: 'ex. : 3 clés d’entrée, 1 badge, 1 clé boîte aux lettres', style: 'flex:1',
+          value: edl.cles || '', placeholder: 'ex. : 3 clés d’entrée, 1 badge, 1 clé boîte aux lettres', style: 'flex:1', 'data-focus': 'cles',
           onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.cles = e.target.value; }).catch(signalerErreur),
         }),
       ]),
       h('textarea', {
-        rows: 2, style: 'width:100%;margin-top:.6rem', placeholder: 'Observations générales',
+        rows: 2, style: 'width:100%;margin-top:.6rem', placeholder: 'Observations générales', 'data-focus': 'observations',
         onchange: (e) => etat.modifierElement('etatsDesLieux', edl.id, (x) => { x.observations = e.target.value; }).catch(signalerErreur),
       }, edl.observations || ''),
     ]),
