@@ -1,2 +1,2 @@
 // Version de l'application affichée à la connexion et dans Paramètres.
-export const VERSION_APP = '35 — 7 septembre';
+export const VERSION_APP = '36 — 7 septembre';

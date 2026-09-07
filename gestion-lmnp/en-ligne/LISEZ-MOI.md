@@ -24,6 +24,16 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Logements & baux → Justificatifs des colocataires ».
 
+**Nouveau en v36 — icônes de lancement.** Chaque entrée s'installe comme
+une application avec son icône : « LMNP » (propriétaires, …/proprietaire) et
+« Résidence ANIKA » (colocataires, …/colocataire). Bouton « Installer
+l'icône… » sous « Se connecter » sur la page de connexion ; carte
+Paramètres → « Icônes de lancement » (installation sur ce PC, ouverture de
+l'entrée colocataires, adresse à copier, raccourci .url de repli). Sur PC,
+Chrome ou Edge propose « Épingler à la barre des tâches » et « Créer un
+raccourci sur le Bureau ». Les manifestes changent de nom : redéployez
+l'hébergement (commande habituelle).
+
 **Nouveau en v35 — plusieurs logements.** L'application gère désormais
 plusieurs logements (voir la section « Plusieurs logements » plus bas) :
 sélecteur « Logement » dans l'en-tête, vue « Tous les logements » groupée
@@ -185,6 +195,29 @@ l'en-tête le bascule à tout moment. Un navigateur n'accorde le plein
 écran qu'à la suite d'un geste de l'utilisateur, jamais tout seul au
 chargement : c'est pourquoi l'installation reste la solution la plus
 confortable.
+
+## Icônes de lancement, une par entrée (v36)
+
+- **Propriétaires, sur votre PC** : page de connexion (entrée Propriétaires)
+  → « 📲 Installer l'icône « LMNP » sur cet appareil », ou Paramètres →
+  « Icônes de lancement » → « Installer sur cet ordinateur ». Chrome ou Edge
+  ouvre sa fenêtre : cochez « Épingler à la barre des tâches » et « Créer un
+  raccourci sur le Bureau ». L'application s'ouvre ensuite dans sa propre
+  fenêtre, sans barre d'adresse.
+- **Colocataires** : donnez-leur l'adresse …/colocataire (bouton « Copier
+  l'adresse ») ; la page de connexion « Colocataires » a le même bouton
+  « Installer l'icône « Résidence ANIKA » ». Pour l'installer vous-même sur
+  votre PC : « Ouvrir l'entrée colocataires » (nouvel onglet, sans vous
+  déconnecter) puis « Installer ».
+- Le bouton installe l'application décrite par le manifeste chargé avec la
+  page : si vous changez d'entrée sur la page de connexion, il propose
+  d'abord d'ouvrir l'adresse de l'entrée voulue, puis d'installer.
+- **Repli** : « Télécharger le raccourci (.url) » donne un fichier à poser
+  sur le Bureau qui ouvre l'adresse dans le navigateur (icône du navigateur) ;
+  le navigateur peut demander de confirmer (« Conserver »). Utile si
+  l'installation d'applications est bloquée sur un poste professionnel.
+- Tablette et téléphone : le même bouton ajoute l'icône à l'écran d'accueil
+  (sur iPad : Partager → « Sur l'écran d'accueil »).
 
 ## Les comptes des colocataires
 

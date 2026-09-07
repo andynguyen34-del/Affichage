@@ -354,6 +354,17 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .connexion-formulaire input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .connexion-erreur { color: var(--alerte); font-size: .86rem; margin-top: 1rem; }
 .connexion-note { color: var(--encre-tres-douce); font-size: .78rem; margin-top: 1.6rem; }
+/* Page de connexion : installation de l'icône de l'entrée affichée. */
+.installation { margin-top: 1rem; padding: .7rem .8rem; border: 1px dashed var(--bordure-forte); border-radius: 10px; background: var(--fond-carte); display: grid; gap: .45rem; justify-items: center; }
+.installation-icone { width: 44px; height: 44px; border-radius: 10px; box-shadow: var(--ombre); }
+.installation .legende { margin: 0; text-align: center; }
+.entrees { display: grid; gap: .8rem; }
+.entree { display: grid; grid-template-columns: 44px 1fr auto; gap: .8rem; align-items: center; padding: .7rem .8rem; border: 1px solid var(--bordure); border-radius: 10px; }
+.entree img { width: 44px; height: 44px; border-radius: 10px; }
+.entree .nom { font-weight: 600; }
+.entree code { font-size: .78rem; color: var(--encre-douce); word-break: break-all; }
+.entree .groupe-boutons { flex-direction: column; align-items: stretch; }
+@media (max-width: 600px) { .entree { grid-template-columns: 44px 1fr; } .entree .groupe-boutons { grid-column: 1 / -1; flex-direction: row; } }
 .connexion-version { color: var(--encre-tres-douce); font-size: .72rem; margin-top: .4rem; }
 
 /* ---------- point d'attente (écran « occupé ») ---------- */

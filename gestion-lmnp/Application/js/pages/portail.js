@@ -225,7 +225,7 @@ export async function rendrePortail({ seDeconnecter }) {
     ]),
     // Installation sur l'écran d'accueil (icône « Résidence ANIKA »), sauf si déjà installée.
     estInstallee() ? null : h('div', { class: 'portail-installation', style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.2rem 0 .8rem' }, [
-      h('span', { class: 'legende', texte: '📲 Ajoutez votre espace à l’écran d’accueil : il s’ouvrira comme une application, avec son icône « Résidence ANIKA ».' }),
+      h('span', { class: 'legende', texte: '📲 Installez votre espace sur cet appareil (écran d’accueil de la tablette ; Bureau et barre des tâches sur PC) : il s’ouvrira comme une application, avec son icône « Résidence ANIKA ».' }),
       installable()
         ? h('button', { class: 'bouton bouton-petit bouton-primaire', type: 'button', onclick: (e) => { proposerInstallation().then((r) => { if (r === 'accepted') e.target.closest('.portail-installation')?.remove(); }); } }, 'Installer')
         : h('span', { class: 'legende', texte: consigneInstallation() }),

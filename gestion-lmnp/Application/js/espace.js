@@ -26,6 +26,12 @@ export const ESPACES = {
 
 const lire = () => { try { return localStorage.getItem(CLE); } catch { return null; } };
 
+// Le manifeste que le navigateur a lu au chargement de la page : c'est LUI
+// qui décide de l'application installée par le bouton « Installer », quel
+// que soit l'espace affiché ensuite (voir installation.js).
+const MANIFESTE_INITIAL = (() => { try { return document.getElementById('lien-manifeste')?.getAttribute('href') || ''; } catch { return ''; } })();
+export const espaceDuManifesteCharge = () => (/colocataire/.test(MANIFESTE_INITIAL) ? 'colocataire' : 'proprietaire');
+
 /** Espace désigné par l'adresse : …/colocataire(s) ou …/proprietaire(s). */
 export function espaceDepuisAdresse() {
   const chemin = String(location.pathname || '').toLowerCase();
@@ -60,6 +66,7 @@ export function appliquerEspace(espace) {
     bouton.classList.toggle('actif', bouton.dataset.espace === espace);
     bouton.setAttribute('aria-selected', bouton.dataset.espace === espace ? 'true' : 'false');
   }
+  document.dispatchEvent(new CustomEvent('lmnp-espace', { detail: espace }));
 }
 
 /** Manifeste, couleur et icône d'installation de l'espace (deux applications installables distinctes). */

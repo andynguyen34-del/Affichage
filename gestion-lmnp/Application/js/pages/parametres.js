@@ -9,7 +9,8 @@ import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
 import { date } from '../format.js';
 import { VERSION_APP } from '../version.js';
 import { REGLAGES_PLEIN_ECRAN, reglagePleinEcran, definirReglagePleinEcran, estInstallee, pleinEcranPossible, enPleinEcran,
-  basculerPleinEcran, installable, proposerInstallation, consigneInstallation, tactile } from '../plein-ecran.js';
+  basculerPleinEcran, installable, consigneInstallation, tactile } from '../plein-ecran.js';
+import { ENTREES, adresseEntree, installerEntree, telechargerRaccourci } from '../installation.js';
 import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppels, logementsAvecAppel } from '../appel-loyer-client.js';
 import { moisVise, jourEnvoi, dejaEnvoye } from '../appel-loyer.js';
 import { nomLogement } from '../logements.js';
@@ -253,26 +254,13 @@ function carteAffichage() {
       ? 'Application installée sur cet appareil : elle s’ouvre déjà sans barre de navigateur.'
       : pleinEcranPossible()
         ? `Sur cet appareil (${tactile() ? 'écran tactile' : 'ordinateur'}), le plein écran ${reglagePleinEcran() === 'jamais' ? 'ne se déclenche pas tout seul' : reglagePleinEcran() === 'toujours' || tactile() ? 'se déclenche au premier toucher ou clic après le lancement' : 'ne se déclenche pas tout seul (ordinateur en mode automatique)'} ; le bouton ⛶ en haut à droite le bascule à tout moment.`
-        : 'Ce navigateur ne permet pas le plein écran par l’application : installez-la sur l’écran d’accueil (ci-dessous) pour l’ouvrir sans barre de navigateur.';
+        : 'Ce navigateur ne permet pas le plein écran par l’application : installez-la (carte « Icônes de lancement » ci-dessous) pour l’ouvrir sans barre de navigateur.';
     zone.replaceChildren(
       h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem' }, [
         h('span', { style: 'min-width:12rem', texte: 'Plein écran au lancement' }), selecteur,
         pleinEcranPossible() && !estInstallee() ? bouton(enPleinEcran() ? 'Quitter le plein écran' : 'Plein écran maintenant', () => basculerPleinEcran().then(() => setTimeout(dessiner, 300)), { petit: true }) : null,
       ]),
       h('p', { class: 'legende', texte: etatActuel }),
-      h('div', { style: 'margin-top:.8rem;font-weight:600', texte: 'Installer sur l’écran d’accueil' }),
-      estInstallee()
-        ? h('p', { class: 'legende', texte: '✓ Déjà installée sur cet appareil.' })
-        : h('div', {}, [
-          h('p', { class: 'legende', texte: 'Installée, l’application a son icône sur l’écran d’accueil et s’ouvre en plein écran, sans barre d’adresse — le plus confortable sur la tablette pour les états des lieux.' }),
-          installable()
-            ? bouton('Installer l’application sur cet appareil', async () => {
-              const resultat = await proposerInstallation();
-              notifier(resultat === 'accepted' ? 'Installation lancée : l’icône apparaît sur l’écran d’accueil.' : 'Installation non effectuée.', resultat === 'accepted' ? 'succes' : '');
-              setTimeout(dessiner, 500);
-            }, { type: 'primaire', petit: true })
-            : h('p', { class: 'legende', texte: consigneInstallation() }),
-        ]),
     );
   };
   dessiner();
@@ -280,6 +268,64 @@ function carteAffichage() {
   document.addEventListener('lmnp-installee', dessiner);
   document.addEventListener('fullscreenchange', dessiner);
   return carte({ titre: 'Affichage sur cet appareil', corps: zone });
+}
+
+/**
+ * Icônes de lancement : une application par entrée (propriétaires,
+ * colocataires), à installer sur ce PC ou cette tablette ; raccourci .url
+ * en repli ; adresse à transmettre aux colocataires.
+ */
+function carteIcones() {
+  const zone = h('div');
+  const dessiner = () => {
+    const entrees = Object.entries(ENTREES).map(([espace, entree]) => {
+      const courante = espace === 'proprietaire';
+      const actions = [];
+      if (courante) {
+        actions.push(estInstallee()
+          ? badge('✓ Installée sur cet appareil', 'succes')
+          : bouton('Installer sur cet ordinateur', async () => {
+            const resultat = await installerEntree(espace);
+            if (resultat === 'accepted') notifier('Installation lancée : l’icône « LMNP » apparaît sur le Bureau, dans la barre des tâches ou sur l’écran d’accueil.', 'succes');
+            else if (resultat === 'consigne') notifier(consigneInstallation());
+            setTimeout(dessiner, 500);
+          }, { type: 'primaire', petit: true, titre: 'Chrome ou Edge ouvre sa fenêtre d’installation : cochez « Épingler à la barre des tâches » et « Créer un raccourci sur le Bureau »' }));
+      } else {
+        actions.push(bouton('Ouvrir l’entrée colocataires ↗', () => { window.open(adresseEntree(espace), '_blank', 'noopener'); }, { type: 'primaire', petit: true, titre: 'Nouvel onglet, sans vous déconnecter : le bouton « Installer » y installe l’icône bleue' }));
+        actions.push(bouton('Copier l’adresse', async () => {
+          try { await navigator.clipboard.writeText(adresseEntree(espace)); notifier('Adresse copiée : à transmettre aux colocataires.', 'succes'); }
+          catch { notifier(`Adresse : ${adresseEntree(espace)}`); }
+        }, { petit: true }));
+      }
+      actions.push(bouton('Télécharger le raccourci (.url)', () => telechargerRaccourci(espace), { petit: true, titre: 'Fichier à poser sur le Bureau : ouvre l’adresse dans le navigateur (icône du navigateur)' }));
+      return h('div', { class: 'entree', 'data-entree': espace }, [
+        h('img', { src: entree.icone, alt: `Icône ${entree.nomAppli}` }),
+        h('div', {}, [
+          h('div', { class: 'nom' }, [`${entree.nomAppli} — ${entree.libelle} `, badge(courante ? 'vous' : 'à leur donner', courante ? 'succes' : 'info')]),
+          h('code', { texte: adresseEntree(espace) }),
+          h('div', { class: 'legende', texte: entree.description }),
+        ]),
+        h('div', { class: 'groupe-boutons' }, actions),
+      ]);
+    });
+    zone.replaceChildren(
+      h('div', { class: 'entrees' }, entrees),
+      h('ol', { style: 'margin:.7rem 0 0;padding-left:1.2rem;font-size:.84rem;display:grid;gap:.25rem' }, [
+        h('li', { texte: '« Installer sur cet ordinateur » : Chrome ou Edge ouvre sa fenêtre d’installation ; cochez « Épingler à la barre des tâches » et « Créer un raccourci sur le Bureau ». Sur tablette : l’icône va sur l’écran d’accueil.' }),
+        h('li', { texte: 'Pour la version colocataires depuis votre PC : « Ouvrir l’entrée colocataires » (nouvel onglet, sans vous déconnecter), puis « Installer l’icône » sur cette page : l’application installée porte l’icône bleue « Résidence ANIKA ». Les colocataires ont ce même bouton sous « Se connecter ».' }),
+        h('li', { texte: 'Le raccourci .url est la solution de repli : un fichier à poser sur le Bureau, qui ouvre l’adresse dans le navigateur (icône du navigateur, pas la nôtre). Le navigateur peut demander de confirmer le téléchargement (« Conserver »).' }),
+      ]),
+      installable() || estInstallee() ? null : h('p', { class: 'legende', style: 'margin-top:.5rem', texte: `Si le bouton d’installation ne fait rien : ${consigneInstallation()}` }),
+    );
+  };
+  dessiner();
+  document.addEventListener('lmnp-installable', dessiner);
+  document.addEventListener('lmnp-installee', dessiner);
+  return carte({
+    titre: 'Icônes de lancement',
+    aide: 'Une application par entrée, avec son icône et son nom : maison verte « LMNP » pour les propriétaires, silhouettes bleues « Résidence ANIKA » pour les colocataires.',
+    corps: zone,
+  });
 }
 
 function carteStockage() {
@@ -519,6 +565,7 @@ export default {
 
     if (api.MODE === 'nuage') conteneur.append(carteAcces(donnees));
     conteneur.append(carteAffichage());
+    if (api.MODE === 'nuage') conteneur.append(carteIcones());
     if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer(donnees));
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 

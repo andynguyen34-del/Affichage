@@ -1,7 +1,7 @@
 {
   "id": "/colocataire",
-  "name": "Résidence ANIKA — espace colocataires",
-  "short_name": "ANIKA",
+  "name": "Résidence ANIKA",
+  "short_name": "Résidence ANIKA",
   "description": "Votre espace colocataire : quittances, bail, état des lieux, dépôt de photos et de justificatifs.",
   "lang": "fr",
   "start_url": "/colocataire",

@@ -20,6 +20,7 @@ import { nomMois } from './format.js';
 import { verifierAppelAutomatique } from './appel-loyer-client.js';
 import { armerPleinEcranAuLancement, brancherBoutonPleinEcran, enregistrerServiceWorker } from './plein-ecran.js';
 import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES, appliquerManifeste } from './espace.js';
+import { brancherInstallationConnexion } from './installation.js';
 import { logementMemorise, memoriserLogement, filtrerDonnees, libelleTypeLocation } from './logements.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
@@ -270,7 +271,9 @@ async function demarrerNuage() {
   chargement.hidden = true;
   connexion.hidden = false;
   formulaireConnexion.hidden = false;
-  // Espace propriétaires ou colocataires : présentation adaptée, choix mémorisé.
+  // Espace propriétaires ou colocataires : présentation adaptée, choix mémorisé,
+  // et bouton d'installation de l'icône de l'entrée affichée.
+  brancherInstallationConnexion();
   brancherSelecteurEspace();
 
   formulaireConnexion.onsubmit = async (evenement) => {
