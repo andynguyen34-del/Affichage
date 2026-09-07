@@ -105,19 +105,47 @@ async function ajouterPhotos(edl, piece, { camera = false } = {}) {
   const fichiers = camera ? (choisi ? [choisi] : []) : choisi;
   if (!fichiers?.length) return;
   notifier(`Envoi de ${fichiers.length} photo(s)…`);
+  let reussies = 0;
   for (const fichier of fichiers) {
     try {
       /* eslint-disable no-await-in-loop */
       const reduite = await compresserPhoto(fichier);
-      const nomPropre = fichier.name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '-');
+      const nomPropre = nomPhoto(fichier);
       const depose = await api.deposerFichier('etats-des-lieux', `${edl.id}/${piece.id}/${nomPropre}.jpg`, reduite);
       await etat.modifierElement('etatsDesLieux', edl.id, (e) => {
         const cible = (e.pieces || []).find((p) => p.id === piece.id);
         if (cible) cible.photos = [...(cible.photos || []), { chemin: depose.chemin, legende: '' }];
       });
-    } catch (erreur) { signalerErreur(erreur); }
+      reussies += 1;
+    } catch (erreur) { notifier(messageStockage(erreur), 'erreur'); }
   }
-  notifier('Photos ajoutées.', 'succes');
+  bilanEnvoi(reussies, fichiers.length);
+}
+
+/** Nom de fichier propre pour une photo (les photos de caméra n'ont parfois pas de nom). */
+const nomPhoto = (fichier) => {
+  const base = String(fichier.name || '').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '-').trim();
+  return base || `photo-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+};
+
+const CODES_STOCKAGE = {
+  'storage/unauthorized': 'accès refusé par les règles de sécurité du stockage (compte non reconnu comme gérant ?)',
+  'storage/unauthenticated': 'session expirée — reconnectez-vous',
+  'storage/retry-limit-exceeded': 'réseau trop lent ou coupé pendant l’envoi',
+  'storage/quota-exceeded': 'quota de stockage dépassé',
+  'storage/canceled': 'envoi annulé',
+  'storage/object-not-found': 'fichier introuvable sur le stockage',
+};
+export const messageStockage = (erreur) => {
+  const code = erreur?.code || '';
+  const explication = CODES_STOCKAGE[code];
+  return explication ? `Photo non enregistrée : ${explication} [${code}].` : `Photo non enregistrée : ${erreur?.message || erreur} ${code ? `[${code}]` : ''}`.trim();
+};
+
+function bilanEnvoi(reussies, total) {
+  if (reussies === total) notifier(total > 1 ? `${total} photos ajoutées.` : 'Photo ajoutée.', 'succes');
+  else if (reussies) notifier(`${reussies} photo(s) sur ${total} ajoutée(s) — voir l’erreur ci-dessus.`, 'erreur');
+  else notifier('Aucune photo n’a pu être enregistrée — voir l’erreur ci-dessus (Paramètres → « Tester le stockage » pour diagnostiquer).', 'erreur');
 }
 
 async function ajouterPhotosMeuble(edl, piece, meuble, { camera = false } = {}) {
@@ -127,20 +155,22 @@ async function ajouterPhotosMeuble(edl, piece, meuble, { camera = false } = {}) 
   const fichiers = camera ? (choisi ? [choisi] : []) : choisi;
   if (!fichiers?.length) return;
   notifier(`Envoi de ${fichiers.length} photo(s)…`);
+  let reussies = 0;
   for (const fichier of fichiers) {
     try {
       /* eslint-disable no-await-in-loop */
       const reduite = await compresserPhoto(fichier);
-      const nomPropre = fichier.name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '-');
+      const nomPropre = nomPhoto(fichier);
       const depose = await api.deposerFichier('etats-des-lieux', `${edl.id}/${piece.id}/meubles/${meuble.id}/${nomPropre}.jpg`, reduite);
       await etat.modifierElement('etatsDesLieux', edl.id, (e) => {
         const cible = (e.pieces || []).find((p) => p.id === piece.id);
         const m = cible && (cible.meubles || []).find((x) => x.id === meuble.id);
         if (m) m.photos = [...(m.photos || []), { chemin: depose.chemin, legende: '' }];
       });
-    } catch (erreur) { signalerErreur(erreur); }
+      reussies += 1;
+    } catch (erreur) { notifier(messageStockage(erreur), 'erreur'); }
   }
-  notifier('Photos du meuble ajoutées.', 'succes');
+  bilanEnvoi(reussies, fichiers.length);
 }
 
 /**
@@ -152,7 +182,7 @@ function galerie(photos, { cle, surLegende, surRetrait, retrait = false }) {
   if (!photos.length) return null;
   return h('div', { style: `display:flex;gap:.5rem;flex-wrap:wrap;margin:.4rem 0 0 ${retrait ? '1rem' : '0'}` },
     photos.map((photo, index) => h('div', { style: 'position:relative;width:110px' }, [
-      vignette(photo.chemin),
+      vignette(photo.chemin, { surClic: () => ouvrirVisionneuse(photos, index, sujetDe(cle)) }),
       h('button', {
         class: 'bouton bouton-petit bouton-danger', type: 'button', title: 'Retirer cette photo',
         style: 'position:absolute;top:2px;right:2px;padding:0 .35rem',
@@ -167,18 +197,100 @@ function galerie(photos, { cle, surLegende, surRetrait, retrait = false }) {
     ])));
 }
 
-function vignette(chemin) {
-  const image = h('img', {
-    alt: '', style: 'width:110px;height:82px;object-fit:cover;border-radius:6px;border:1px solid var(--bordure)',
-  });
+/** Charge (une fois) l'image d'une photo et renvoie son URL locale. */
+function chargerImage(chemin) {
   const connue = vignettes.get(chemin);
-  if (connue) { image.src = connue; return image; }
-  api.lireOctets('etats-des-lieux', chemin).then((octets) => {
+  if (connue) return Promise.resolve(connue);
+  return api.lireOctets('etats-des-lieux', chemin).then((octets) => {
     const url = URL.createObjectURL(new Blob([octets], { type: 'image/jpeg' }));
     vignettes.set(chemin, url);
-    image.src = url;
-  }).catch(() => { image.alt = 'photo indisponible'; });
-  return image;
+    return url;
+  });
+}
+
+/**
+ * Vignette d'une photo. En cas d'échec de chargement, le cadre l'indique en
+ * clair (avec le code d'erreur) et propose de réessayer — jamais une case vide.
+ */
+function vignette(chemin, { surClic = null } = {}) {
+  const cadre = h('div', {
+    class: 'vignette', title: surClic ? 'Agrandir la photo' : '',
+    style: 'width:110px;height:82px;border-radius:6px;border:1px solid var(--bordure);overflow:hidden;'
+      + `background:#f1f3f5;display:flex;align-items:center;justify-content:center;${surClic ? 'cursor:zoom-in' : ''}`,
+  });
+  const charger = () => {
+    cadre.replaceChildren(h('span', { class: 'legende', style: 'font-size:.7rem', texte: '…' }));
+    chargerImage(chemin).then((url) => {
+      const image = h('img', { src: url, alt: 'photo', style: 'width:110px;height:82px;object-fit:cover;display:block' });
+      if (surClic) image.addEventListener('click', surClic);
+      cadre.replaceChildren(image);
+    }).catch((erreur) => {
+      const code = erreur?.code || '';
+      cadre.title = `${erreur?.message || erreur} ${code}`.trim();
+      cadre.replaceChildren(h('div', { style: 'text-align:center;padding:.2rem;line-height:1.2' }, [
+        h('div', { style: 'font-size:.68rem;color:var(--danger, #b3261e)', texte: `Photo indisponible${code ? ` (${code.replace('storage/', '')})` : ''}` }),
+        h('button', { class: 'bouton bouton-petit', type: 'button', style: 'margin-top:.2rem;font-size:.7rem', onclick: charger }, 'Réessayer'),
+      ]));
+    });
+  };
+  charger();
+  return cadre;
+}
+
+/** Intitulé lisible d'une galerie d'après sa clé (« piece-… » ou « meuble-… »). */
+const sujetDe = (cle) => (String(cle).startsWith('meuble-') ? 'Photo du meuble' : 'Photo de la pièce');
+
+/**
+ * Visionneuse plein écran : la photo agrandie, sa légende, précédente /
+ * suivante, fermeture par ✕, Échap ou clic sur le fond.
+ */
+function ouvrirVisionneuse(photos, indexDepart, sujet = 'Photo') {
+  let index = indexDepart;
+  const image = h('img', { alt: 'photo agrandie', style: 'max-width:92vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);background:#222' });
+  const legende = h('div', { style: 'color:#fff;margin-top:.7rem;font-size:.95rem;text-align:center;max-width:92vw' });
+  const fond = h('div', {
+    class: 'visionneuse', role: 'dialog', 'aria-label': 'Photo agrandie',
+    style: 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);display:flex;flex-direction:column;'
+      + 'align-items:center;justify-content:center;padding:1rem;touch-action:pan-x',
+  });
+  const fermer = () => { fond.remove(); document.removeEventListener('keydown', surTouche); };
+  const montrer = () => {
+    const photo = photos[index];
+    image.removeAttribute('src');
+    chargerImage(photo.chemin).then((url) => { image.src = url; }).catch(() => { legende.textContent = 'Photo indisponible.'; });
+    legende.textContent = `${sujet} ${index + 1} / ${photos.length}${photo.legende ? ` — ${photo.legende}` : ''}`;
+  };
+  const precedent = () => { index = (index - 1 + photos.length) % photos.length; montrer(); };
+  const suivant = () => { index = (index + 1) % photos.length; montrer(); };
+  const surTouche = (e) => {
+    if (e.key === 'Escape') fermer();
+    else if (e.key === 'ArrowLeft') precedent();
+    else if (e.key === 'ArrowRight') suivant();
+  };
+  const boutonFlottant = (texte, action, style) => h('button', {
+    type: 'button', class: 'visionneuse-bouton', onclick: (e) => { e.stopPropagation(); action(); },
+    style: `position:absolute;${style};background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:50%;`
+      + 'width:2.8rem;height:2.8rem;font-size:1.4rem;cursor:pointer',
+  }, texte);
+  fond.append(
+    boutonFlottant('✕', fermer, 'top:.8rem;right:.8rem'),
+    photos.length > 1 ? boutonFlottant('‹', precedent, 'left:.6rem;top:50%;transform:translateY(-50%)') : null,
+    photos.length > 1 ? boutonFlottant('›', suivant, 'right:.6rem;top:50%;transform:translateY(-50%)') : null,
+    image, legende,
+  );
+  fond.addEventListener('click', (e) => { if (e.target === fond || e.target === legende) fermer(); });
+  image.addEventListener('click', (e) => e.stopPropagation());
+  // Balayage tactile : suivante / précédente.
+  let departX = null;
+  fond.addEventListener('touchstart', (e) => { departX = e.touches[0]?.clientX ?? null; }, { passive: true });
+  fond.addEventListener('touchend', (e) => {
+    const finX = e.changedTouches[0]?.clientX;
+    if (departX !== null && finX !== undefined && Math.abs(finX - departX) > 50) (finX < departX ? suivant : precedent)();
+    departX = null;
+  }, { passive: true });
+  document.addEventListener('keydown', surTouche);
+  document.body.append(fond);
+  montrer();
 }
 
 function blocPiece(edl, piece, numero) {

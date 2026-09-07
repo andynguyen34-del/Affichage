@@ -38,6 +38,7 @@ export async function deposerOctets(espace, chemin, octets) {
   return { espace, chemin };
 }
 export const utilisateurEmail = () => '';
+export const nomStockage = () => 'dossier local';
 export async function lireOctets(espace, chemin) {
   const dir = await dossier(espace);
   const { parent, nom } = await cheminVersFichier(dir, chemin, false);

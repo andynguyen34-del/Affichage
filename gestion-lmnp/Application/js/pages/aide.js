@@ -75,7 +75,7 @@ export default {
             + 'ses propres photos (bouton « 📷 » de sa ligne, ou « + Photos » depuis la galerie) : elles '
             + 'apparaissent sous sa ligne d’inventaire, à l’écran comme dans le rapport. Sous chaque vignette, '
             + 'une légende facultative (« rayure côté gauche »…) est reprise dans le rapport ; sans légende, la photo '
-            + 'porte le nom de la pièce ou du meuble et son numéro.',
+            + 'porte le nom de la pièce ou du meuble et son numéro. Un clic sur une vignette l’agrandit en plein écran (flèches ou balayage pour passer à la suivante).',
           'Ajoutez le plan du logement (photo ou croquis) et posez d’un clic le numéro de chaque pièce dessus : '
             + 'le rapport PDF reprend le plan et ses repères.',
           'Chaque partie signe l’état des lieux à la main sur l’écran de la tablette (les deux bailleurs, '

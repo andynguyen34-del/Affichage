@@ -89,6 +89,8 @@ export async function seConnecter(email, motDePasse) {
 
 export async function seDeconnecter() { await signOut(auth); }
 export const utilisateurEmail = () => auth?.currentUser?.email || '';
+/** Nom du bucket de stockage (diagnostic). */
+export const nomStockage = () => stockage?.app?.options?.storageBucket || '';
 
 /**
  * Envoie l'e-mail « définir / réinitialiser le mot de passe » : le compte

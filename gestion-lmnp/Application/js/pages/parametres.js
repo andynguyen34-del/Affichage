@@ -8,6 +8,68 @@ import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
 import { date } from '../format.js';
 
+const EXPLICATIONS_STOCKAGE = {
+  'storage/unauthorized': 'Refusé par les règles de sécurité du stockage. Soit ce compte n’est pas reconnu comme gérant '
+    + '(Paramètres → Accès), soit l’autorisation croisée Storage → Firestore n’a pas été accordée au déploiement : '
+    + 'relancez « firebase deploy --only storage --project gestion-lmnp-anika » et répondez Y à la question « Grant the new role? ».',
+  'storage/unauthenticated': 'Session expirée : déconnectez-vous puis reconnectez-vous.',
+  'storage/retry-limit-exceeded': 'Réseau trop lent ou coupé : réessayez avec une meilleure connexion.',
+  'storage/quota-exceeded': 'Quota de stockage dépassé (plan Firebase).',
+  'storage/unknown': 'Erreur inconnue côté stockage : réessayez ; si elle persiste, envoyez le code ci-dessus.',
+};
+
+/**
+ * Test grandeur nature du stockage (écriture, relecture) : c'est ce que font
+ * les photos d'état des lieux et les documents du portail. Le résultat, avec
+ * le code d'erreur éventuel, dit exactement ce qui bloque.
+ */
+async function testerStockage(zone) {
+  zone.replaceChildren(h('p', { class: 'legende', texte: 'Test en cours…' }));
+  const etapes = [];
+  const contenu = new TextEncoder().encode(`test ${new Date().toISOString()}`);
+  const chemin = 'diagnostic/test-stockage.txt';
+  const essayer = async (libelle, action) => {
+    try {
+      const resultat = await action();
+      etapes.push({ libelle, ok: true, detail: resultat || '' });
+      return true;
+    } catch (erreur) {
+      etapes.push({ libelle, ok: false, detail: `${erreur?.message || erreur}`, code: erreur?.code || '' });
+      return false;
+    }
+  };
+  const ecrit = await essayer('Écriture d’un fichier de test', async () => { await api.deposerOctets('diagnostic', 'test-stockage.txt', contenu, 'text/plain'); });
+  if (ecrit) {
+    await essayer('Relecture du fichier', async () => {
+      const lu = await api.lireOctets('diagnostic', 'test-stockage.txt');
+      if (lu.length !== contenu.length) throw new Error(`taille lue ${lu.length} ≠ ${contenu.length}`);
+      return `${lu.length} octets`;
+    });
+  }
+  const codes = etapes.filter((e) => !e.ok).map((e) => e.code).filter(Boolean);
+  zone.replaceChildren(
+    h('ul', { style: 'margin:.3rem 0 .5rem;padding-left:1.2rem' }, etapes.map((e) => h('li', {}, [
+      h('span', { texte: `${e.ok ? '✓' : '✗'} ${e.libelle}` }),
+      e.detail ? h('span', { class: 'legende', texte: ` — ${e.detail}${e.code ? ` [${e.code}]` : ''}` }) : null,
+    ]))),
+    codes.length
+      ? h('div', { class: 'alerte alerte-erreur', texte: EXPLICATIONS_STOCKAGE[codes[0]] || `Code d’erreur : ${codes[0]}.` })
+      : h('div', { class: 'alerte alerte-info', texte: '✓ Le stockage fonctionne : les photos et documents peuvent être enregistrés et relus depuis ce compte.' }),
+    h('p', { class: 'legende', style: 'margin-top:.5rem', texte: `Compte : ${api.utilisateurEmail() || '—'} · Espace de stockage : ${api.nomStockage() || '—'} · Fichier de test : ${chemin}` }),
+  );
+}
+
+function carteStockage() {
+  const zone = h('div', {}, h('p', { class: 'legende', texte:
+    'Si des photos d’état des lieux ou des documents ne s’affichent pas, ce test dit en quelques secondes si le stockage '
+    + 'accepte l’écriture et la lecture depuis ce compte, et pourquoi sinon.' }));
+  return carte({
+    titre: 'Stockage des photos et documents',
+    actions: [bouton('Tester le stockage', () => testerStockage(zone).catch(signalerErreur), { petit: true, type: 'primaire' })],
+    corps: zone,
+  });
+}
+
 async function modifierIdentite(parametres) {
   const saisie = await formulaire({
     titre: 'Identité',
@@ -229,6 +291,7 @@ export default {
     }));
 
     if (api.MODE === 'nuage') conteneur.append(carteAcces(donnees));
+    if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
     conteneur.append(carte({
       titre: 'Sauvegarde',
