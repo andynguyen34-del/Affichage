@@ -91,6 +91,10 @@ export default {
             + 'Andy et Karine, puis chaque colocataire) — et faites signer le bail dans la foulée '
             + '(« Bien & baux » → Bail signé).',
           'Le rapport PDF (plan, photos, signatures) se télécharge et est déposé sur l’espace de chaque colocataire.',
+          'Les photos et documents sont stockés dans l’espace Firebase Storage du projet (Google Cloud, Europe) : '
+            + 'dossier « etats-des-lieux » pour les photos, « documents » pour les PDF, « portail » pour ce qui est remis aux colocataires. '
+            + 'Depuis un réseau qui bloque ce serveur (poste professionnel), l’application les fait transiter par sa propre adresse, sans rien changer pour vous ; '
+            + 'Paramètres → « Tester le stockage » l’indique.',
           ['Enfin, ouvrez la ', h('strong', { texte: 'fenêtre contradictoire' }),
             ' : chaque colocataire a 3 semaines pour déposer ses propres photos depuis son espace '
             + '(datées, non modifiables) ; « Relever les photos » les affiche côté gérant.'],

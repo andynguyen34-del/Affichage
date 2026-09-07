@@ -44,6 +44,10 @@ export async function deposerOctets(espace, chemin, octets) {
 export const utilisateurEmail = () => '';
 export const nomStockage = () => 'dossier local';
 export async function sonderStockage() { return 'dossier local'; }
+export async function sonderRelais() { throw new Error('Sans objet en version dossier.'); }
+export const modeFichiers = () => 'direct';
+export const raisonModeFichiers = () => '';
+export function reinitialiserModeFichiers() { /* sans objet */ }
 export async function lireOctets(espace, chemin) {
   const dir = await dossier(espace);
   const { parent, nom } = await cheminVersFichier(dir, chemin, false);

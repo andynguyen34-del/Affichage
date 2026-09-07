@@ -13,10 +13,12 @@ import { moisVise, jourEnvoi } from '../appel-loyer.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
 
 const EXPLICATIONS_STOCKAGE = {
-  'reseau/bloque': 'Le serveur de stockage ne répond pas depuis ce poste, alors que la base de données répond : le réseau '
-    + '(pare-feu ou proxy d’entreprise) bloque firebasestorage.googleapis.com. Les photos et documents s’affichent depuis un '
-    + 'autre réseau (tablette en 4G, connexion personnelle). Si ce poste doit absolument y accéder, demandez l’autorisation '
-    + 'de ce domaine, ou signalez-le pour qu’un relais par l’adresse de l’application soit mis en place.',
+  'reseau/relais': 'Le serveur de stockage ne répond pas directement depuis ce poste (réseau qui bloque '
+    + 'firebasestorage.googleapis.com), mais le relais par l’adresse de l’application fonctionne : les photos et documents '
+    + 'passent par lui automatiquement. Rien à faire.',
+  'reseau/bloque': 'Le serveur de stockage ne répond pas depuis ce poste et le relais par l’adresse de l’application non plus : '
+    + 'vérifiez que la fonction « fichiers » est déployée (firebase deploy), puis réessayez. En attendant, les photos et documents '
+    + 's’affichent depuis un autre réseau (tablette en 4G, connexion personnelle).',
   'storage/retry-limit-exceeded': 'Le serveur de stockage n’a pas répondu à temps (20 s) : réseau lent, coupé, ou qui bloque '
     + 'firebasestorage.googleapis.com. Réessayez depuis un autre réseau (tablette en 4G, connexion personnelle).',
   'storage/unauthorized': 'Refusé par les règles de sécurité du stockage. Soit ce compte n’est pas reconnu comme gérant '
@@ -47,17 +49,20 @@ async function testerStockage(zone) {
       return false;
     }
   };
-  const joignable = await essayer('Serveur de stockage joignable depuis ce poste', () => api.sonderStockage());
-  const ecrit = joignable && await essayer('Écriture d’un fichier de test', async () => { await api.deposerOctets('diagnostic', 'test-stockage.txt', contenu, 'text/plain'); });
+  const joignable = await essayer('Serveur de stockage joignable directement depuis ce poste', () => api.sonderStockage());
+  const relaisOk = await essayer('Relais par l’adresse de l’application (/api/fichiers)', () => api.sonderRelais());
+  const mode = api.modeFichiers();
+  const via = mode === 'relais' ? ' (via le relais)' : ' (accès direct)';
+  const ecrit = (joignable || relaisOk) && await essayer(`Écriture d’un fichier de test${via}`, async () => { await api.deposerOctets('diagnostic', 'test-stockage.txt', contenu, 'text/plain'); });
   if (ecrit) {
-    await essayer('Relecture du fichier', async () => {
+    await essayer(`Relecture du fichier${via}`, async () => {
       const lu = await api.lireOctets('diagnostic', 'test-stockage.txt');
       if (lu.length !== contenu.length) throw new Error(`taille lue ${lu.length} ≠ ${contenu.length}`);
       return `${lu.length} octets`;
     });
     // Exactement le chemin des photos d'état des lieux : une image JPEG
     // fabriquée sur place, déposée comme une photo, puis relue et affichée.
-    await essayer('Dépôt puis affichage d’une image (comme une photo d’état des lieux)', async () => {
+    await essayer(`Dépôt puis affichage d’une image, comme une photo d’état des lieux${via}`, async () => {
       const canevas = document.createElement('canvas');
       canevas.width = 64; canevas.height = 48;
       const ctx = canevas.getContext('2d');
@@ -78,15 +83,20 @@ async function testerStockage(zone) {
     });
   }
   const codes = etapes.filter((e) => !e.ok).map((e) => e.code).filter(Boolean);
-  if (!joignable) codes.unshift('reseau/bloque');
+  if (!joignable && relaisOk) codes.unshift('reseau/relais');
+  else if (!joignable) codes.unshift('reseau/bloque');
   zone.replaceChildren(
     h('ul', { style: 'margin:.3rem 0 .5rem;padding-left:1.2rem' }, etapes.map((e) => h('li', {}, [
       h('span', { texte: `${e.ok ? '✓' : '✗'} ${e.libelle}` }),
       e.detail ? h('span', { class: 'legende', texte: ` — ${e.detail}${e.code ? ` [${e.code}]` : ''}` }) : null,
     ]))),
     codes.length
-      ? h('div', { class: 'alerte alerte-erreur', texte: EXPLICATIONS_STOCKAGE[codes[0]] || `Code d’erreur : ${codes[0]}.` })
-      : h('div', { class: 'alerte alerte-info', texte: '✓ Le stockage fonctionne : les photos et documents peuvent être enregistrés et relus depuis ce compte.' }),
+      ? h('div', { class: codes[0] === 'reseau/relais' ? 'alerte alerte-info' : 'alerte alerte-erreur', texte: EXPLICATIONS_STOCKAGE[codes[0]] || `Code d’erreur : ${codes[0]}.` })
+      : h('div', { class: 'alerte alerte-info', texte: `✓ Le stockage fonctionne${via} : les photos et documents peuvent être enregistrés et relus depuis ce compte.` }),
+    h('p', { class: 'legende', style: 'margin-top:.4rem' }, [
+      h('span', { texte: `Mode d’accès aux fichiers : ${api.modeFichiers() === 'relais' ? `relais par l’adresse de l’application (${api.raisonModeFichiers() || 'automatique'})` : 'direct'}. ` }),
+      api.modeFichiers() === 'relais' ? bouton('Revenir à l’accès direct', () => { api.reinitialiserModeFichiers(); notifier('Accès direct rétabli pour ce navigateur ; le relais reprendra tout seul si le serveur de stockage reste injoignable.', 'succes'); testerStockage(zone).catch(signalerErreur); }, { petit: true }) : null,
+    ]),
     h('p', { class: 'legende', style: 'margin-top:.5rem', texte: `Compte : ${api.utilisateurEmail() || '—'} · Espace de stockage : ${api.nomStockage() || '—'} · Fichier de test : ${chemin} · Navigateur : ${navigator.userAgent.replace(/\).*$/, ')')}` }),
     blocJournal(),
   );
@@ -216,7 +226,8 @@ function carteAppelLoyer() {
 function carteStockage() {
   const zone = h('div', {}, h('p', { class: 'legende', texte:
     'Si des photos d’état des lieux ou des documents ne s’affichent pas, ce test dit en quelques secondes si le stockage '
-    + 'accepte l’écriture et la lecture depuis ce compte, et pourquoi sinon.' }));
+    + 'accepte l’écriture et la lecture depuis ce compte, et pourquoi sinon. Sur un réseau qui bloque le serveur de stockage, '
+    + `l’application passe d’elle-même par son relais. Mode actuel : ${api.modeFichiers() === 'relais' ? 'relais' : 'direct'}.` }));
   return carte({
     titre: 'Stockage des photos et documents',
     actions: [bouton('Tester le stockage', () => testerStockage(zone).catch(signalerErreur), { petit: true, type: 'primaire' })],

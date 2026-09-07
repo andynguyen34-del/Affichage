@@ -1,3 +1,5 @@
+// Fonctions du projet : appel de loyer planifié et relais de fichiers.
+//
 // Appel de loyer planifié : chaque jour à 8 h 10 (heure de Paris), si c'est
 // le jour réglé dans l'application et que le mois n'a pas encore été appelé,
 // dépose un e-mail par colocataire dans la collection « mail » (envoyée par
@@ -13,6 +15,9 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { preparerAppels, doitEnvoyer, moisVise, cleMois, APPEL_PAR_DEFAUT, nomMois } from './lib/appel-loyer.js';
 
 initializeApp();
+
+// Relais de fichiers (/api/fichiers) : voir relais-fichiers.js.
+export { fichiers } from './relais-fichiers.js';
 
 const lireCollection = async (base, nom) => {
   const photo = await base.doc(`donnees/${nom}`).get();

@@ -24,9 +24,9 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Bien & baux → Justificatifs des colocataires ».
 
-**Important pour cette mise à jour (v28)** : la livraison contient un
-dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer, voir
-plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
+**Important pour cette mise à jour (v30)** : la livraison contient un
+dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer et
+relais de fichiers, voir plus bas), déclaré dans `firebase.json` sous le codebase `appel-loyer`,
 **avec ses bibliothèques déjà installées** (`node_modules/`, 5 500 petits
 fichiers : c'est normal, et c'est indispensable — la CLI Firebase charge le
 code de la fonction sur votre PC pour l'analyser avant de l'envoyer ; sans
@@ -188,6 +188,27 @@ Il n'est donc pas nécessaire de recopier le dossier `functions/` de la v23
 dans les livraisons suivantes ; si vous le faites quand même, il est ignoré.
 Pour mettre à jour `envoiMail`, déployez depuis son propre dossier avec
 `firebase deploy --only functions`.
+
+## Où sont les photos et documents, et le relais de fichiers (v30)
+
+Les photos d'état des lieux, les PDF (quittances, rapports, bail signé) et
+les dépôts des colocataires vivent dans **Firebase Storage** (espace Google
+Cloud du projet, région Europe) :
+`etats-des-lieux/{état des lieux}/{pièce}/…` pour les photos,
+`documents/…` pour les PDF, `portail/{e-mail}/…` pour ce qui est remis à
+chaque colocataire. Ils se consultent aussi depuis la console :
+https://console.firebase.google.com/project/gestion-lmnp-anika/storage
+
+Certains réseaux d'entreprise bloquent le serveur de stockage
+(`firebasestorage.googleapis.com`) tout en laissant passer l'adresse de
+l'application : les vignettes restaient alors vides (« Photo indisponible
+(retry-limit-exceeded) »). Depuis la v30, la fonction **`fichiers`**, servie
+derrière `https://gestion-lmnp-anika.web.app/api/fichiers`, fait transiter
+les fichiers par l'adresse de l'application. L'application l'utilise
+d'elle-même dès qu'elle constate que le serveur de stockage ne répond pas,
+et le mémorise pour ce navigateur (Paramètres → « Tester le stockage »
+l'indique et permet de revenir à l'accès direct). Le relais applique
+exactement les mêmes droits que les règles de sécurité du stockage.
 
 ## L'appel de loyer automatique (v26, dossier `functions-appel-loyer/`)
 

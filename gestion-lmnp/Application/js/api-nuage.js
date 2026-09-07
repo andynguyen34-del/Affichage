@@ -52,7 +52,7 @@ export async function initialiser() {
   // d'entreprise, par exemple) doit échouer vite et visiblement, pas rester
   // muette deux minutes : 20 s de tentatives en lecture. Les envois gardent
   // leur patience par défaut (réseau mobile lent).
-  stockage.maxOperationRetryTime = 20000;
+  stockage.maxOperationRetryTime = 12000;
   if (window.__EMULATEURS__) {
     const e = window.__EMULATEURS__;
     connectAuthEmulator(auth, `http://${e.hote}:${e.auth}`, { disableWarnings: true });
@@ -60,6 +60,9 @@ export async function initialiser() {
     connectStorageEmulator(stockage, e.hote, e.stockage);
   }
   try { await setPersistence(auth, browserLocalPersistence); } catch { /* session seulement */ }
+  // Le serveur de stockage est-il joignable d'ici ? Sinon, on passe tout de
+  // suite par le relais de l'application, sans attendre un premier échec.
+  if (!relais) sonderStockage().catch((erreur) => activerRelais(erreur.message));
 }
 
 // ----------------------------------------------------------------- connexion
@@ -217,10 +220,83 @@ export async function ecrireCollection(nom, versionAttendue, contenu) {
   return resultat.ok ? { ok: true, version: resultat.version } : resultat;
 }
 
+// ------------------------------------------------ relais via l'hébergement
+
+// Certains réseaux (entreprise) bloquent le serveur de stockage tout en
+// laissant passer l'adresse de l'application : les fichiers transitent alors
+// par /api/fichiers (fonction « fichiers », voir functions-appel-loyer/
+// relais-fichiers.js), qui applique les mêmes droits que les règles Storage.
+// Le choix est mémorisé dans ce navigateur ; Paramètres → Stockage permet
+// de revenir à l'accès direct.
+const CLE_RELAIS = 'lmnp-relais-fichiers';
+const lireDrapeauRelais = () => { try { return localStorage.getItem(CLE_RELAIS) === '1'; } catch { return false; } };
+let relais = window.__RELAIS_FICHIERS__ === 'force' || lireDrapeauRelais();
+let raisonRelais = relais ? 'mémorisé dans ce navigateur' : '';
+const CODES_RESEAU = new Set(['storage/retry-limit-exceeded', 'storage/unknown']);
+
+export const modeFichiers = () => (relais ? 'relais' : 'direct');
+export const raisonModeFichiers = () => raisonRelais;
+export function reinitialiserModeFichiers() {
+  relais = window.__RELAIS_FICHIERS__ === 'force';
+  raisonRelais = '';
+  try { localStorage.removeItem(CLE_RELAIS); } catch { /* sans importance */ }
+}
+function activerRelais(raison) {
+  if (relais) return;
+  relais = true;
+  raisonRelais = String(raison || 'serveur de stockage injoignable');
+  try { localStorage.setItem(CLE_RELAIS, '1'); } catch { /* sans importance */ }
+  console.warn(`Fichiers : passage par le relais de l’application (${raisonRelais}).`);
+}
+
+async function appelRelais(op, { espace, chemin, prefixe, espaceCible, cible, ecraser, corps, typeMime } = {}) {
+  const jeton = await auth?.currentUser?.getIdToken();
+  if (!jeton) { const e = new Error('Connexion requise.'); e.code = 'relais/401'; throw e; }
+  const params = new URLSearchParams({ op });
+  for (const [cle, valeur] of Object.entries({ espace, chemin, prefixe, espaceCible, cible, ecraser })) {
+    if (valeur !== undefined && valeur !== null && valeur !== '') params.set(cle, String(valeur));
+  }
+  const reponse = await fetch(`/api/fichiers?${params}`, {
+    method: corps ? 'POST' : 'GET',
+    headers: { Authorization: `Bearer ${jeton}`, ...(corps ? { 'Content-Type': typeMime || 'application/octet-stream' } : {}) },
+    body: corps || undefined,
+    cache: 'no-store',
+  });
+  if (!reponse.ok) {
+    let message = `relais : HTTP ${reponse.status}`;
+    try { const j = await reponse.json(); if (j?.erreur) message = j.erreur; } catch { /* corps non JSON */ }
+    const erreur = new Error(message);
+    erreur.code = `relais/${reponse.status}`;
+    throw erreur;
+  }
+  return reponse;
+}
+
+/** Accès direct d'abord ; sur coupure réseau vers le stockage, bascule sur le relais. */
+async function avecRepli(direct, viaRelais) {
+  if (relais) return viaRelais();
+  try { return await direct(); } catch (erreur) {
+    if (!CODES_RESEAU.has(erreur?.code)) throw erreur;
+    activerRelais(erreur.code);
+    return viaRelais();
+  }
+}
+
+/** Le relais répond-il pour ce compte ? (diagnostic) */
+export async function sonderRelais() {
+  const depart = performance.now();
+  const infos = await (await appelRelais('sonde')).json();
+  return `réponse en ${Math.round(performance.now() - depart)} ms — compte ${infos.email}${infos.gerant ? ' (gérant)' : ''}, espace ${infos.bucket}`;
+}
+
 // ------------------------------------------------------------------- fichiers
 
 // Les justificatifs vivent dans Firebase Storage : `{espace}/{chemin}`.
 const refFichier = (espace, chemin) => refStockage(stockage, `${espace}/${chemin}`);
+const lireBlob = (espace, chemin) => avecRepli(
+  () => getBlob(refFichier(espace, chemin)),
+  async () => (await appelRelais('lire', { espace, chemin })).blob(),
+);
 
 async function parcourir(reference, prefixe, espace, elements) {
   const page = await listAll(reference);
@@ -241,10 +317,12 @@ async function parcourir(reference, prefixe, espace, elements) {
 }
 
 export async function listerFichiers(espace, prefixe = '') {
-  const elements = [];
-  const depart = prefixe ? `${espace}/${prefixe}` : espace;
-  await parcourir(refStockage(stockage, depart), prefixe, espace, elements);
-  return elements.sort((a, b) => a.chemin.localeCompare(b.chemin));
+  return avecRepli(async () => {
+    const elements = [];
+    const depart = prefixe ? `${espace}/${prefixe}` : espace;
+    await parcourir(refStockage(stockage, depart), prefixe, espace, elements);
+    return elements.sort((a, b) => a.chemin.localeCompare(b.chemin));
+  }, async () => (await (await appelRelais('liste', { espace, prefixe })).json()).elements || []);
 }
 
 async function existe(reference) {
@@ -266,32 +344,38 @@ async function nomDisponible(espace, chemin) {
 }
 
 export async function deposerFichier(espace, chemin, fichier) {
-  const cheminFinal = await nomDisponible(espace, chemin);
-  await uploadBytes(refFichier(espace, cheminFinal), fichier, {
-    contentType: fichier.type || 'application/octet-stream',
-  });
-  return { espace, chemin: cheminFinal };
+  return avecRepli(async () => {
+    const cheminFinal = await nomDisponible(espace, chemin);
+    await uploadBytes(refFichier(espace, cheminFinal), fichier, {
+      contentType: fichier.type || 'application/octet-stream',
+    });
+    return { espace, chemin: cheminFinal };
+  }, async () => (await appelRelais('deposer', { espace, chemin, corps: fichier, typeMime: fichier.type || 'application/octet-stream' })).json());
 }
 
 export async function deplacerFichier(espace, chemin, espaceCible, cible) {
-  const source = refFichier(espace, chemin);
-  const contenu = await getBlob(source);
-  const cheminFinal = await nomDisponible(espaceCible, cible);
-  await uploadBytes(refFichier(espaceCible, cheminFinal), contenu);
-  await deleteObject(source);
-  return { espace: espaceCible, chemin: cheminFinal };
+  return avecRepli(async () => {
+    const source = refFichier(espace, chemin);
+    const contenu = await getBlob(source);
+    const cheminFinal = await nomDisponible(espaceCible, cible);
+    await uploadBytes(refFichier(espaceCible, cheminFinal), contenu);
+    await deleteObject(source);
+    return { espace: espaceCible, chemin: cheminFinal };
+  }, async () => (await appelRelais('deplacer', { espace, chemin, espaceCible, cible, corps: new Uint8Array([0]), typeMime: 'application/octet-stream' })).json());
 }
 
 export async function supprimerFichier(espace, chemin) {
-  const source = refFichier(espace, chemin);
-  // Copie vers la Corbeille avant suppression, comme la version dossier.
-  try {
-    const contenu = await getBlob(source);
-    const horodatage = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15);
-    const nom = chemin.includes('/') ? chemin.slice(chemin.lastIndexOf('/') + 1) : chemin;
-    await uploadBytes(refFichier('corbeille', `${horodatage}-${nom}`), contenu);
-  } catch { /* si la copie échoue, on supprime quand même */ }
-  await deleteObject(source);
+  await avecRepli(async () => {
+    const source = refFichier(espace, chemin);
+    // Copie vers la Corbeille avant suppression, comme la version dossier.
+    try {
+      const contenu = await getBlob(source);
+      const horodatage = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15);
+      const nom = chemin.includes('/') ? chemin.slice(chemin.lastIndexOf('/') + 1) : chemin;
+      await uploadBytes(refFichier('corbeille', `${horodatage}-${nom}`), contenu);
+    } catch { /* si la copie échoue, on supprime quand même */ }
+    await deleteObject(source);
+  }, async () => { await appelRelais('supprimer', { espace, chemin, corps: new Uint8Array([0]), typeMime: 'application/octet-stream' }); });
 }
 
 export async function ouvrirFichier(espace, chemin) {
@@ -306,7 +390,7 @@ export async function ouvrirFichier(espace, chemin) {
     } catch { /* peu importe */ }
   }
   try {
-    const contenu = await getBlob(refFichier(espace, chemin));
+    const contenu = await lireBlob(espace, chemin);
     const url = URL.createObjectURL(contenu);
     if (fenetre && !fenetre.closed) fenetre.location.replace(url);
     else window.open(url, '_blank');
@@ -319,13 +403,13 @@ export async function ouvrirFichier(espace, chemin) {
 
 /** Lit le contenu brut d'un fichier (octets). */
 export async function lireOctets(espace, chemin) {
-  const contenu = await getBlob(refFichier(espace, chemin));
+  const contenu = await lireBlob(espace, chemin);
   return new Uint8Array(await contenu.arrayBuffer());
 }
 
 /** Télécharge un fichier sur le poste (bouton « Télécharger »). */
 export async function telechargerFichier(espace, chemin, nomFichier) {
-  const contenu = await getBlob(refFichier(espace, chemin));
+  const contenu = await lireBlob(espace, chemin);
   const lien = document.createElement('a');
   lien.href = URL.createObjectURL(contenu);
   lien.download = nomFichierTelechargement(nomFichier || chemin.split('/').pop());
@@ -339,8 +423,10 @@ export async function telechargerFichier(espace, chemin, nomFichier) {
 
 /** Dépose des octets générés par l'application (PDF de quittance, rapport…). */
 export async function deposerOctets(espace, chemin, octets, typeMime) {
-  await uploadBytes(refFichier(espace, chemin), octets, { contentType: typeMime || 'application/octet-stream' });
-  return { espace, chemin };
+  return avecRepli(async () => {
+    await uploadBytes(refFichier(espace, chemin), octets, { contentType: typeMime || 'application/octet-stream' });
+    return { espace, chemin };
+  }, async () => (await appelRelais('deposer', { espace, chemin, ecraser: '1', corps: octets, typeMime: typeMime || 'application/octet-stream' })).json());
 }
 
 export async function arreter() { /* rien à libérer */ }
