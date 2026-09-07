@@ -9,6 +9,7 @@ import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.j
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
+import { estCourteDuree, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
 
 const locataireDe = (donnees, echeance, bail) =>
   donnees.locataires.find((l) => l.id === (echeance?.locataireId || bail?.locataireId)) || null;
@@ -103,7 +104,7 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   };
 
   const notifierParEmail = async () => {
-    if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Bien & baux »).', 'erreur'); return; }
+    if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Logements & baux »).', 'erreur'); return; }
     if (!publie) { notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
     await executer(api.envoyerCourriel({
       destinataires: destinatairesDe(locataire),
@@ -266,6 +267,111 @@ function ligneStatut(echeance) {
   return badge(info.texte, info.ton);
 }
 
+// ------------------------------------------------------------------ séjours
+// Location de courte durée (Airbnb, Booking…) : pas de bail ni d'échéance
+// mensuelle, mais des séjours — chacun avec son montant et son encaissement.
+
+async function saisirSejour(bien, existant = null) {
+  const saisie = await formulaire({
+    titre: existant ? `Séjour — ${bien.nom}` : `Nouveau séjour — ${bien.nom}`,
+    aide: 'Le montant est ce que vous percevez pour le séjour (net des frais retenus par la plateforme).',
+    champs: [
+      { cle: 'plateforme', libelle: 'Plateforme', type: 'liste', options: PLATEFORMES.map((v) => ({ valeur: v, libelle: v })) },
+      { cle: 'voyageur', libelle: 'Voyageur (nom ou prénom)', type: 'texte' },
+      { cle: 'arrivee', libelle: 'Arrivée', type: 'date', requis: true },
+      { cle: 'depart', libelle: 'Départ', type: 'date', requis: true },
+      { cle: 'montant', libelle: 'Montant perçu (€)', type: 'montant', requis: true },
+      { cle: 'notes', libelle: 'Notes (référence de réservation…)', type: 'zone' },
+    ],
+    valeurs: existant ? {
+      plateforme: existant.plateforme, voyageur: existant.voyageur || '', arrivee: existant.arrivee, depart: existant.depart,
+      montant: existant.montant || 0, notes: existant.notes || '',
+    } : { plateforme: PLATEFORMES[0], voyageur: '', arrivee: aujourdhui(), depart: '', montant: 0, notes: '' },
+  });
+  if (!saisie) return;
+  if (saisie.depart <= saisie.arrivee) { notifier('Le départ doit être postérieur à l’arrivée.', 'erreur'); return; }
+  await executer(etat.enregistrer('loyers', gabaritSejour(bien.id, saisie, existant || {})), existant ? 'Séjour mis à jour.' : 'Séjour enregistré.');
+}
+
+async function encaisserSejour(sejour) {
+  const reste = centimes((Number(sejour.montant) || 0) - calcul.totalEncaisse(sejour));
+  const saisie = await formulaire({
+    titre: `Encaissement du séjour du ${date(sejour.arrivee)}`,
+    champs: [
+      { cle: 'date', libelle: 'Date de l’encaissement', type: 'date', requis: true },
+      { cle: 'montant', libelle: 'Montant reçu (€)', type: 'montant', requis: true },
+      { cle: 'mode', libelle: 'Mode de règlement', type: 'liste', options: [`Virement ${sejour.plateforme || ''}`.trim(), ...etat.MODES_REGLEMENT].map((m) => ({ valeur: m, libelle: m })) },
+      { cle: 'reference', libelle: 'Référence (facultatif)', type: 'texte', largeur: 'pleine' },
+    ],
+    valeurs: { date: aujourdhui(), montant: reste > 0 ? reste : sejour.montant, mode: `Virement ${sejour.plateforme || ''}`.trim() },
+  });
+  if (!saisie) return;
+  const nouvel = { id: crypto.randomUUID(), date: saisie.date, montant: Number(saisie.montant) || 0, mode: saisie.mode, reference: saisie.reference || '' };
+  await executer(
+    etat.modifierElement('loyers', sejour.id, (e) => { e.encaissements = [...(e.encaissements || []), nouvel]; }, gabaritSejour(sejour.bienId, {}, sejour)),
+    'Encaissement enregistré.',
+  );
+}
+
+const LIBELLES_PHASE = { 'a-venir': ['À venir', 'attente'], 'en-cours': ['En cours', 'info'], termine: ['Terminé', 'attente'] };
+
+/** Carte des séjours d'un logement de courte durée sur l'année. */
+function carteSejours(donnees, bien, annee) {
+  const sejours = sejoursDe(donnees.loyers, bien.id, annee);
+  const total = centimes(sejours.reduce((s, x) => s + (Number(x.montant) || 0), 0));
+  const recu = centimes(sejours.reduce((s, x) => s + calcul.totalEncaisse(x), 0));
+  const nuits = sejours.reduce((s, x) => s + nuitsEntre(x.arrivee, x.depart), 0);
+  const colonnes = [
+    { titre: 'Séjour', valeur: (x) => h('div', {}, [
+      h('div', { texte: `${date(x.arrivee)} → ${date(x.depart)}` }),
+      h('div', { class: 'legende', texte: `${nuitsEntre(x.arrivee, x.depart)} nuit(s)${x.notes ? ` · ${x.notes}` : ''}` }),
+    ]) },
+    { titre: 'Voyageur', valeur: (x) => x.voyageur || '—' },
+    { titre: 'Plateforme', valeur: (x) => x.plateforme || '—' },
+    { titre: 'Montant', nombre: true, valeur: (x) => montant(x.montant || 0) },
+    { titre: 'Encaissé', nombre: true, valeur: (x) => {
+      const r = calcul.totalEncaisse(x);
+      return r ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(x) }, montant(r)) : '—';
+    } },
+    { titre: 'État', valeur: (x) => {
+      const [texte, ton] = LIBELLES_PHASE[phaseSejour(x, aujourdhui())];
+      const paye = calcul.statut(x) === 'paye';
+      return h('div', { class: 'groupe-boutons' }, [badge(texte, ton), paye ? badge('Encaissé', 'succes') : (calcul.totalEncaisse(x) > 0 ? badge('Partiel', 'attention') : null)]);
+    } },
+    { titre: '', actions: true, valeur: (x) => h('div', { class: 'groupe-boutons' }, [
+      calcul.statut(x) !== 'paye' ? bouton('Encaissé', () => encaisserSejour(x), { petit: true, type: 'primaire', titre: 'Enregistrer le versement de la plateforme ou du voyageur' }) : null,
+      bouton('Modifier', () => saisirSejour(bien, x), { petit: true }),
+      bouton('✕', async () => {
+        const ok = await confirmer({ titre: 'Supprimer le séjour', message: `Supprimer le séjour du ${date(x.arrivee)} au ${date(x.depart)} ?`, libelleValider: 'Supprimer', danger: true });
+        if (ok) await executer(etat.supprimer('loyers', x.id), 'Séjour supprimé.');
+      }, { petit: true, type: 'danger' }),
+    ]) },
+  ];
+  return carte({
+    titre: `Séjours ${annee} — ${bien.nom}`,
+    aide: sejours.length
+      ? `${sejours.length} séjour(s), ${nuits} nuit(s) : ${montant(recu)} encaissés sur ${montant(total)}`
+      : 'Courte durée : enregistrez chaque séjour (dates, voyageur, montant perçu) puis son encaissement.',
+    actions: [bouton('+ Séjour', () => saisirSejour(bien), { petit: true, type: 'primaire' })],
+    serre: true,
+    corps: tableau({ colonnes, lignes: sejours, cle: (x) => x.id, messageVide: `Aucun séjour en ${annee}.` }),
+  });
+}
+
+/** Bandeau d'un logement dans la vue « Tous les logements ». */
+const enteteLogement = (bien, contexte) => h('div', { class: 'section-logement' }, [
+  h('h2', { texte: bien.nom }),
+  badge(libelleTypeLocation(bien), estCourteDuree(bien) ? 'info' : 'succes'),
+  h('span', { class: 'legende', texte: [bien.adresse, bien.ville].filter(Boolean).join(', ') }),
+  bouton('Ce logement seul', () => contexte.definirLogement(bien.id), { petit: true, type: 'discret', titre: 'Afficher uniquement ce logement dans toutes les pages' }),
+]);
+
+const sousTotalLogement = (attendu, encaisse) => h('div', { class: 'sous-total-logement' }, [
+  h('span', {}, ['Sous-total : attendu ', h('strong', { texte: montant(attendu) })]),
+  h('span', {}, ['encaissé ', h('strong', { texte: montant(encaisse) })]),
+  h('span', {}, ['reste ', h('strong', { texte: montant(centimes(attendu - encaisse)) })]),
+]);
+
 export default {
   cle: 'loyers',
   libelle: 'Loyers',
@@ -275,7 +381,8 @@ export default {
   compteur(contexte) {
     const donnees = contexte.donnees || {};
     if (!donnees.baux) return null;
-    const retards = calcul.echeancesGlobales(donnees.baux, contexte.annee, donnees.loyers)
+    const sejours = (donnees.loyers || []).filter((l) => l.sejour && Number(l.annee) === Number(contexte.annee) && l.depart && l.depart <= aujourdhui());
+    const retards = [...calcul.echeancesGlobales(donnees.baux, contexte.annee, donnees.loyers), ...sejours]
       .filter((e) => calcul.statut(e) === 'retard' || calcul.statut(e) === 'partiel').length;
     return retards || null;
   },
@@ -283,23 +390,26 @@ export default {
     const donnees = contexte.donnees;
     const annee = contexte.annee;
     const conteneur = h('div');
+    const logementsCourteDuree = donnees.biens.filter(estCourteDuree);
 
-    if (!donnees.baux.length) {
+    if (!donnees.baux.length && !logementsCourteDuree.length) {
       return carte({
         titre: 'Aucun bail',
         corps: vide('Rien à quittancer pour l’instant',
-          'Enregistrez d’abord un bail dans « Bien & baux » : les échéances mensuelles en découlent automatiquement.'),
+          'Enregistrez d’abord un bail dans « Logements & baux » : les échéances mensuelles en découlent automatiquement.'),
       });
     }
 
     const toutes = calcul.echeancesGlobales(donnees.baux, annee, donnees.loyers);
-    const attendu = centimes(toutes.reduce((s, e) => s + (e.total || 0), 0));
-    const encaisse = centimes(toutes.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
-    const impayes = toutes.filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
+    const sejoursAnnee = logementsCourteDuree.flatMap((bien) => sejoursDe(donnees.loyers, bien.id, annee));
+    const attendu = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + (e.total || 0), 0));
+    const encaisse = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+    const impayes = [...toutes, ...sejoursAnnee.filter((x) => x.depart && x.depart <= aujourdhui())]
+      .filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
     const resteDu = centimes(impayes.reduce((s, e) => s + (e.total - calcul.totalEncaisse(e)), 0));
 
     conteneur.append(h('div', { class: 'grille grille-4', style: 'margin-bottom:1rem' }, [
-      tuile({ libelle: `Attendu ${annee}`, valeur: montant(attendu, { rond: true }), detail: `${toutes.length} échéances` }),
+      tuile({ libelle: `Attendu ${annee}`, valeur: montant(attendu, { rond: true }), detail: `${toutes.length} échéance(s)${sejoursAnnee.length ? `, ${sejoursAnnee.length} séjour(s)` : ''}` }),
       tuile({ libelle: 'Encaissé', valeur: montant(encaisse, { rond: true }), ton: 'positif' }),
       tuile({ libelle: 'Reste dû', valeur: montant(resteDu, { rond: true }), ton: resteDu > 0 ? 'negatif' : 'neutre', detail: `${impayes.length} échéance(s)` }),
       tuile({
@@ -308,10 +418,30 @@ export default {
       }),
     ]));
 
-    for (const bail of donnees.baux) {
+    // Vue « Tous les logements » : un bandeau par logement, ses cartes, puis
+    // son sous-total. Avec un seul logement affiché, les cartes seules.
+    const grouper = !contexte.bienId && donnees.biens.length > 1;
+    // Un bail dont le logement a été supprimé reste visible, en fin de page.
+    const logements = [...donnees.biens, ...(donnees.baux.some((b) => !donnees.biens.some((x) => x.id === b.bienId)) ? [null] : [])];
+    for (const bien of logements) {
+    if (grouper) conteneur.append(bien ? enteteLogement(bien, contexte) : h('div', { class: 'section-logement' }, [h('h2', { texte: 'Baux sans logement' })]));
+    let attenduLogement = 0;
+    let encaisseLogement = 0;
+    if (bien && estCourteDuree(bien)) {
+      const sejours = sejoursDe(donnees.loyers, bien.id, annee);
+      attenduLogement = sejours.reduce((s, x) => s + (x.total || 0), 0);
+      encaisseLogement = sejours.reduce((s, x) => s + calcul.totalEncaisse(x), 0);
+      conteneur.append(carteSejours(donnees, bien, annee));
+      if (grouper) conteneur.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
+      continue;
+    }
+    const bauxDuLogement = donnees.baux.filter((b) => (bien ? b.bienId === bien.id : !donnees.biens.some((x) => x.id === b.bienId)));
+    let cartes = 0;
+    for (const bail of bauxDuLogement) {
       const toutesEcheances = calcul.echeancesAnnee(bail, annee, donnees.loyers);
       if (!toutesEcheances.length) continue;
-      const bien = donnees.biens.find((b) => b.id === bail.bienId);
+      attenduLogement += toutesEcheances.reduce((s, e) => s + (e.total || 0), 0);
+      encaisseLogement += toutesEcheances.reduce((s, e) => s + calcul.totalEncaisse(e), 0);
 
       // Une carte par payeur : chaque colocataire suit ses propres virements.
       const parLocataire = new Map();
@@ -355,6 +485,7 @@ export default {
         ]) },
       ];
 
+      cartes += 1;
       conteneur.append(carte({
         titre: `${nomDe(locataireCourant)} — ${bien?.nom || 'logement inconnu'}`,
         aide: `${montant(recuBail)} reçus sur ${montant(totalBail)} attendus en ${annee}`
@@ -398,6 +529,17 @@ export default {
         corps: tableau({ colonnes, lignes: echeances, cle: (e) => e.id, messageVide: 'Aucune échéance.' }),
       }));
       }
+    }
+    if (!cartes) {
+      conteneur.append(carte({
+        titre: bien ? bien.nom : 'Baux sans logement',
+        corps: vide(`Aucune échéance en ${annee}`, bauxDuLogement.length
+          ? 'Aucun bail de ce logement ne couvre cette année.'
+          : 'Aucun bail pour ce logement : enregistrez-en un dans « Logements & baux ».'),
+        serre: true,
+      }));
+    }
+    if (grouper) conteneur.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
     }
 
     return conteneur;

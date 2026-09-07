@@ -9,6 +9,7 @@ import { fluxDuBail } from '../calculs/loyers.js';
 import { pdfRestitutionAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
+import { bienDuBail } from '../logements.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
 
@@ -230,6 +231,7 @@ export default {
     const donnees = contexte.donnees;
     const lignes = lignesCautions(donnees);
     const conteneur = h('div');
+    const plusieursLogements = !contexte.bienId && donnees.biens.length > 1;
 
     const detenu = centimes(lignes.reduce((s, l) => s
       + (Number(l.montantRecu) || 0) - (l.restitueLe ? (Number(l.montantRestitue) || 0) : 0), 0));
@@ -249,6 +251,7 @@ export default {
       corps: tableau({
         colonnes: [
           { titre: 'Colocataire', valeur: (l) => nomDe(donnees.locataires.find((x) => x.id === l.locataireId)) },
+          ...(plusieursLogements ? [{ titre: 'Logement', valeur: (l) => bienDuBail(donnees, l.bail)?.nom || '—' }] : []),
           { titre: 'Bail', valeur: (l) => (l.bail ? `${date(l.bail.dateDebut)} → ${l.bail.dateFin ? date(l.bail.dateFin) : 'en cours'}` : 'bail supprimé') },
           { titre: 'Convenu', nombre: true, valeur: (l) => montant(l.attendu || 0) },
           { titre: 'Reçue', nombre: true, valeur: (l) => (l.recuLe
@@ -272,7 +275,7 @@ export default {
         ],
         lignes,
         cle: (l) => l.id,
-        messageVide: 'Aucune caution à suivre — déclarez d’abord un bail dans « Bien & baux ».',
+        messageVide: 'Aucune caution à suivre — déclarez d’abord un bail dans « Logements & baux ».',
       }),
     }));
 

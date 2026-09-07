@@ -10,6 +10,7 @@ import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js'
 import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, nbMoisEntre } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
+import { bienDuBail } from '../logements.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
 
@@ -41,7 +42,7 @@ async function saisirRegularisation(donnees, contexte, existante = null) {
     champs: [
       { cle: 'bailId', libelle: 'Bail', type: 'liste', options: donnees.baux.map((b) => ({
         valeur: b.id,
-        libelle: `Bail du ${date(b.dateDebut)}${b.dateFin ? ` au ${date(b.dateFin)}` : ' (en cours)'}`,
+        libelle: `${bienDuBail(donnees, b)?.nom || 'Logement ?'} — bail du ${date(b.dateDebut)}${b.dateFin ? ` au ${date(b.dateFin)}` : ' (en cours)'}`,
       })) },
       { cle: 'debut', libelle: 'Début de la période', type: 'date', requis: true },
       { cle: 'fin', libelle: 'Fin de la période', type: 'date', requis: true },
@@ -143,7 +144,7 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
   };
 
   const notifierParEmail = async () => {
-    if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Bien & baux »).', 'erreur'); return; }
+    if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Logements & baux »).', 'erreur'); return; }
     if (!publie) { notifier('Le décompte n’a pas pu être déposé sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
     const solde = ligne.solde;
     const phrase = solde > 0.005
@@ -213,7 +214,7 @@ function carteRegularisation(donnees, regularisation) {
   const detailDepenses = depensesDe(regularisation).map((d) => `${d.libelle} : ${montant(d.montant)}`).join(' · ');
 
   return carte({
-    titre: `Du ${date(regularisation.debut)} au ${date(regularisation.fin)}`,
+    titre: `${bienDuBail(donnees, bail)?.nom ? `${bienDuBail(donnees, bail).nom} — ` : ''}du ${date(regularisation.debut)} au ${date(regularisation.fin)}`,
     aide: detailDepenses
       ? `Dépenses réelles : ${detailDepenses} — total ${montant(decompte.totalReel)}`
       : 'Aucune dépense réelle saisie pour l’instant : le décompte rembourserait toutes les provisions.',
@@ -264,7 +265,9 @@ export default {
       return carte({
         titre: 'Aucun bail',
         corps: vide('Rien à régulariser pour l’instant',
-          'Enregistrez d’abord un bail dans « Bien & baux » : les provisions sur charges en découlent.'),
+          donnees.biens.some((b) => b.typeLocation === 'courte') && donnees.biens.every((b) => b.typeLocation === 'courte')
+            ? 'Un logement de courte durée n’a ni provisions sur charges ni régularisation.'
+            : 'Enregistrez d’abord un bail dans « Logements & baux » : les provisions sur charges en découlent.'),
       });
     }
 
@@ -281,7 +284,7 @@ export default {
       }
     }
 
-    const regularisations = [...etat.liste('regularisations')]
+    const regularisations = [...(donnees.regularisations || etat.liste('regularisations'))]
       .sort((a, b) => String(b.debut).localeCompare(String(a.debut)));
 
     conteneur.append(h('div', { class: 'grille grille-3', style: 'margin-bottom:1rem' }, [

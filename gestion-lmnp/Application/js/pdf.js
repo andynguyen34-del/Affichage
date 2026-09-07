@@ -215,7 +215,7 @@ export async function pdfRegularisation({ bailleur, locataire, bien, debut, fin,
   return document_.save();
 }
 
-const LIBELLES_ETAT = { neuf: 'Neuf', bon: 'Bon état', usage: 'État d\'usage', mauvais: 'Mauvais état' };
+const LIBELLES_ETAT = { neuf: 'Neuf', 'tres-bon': 'Très bon état', bon: 'Bon état', usage: 'État d\'usage', mauvais: 'Mauvais état' };
 
 /**
  * Rapport d'état des lieux : informations, pièces avec photos, compteurs,

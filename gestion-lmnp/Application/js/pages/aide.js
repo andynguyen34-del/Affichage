@@ -18,7 +18,7 @@ export default {
       titre: 'Le mois type',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Les échéances de chaque colocataire se créent toutes seules à partir du bail et de la répartition des parts (bouton « Répartir » dans « Bien & baux »).',
+          'Les échéances de chaque colocataire se créent toutes seules à partir du bail et de la répartition des parts (bouton « Répartir » dans « Logements & baux »).',
           ['À réception d’un virement : page « Loyers » → ', h('strong', { texte: 'Virement reçu' }),
             ' sur la ligne du colocataire et du mois.'],
           'Les quittances, décomptes de régularisation et restitutions de dépôt sont édités à l’identité '
@@ -31,6 +31,28 @@ export default {
           ['Quand le mois est soldé : bouton ', h('strong', { texte: 'Quittance' }),
             ' — le PDF est déposé sur l’espace du colocataire, téléchargeable, et un clic envoie '
             + 'l’e-mail de mise à disposition. « Imprimer » édite la version papier.'],
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
+      titre: 'Plusieurs logements',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          'Déclarez chaque logement dans « Logements & baux » (bouton « + Logement »), avec son type de location : '
+            + 'colocation (un bail, plusieurs colocataires avec leur part), location entière (un bail, un locataire), '
+            + 'ou courte durée (Airbnb, Booking… : des séjours, sans bail ni appel de loyer).',
+          ['Le sélecteur ', h('strong', { texte: 'Logement' }),
+            ' en haut de l’écran, à côté de l’exercice, choisit le logement affiché dans toutes les pages (Loyers, Cautions, Charges, '
+            + 'États des lieux, Logements & baux). Le choix est mémorisé sur l’appareil. « Tous les logements » montre tout, '
+            + 'logement par logement, avec un sous-total sous chacun dans « Loyers ».'],
+          'Les baux, loyers, cautions, régularisations et états des lieux sont rattachés au logement de leur bail : rien à ressaisir '
+            + 'pour les données existantes.',
+          'Courte durée : dans « Loyers », la carte « Séjours » du logement liste chaque séjour (arrivée, départ, voyageur, plateforme, '
+            + 'montant perçu) et son encaissement ; les recettes s’ajoutent aux tuiles de l’année. Un état des lieux peut se rattacher '
+            + 'à un logement de courte durée sans bail.',
+          'L’appel de loyer automatique se règle logement par logement (Paramètres → « Appel de loyer automatique » : jour, coordonnées '
+            + 'de paiement, textes) ; l’historique indique le logement de chaque envoi.',
         ]),
       ]),
     }));
@@ -89,7 +111,7 @@ export default {
             + 'le rapport PDF reprend le plan et ses repères.',
           'Chaque partie signe l’état des lieux à la main sur l’écran de la tablette (les deux bailleurs, '
             + 'Andy et Karine, puis chaque colocataire) — et faites signer le bail dans la foulée '
-            + '(« Bien & baux » → Bail signé).',
+            + '(« Logements & baux » → Bail signé).',
           'Le rapport PDF (plan, photos, signatures) se télécharge et est déposé sur l’espace de chaque colocataire.',
           'Les photos et documents sont stockés dans l’espace Firebase Storage du projet (Google Cloud, Europe) : '
             + 'dossier « etats-des-lieux » pour les photos, « documents » pour les PDF, « portail » pour ce qui est remis aux colocataires. '
@@ -106,7 +128,7 @@ export default {
       titre: 'Le bail signé dans l’application',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          ['Page « Bien & baux », bouton ', h('strong', { texte: 'Bail signé' }),
+          ['Page « Logements & baux », bouton ', h('strong', { texte: 'Bail signé' }),
             ' sur la ligne du bail : joignez le PDF du bail, puis chaque partie signe à l’écran '
             + '(tablette, doigt ou stylet).'],
           '« Générer le bail signé » ajoute au PDF une page datée avec toutes les signatures.',
@@ -122,7 +144,7 @@ export default {
       titre: 'L’espace colocataire',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Renseignez l’adresse e-mail du colocataire dans « Bien & baux », puis ouvrez son accès dans '
+          'Renseignez l’adresse e-mail du colocataire dans « Logements & baux », puis ouvrez son accès dans '
             + '« Paramètres → Accès à l’application ».',
           'Donnez-lui l’adresse de son espace : https://gestion-lmnp-anika.web.app/colocataire — la page de connexion '
             + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
@@ -133,7 +155,7 @@ export default {
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
-            + '« Bien & baux » → « Justificatifs des colocataires » → Relever, avec rappel par e-mail de ce qui manque.',
+            + '« Logements & baux » → « Justificatifs des colocataires » → Relever, avec rappel par e-mail de ce qui manque.',
         ]),
       ]),
     }));

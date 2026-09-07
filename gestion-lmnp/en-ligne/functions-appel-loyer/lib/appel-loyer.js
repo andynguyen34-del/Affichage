@@ -163,6 +163,15 @@ var APPEL_PAR_DEFAUT = {
   copieBailleur: true
 };
 var cleMois = (annee, mois) => `${annee}-${String(mois).padStart(2, "0")}`;
+var cleEnvoi = (bienId, annee, mois) => `${bienId || ""}:${cleMois(annee, mois)}`;
+var sansAppel = (bien) => bien?.typeLocation === "courte";
+function reglageAppelDe(parametres = {}, bien = null) {
+  return { ...APPEL_PAR_DEFAUT, ...parametres?.appelLoyer || {}, ...bien?.appelLoyer || {} };
+}
+function dejaEnvoye(historique, bienId, annee, mois) {
+  const envois = historique?.envois || {};
+  return envois[cleEnvoi(bienId, annee, mois)] || envois[cleMois(annee, mois)] || null;
+}
 function moisVise(dateIso, cible = "courant") {
   let annee = Number(dateIso.slice(0, 4));
   let mois = Number(dateIso.slice(5, 7));
@@ -180,7 +189,7 @@ function jourEnvoi(reglage, annee, mois) {
   return Math.min(Math.max(1, Number(reglage.jour) || 1), dernier);
 }
 var JOURS_RATTRAPAGE = 7;
-function doitEnvoyer(reglage, dateIso, historique = {}) {
+function doitEnvoyer(reglage, dateIso, historique = {}, bienId = "") {
   const r = { ...APPEL_PAR_DEFAUT, ...reglage || {} };
   if (!r.actif) return false;
   const annee = Number(dateIso.slice(0, 4));
@@ -189,19 +198,22 @@ function doitEnvoyer(reglage, dateIso, historique = {}) {
   const cible = jourEnvoi(r, annee, mois);
   if (jour < cible || jour > cible + JOURS_RATTRAPAGE) return false;
   const vise = moisVise(dateIso, r.cible);
-  return !(historique?.envois || {})[cleMois(vise.annee, vise.mois)];
+  return !dejaEnvoye(historique, bienId, vise.annee, vise.mois);
 }
 var echapper = (texte) => String(texte ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 var remplir = (gabarit, valeurs) => String(gabarit || "").replace(/\{(\w+)\}/g, (tout, cle) => valeurs[cle] !== void 0 ? valeurs[cle] : tout);
 var nomComplet = (l) => `${l?.prenom || ""} ${l?.nom || ""}`.trim();
 var adresseBien = (bien) => [bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois }) {
-  const reglage = { ...APPEL_PAR_DEFAUT, ...parametres.appelLoyer || {} };
+function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois, bienId = "" }) {
+  const bienVise = bienId ? biens.find((b) => b.id === bienId) || null : null;
+  const reglage = reglageAppelDe(parametres, bienVise);
   const bailleurs = (parametres.bailleurs || []).filter((b) => b?.nom);
   const signature = bailleurs.map((b) => b.nom).join(" et ") || parametres.nomActivite || "Le bailleur";
   const courriels = [];
   const ecartes = [];
-  const echeances = echeancesGlobales(baux, annee, loyers).filter((e) => Number(e.mois) === Number(mois) && (Number(e.total) || 0) > 0);
+  const bauxVises = bienId ? baux.filter((b) => b.bienId === bienId) : baux;
+  if (bienVise && sansAppel(bienVise)) return { courriels, ecartes, reglage, logement: bienVise.nom };
+  const echeances = echeancesGlobales(bauxVises, annee, loyers).filter((e) => Number(e.mois) === Number(mois) && (Number(e.total) || 0) > 0);
   for (const echeance of echeances) {
     const locataire = locataires.find((l) => l.id === echeance.locataireId);
     const nom = nomComplet(locataire) || "colocataire";
@@ -253,17 +265,22 @@ function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], p
       sujet,
       html: lignes.filter(Boolean).join("\n"),
       montantDu: reste,
-      dateLimite: echeance.dateEcheance
+      dateLimite: echeance.dateEcheance,
+      bienId: bien?.id || ""
     });
   }
-  return { courriels, ecartes, reglage };
+  return { courriels, ecartes, reglage, logement: bienVise?.nom || "" };
 }
 export { nomMois, 
   APPEL_PAR_DEFAUT,
   JOURS_RATTRAPAGE,
+  cleEnvoi,
   cleMois,
+  dejaEnvoye,
   doitEnvoyer,
   jourEnvoi,
   moisVise,
-  preparerAppels
+  preparerAppels,
+  reglageAppelDe,
+  sansAppel
 };

@@ -20,15 +20,20 @@ import { nomMois } from './format.js';
 import { verifierAppelAutomatique } from './appel-loyer-client.js';
 import { armerPleinEcranAuLancement, brancherBoutonPleinEcran, enregistrerServiceWorker } from './plein-ecran.js';
 import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES, appliquerManifeste } from './espace.js';
+import { logementMemorise, memoriserLogement, filtrerDonnees, libelleTypeLocation } from './logements.js';
 
 const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
 
 const contexte = {
   annee: new Date().getFullYear(),
   page: 'loyers',
+  // Logement affiché ('' = tous les logements) : choisi dans l'en-tête,
+  // mémorisé sur l'appareil, appliqué à toutes les pages.
+  bienId: logementMemorise(),
   allerA(cle, options = {}) {
     contexte.page = cle;
     if (options.annee) contexte.annee = options.annee;
+    if (options.bienId !== undefined) contexte.definirLogement(options.bienId, { redessiner: false });
     location.hash = cle;
     dessiner();
   },
@@ -36,6 +41,11 @@ const contexte = {
     contexte.annee = Number(annee);
     dessinerSelecteurAnnee();
     dessiner();
+  },
+  definirLogement(bienId, { redessiner = true } = {}) {
+    contexte.bienId = bienId || '';
+    memoriserLogement(contexte.bienId);
+    if (redessiner) dessiner();
   },
 };
 
@@ -82,6 +92,21 @@ function dessinerSelecteurAnnee() {
   selecteur.onchange = (evenement) => contexte.definirAnnee(evenement.target.value);
 }
 
+/** Sélecteur « Logement » de l'en-tête : tous les logements, ou un seul. */
+function dessinerSelecteurLogement() {
+  const bloc = document.getElementById('bloc-logement');
+  const selecteur = vider(document.getElementById('selecteur-logement'));
+  const biens = etat.liste('biens');
+  // Un logement supprimé entre-temps : on revient à « tous ».
+  if (contexte.bienId && !biens.some((b) => b.id === contexte.bienId)) contexte.definirLogement('', { redessiner: false });
+  bloc.hidden = !biens.length;
+  selecteur.append(h('option', { value: '', selected: !contexte.bienId }, biens.length > 1 ? 'Tous les logements' : 'Tous'));
+  for (const b of biens) {
+    selecteur.append(h('option', { value: b.id, selected: b.id === contexte.bienId, title: libelleTypeLocation(b) }, b.nom));
+  }
+  selecteur.onchange = (evenement) => contexte.definirLogement(evenement.target.value);
+}
+
 function dessinerSynchro() {
   const zone = document.getElementById('synchro');
   const valeur = etat.etatSynchro();
@@ -109,7 +134,7 @@ function dessinerAlertes() {
     zone.append(h('div', { class: 'alerte alerte-info' }, [
       h('div', {}, [
         h('strong', { texte: 'Première utilisation. ' }),
-        'Commencez par déclarer le logement, les colocataires et le bail dans « Bien & baux ».',
+        'Commencez par déclarer le logement, les colocataires et le bail dans « Logements & baux ».',
       ]),
       bouton('Déclarer le logement', () => contexte.allerA('bien'), { petit: true }),
     ]));
@@ -130,6 +155,7 @@ export function collecte() {
     loyers: etat.liste('loyers'),
     cautions: etat.liste('cautions'),
     etatsDesLieux: etat.liste('etatsDesLieux'),
+    regularisations: etat.liste('regularisations'),
   };
 }
 
@@ -141,7 +167,11 @@ export function collecte() {
  */
 function dessiner({ conserverPosition = false } = {}) {
   const page = PAGES.find((p) => p.cle === contexte.page) || PAGES[0];
-  contexte.donnees = collecte();
+  // `tout` : l'ensemble du dossier ; `donnees` : ce que voit le logement
+  // choisi dans l'en-tête (identique à `tout` avec « Tous les logements »).
+  contexte.tout = collecte();
+  dessinerSelecteurLogement();
+  contexte.donnees = filtrerDonnees(contexte.tout, contexte.bienId);
   document.getElementById('titre-page').textContent = page.titre || page.libelle;
   document.getElementById('sous-titre-page').textContent =
     (typeof page.sousTitre === 'function' ? page.sousTitre(contexte) : page.sousTitre) || '';
@@ -547,8 +577,10 @@ async function ouvrirApplication() {
   // Appel de loyer automatique : si c'est le jour et que le mois n'a pas encore
   // été appelé (par la fonction planifiée ou un autre poste), on envoie.
   if (api.MODE === 'nuage') {
-    verifierAppelAutomatique().then((resultat) => {
-      if (resultat?.envoyes) notifier(`Appel de loyer ${nomMois(resultat.vise.mois)} ${resultat.vise.annee} envoyé à ${resultat.envoyes} colocataire(s).`, 'succes');
+    verifierAppelAutomatique().then((resultats) => {
+      for (const resultat of resultats || []) {
+        if (resultat?.envoyes) notifier(`Appel de loyer ${nomMois(resultat.vise.mois)} ${resultat.vise.annee} — ${resultat.logement} : envoyé à ${resultat.envoyes} ${resultat.envoyes > 1 ? 'personnes' : 'personne'}.`, 'succes');
+      }
     }).catch((erreur) => console.error('Appel de loyer automatique :', erreur));
   }
 

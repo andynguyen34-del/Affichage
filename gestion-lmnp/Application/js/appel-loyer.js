@@ -18,6 +18,29 @@ export const APPEL_PAR_DEFAUT = {
 
 export const cleMois = (annee, mois) => `${annee}-${String(mois).padStart(2, '0')}`;
 
+/** Clé d'un envoi au journal : un logement et un mois (« {bienId}:{AAAA-MM} »). */
+export const cleEnvoi = (bienId, annee, mois) => `${bienId || ''}:${cleMois(annee, mois)}`;
+
+/** Un logement de courte durée (Airbnb…) n'a pas d'appel de loyer. */
+export const sansAppel = (bien) => bien?.typeLocation === 'courte';
+
+/**
+ * Réglages d'appel d'un logement : ceux notés sur le logement, à défaut les
+ * réglages communs (Paramètres → appelLoyer, tels qu'ils existaient avant
+ * les réglages par logement), à défaut les valeurs par défaut.
+ */
+export function reglageAppelDe(parametres = {}, bien = null) {
+  return { ...APPEL_PAR_DEFAUT, ...(parametres?.appelLoyer || {}), ...(bien?.appelLoyer || {}) };
+}
+
+/** L'envoi d'un mois est-il inscrit au journal pour ce logement ? */
+export function dejaEnvoye(historique, bienId, annee, mois) {
+  const envois = historique?.envois || {};
+  // Les envois d'avant les réglages par logement (clé « AAAA-MM » seule)
+  // valaient pour tous les logements de l'époque : on ne renvoie pas.
+  return envois[cleEnvoi(bienId, annee, mois)] || envois[cleMois(annee, mois)] || null;
+}
+
 /** Le mois dont on appelle le loyer, pour un envoi à cette date. */
 export function moisVise(dateIso, cible = 'courant') {
   let annee = Number(dateIso.slice(0, 4));
@@ -41,7 +64,7 @@ export const JOURS_RATTRAPAGE = 7;
  * était éteint ce jour-là — mais activer la fonction en fin de mois n'envoie
  * pas l'appel du mois en retard), et si le mois visé n'a pas déjà été appelé.
  */
-export function doitEnvoyer(reglage, dateIso, historique = {}) {
+export function doitEnvoyer(reglage, dateIso, historique = {}, bienId = '') {
   const r = { ...APPEL_PAR_DEFAUT, ...(reglage || {}) };
   if (!r.actif) return false;
   const annee = Number(dateIso.slice(0, 4));
@@ -50,7 +73,7 @@ export function doitEnvoyer(reglage, dateIso, historique = {}) {
   const cible = jourEnvoi(r, annee, mois);
   if (jour < cible || jour > cible + JOURS_RATTRAPAGE) return false;
   const vise = moisVise(dateIso, r.cible);
-  return !(historique?.envois || {})[cleMois(vise.annee, vise.mois)];
+  return !dejaEnvoye(historique, bienId, vise.annee, vise.mois);
 }
 
 const echapper = (texte) => String(texte ?? '')
@@ -66,14 +89,19 @@ const adresseBien = (bien) => [bien?.adresse, [bien?.codePostal, bien?.ville].fi
  * Prépare les courriels d'appel de loyer d'un mois : un par colocataire ayant
  * une échéance non soldée. Renvoie aussi les colocataires laissés de côté
  * (déjà réglé, sans adresse) pour le compte rendu.
+ * `bienId` : un logement précis (ses réglages, ses baux) ; sans lui, tous les
+ * baux avec les réglages communs.
  */
-export function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois }) {
-  const reglage = { ...APPEL_PAR_DEFAUT, ...(parametres.appelLoyer || {}) };
+export function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois, bienId = '' }) {
+  const bienVise = bienId ? biens.find((b) => b.id === bienId) || null : null;
+  const reglage = reglageAppelDe(parametres, bienVise);
   const bailleurs = (parametres.bailleurs || []).filter((b) => b?.nom);
   const signature = bailleurs.map((b) => b.nom).join(' et ') || parametres.nomActivite || 'Le bailleur';
   const courriels = [];
   const ecartes = [];
-  const echeances = echeancesGlobales(baux, annee, loyers).filter((e) => Number(e.mois) === Number(mois) && (Number(e.total) || 0) > 0);
+  const bauxVises = bienId ? baux.filter((b) => b.bienId === bienId) : baux;
+  if (bienVise && sansAppel(bienVise)) return { courriels, ecartes, reglage, logement: bienVise.nom };
+  const echeances = echeancesGlobales(bauxVises, annee, loyers).filter((e) => Number(e.mois) === Number(mois) && (Number(e.total) || 0) > 0);
   for (const echeance of echeances) {
     const locataire = locataires.find((l) => l.id === echeance.locataireId);
     const nom = nomComplet(locataire) || 'colocataire';
@@ -111,8 +139,8 @@ export function preparerAppels({ baux = [], locataires = [], loyers = [], biens 
     courriels.push({
       locataireId: echeance.locataireId, nom, destinataires, sujet,
       html: lignes.filter(Boolean).join('\n'),
-      montantDu: reste, dateLimite: echeance.dateEcheance,
+      montantDu: reste, dateLimite: echeance.dateEcheance, bienId: bien?.id || '',
     });
   }
-  return { courriels, ecartes, reglage };
+  return { courriels, ecartes, reglage, logement: bienVise?.nom || '' };
 }

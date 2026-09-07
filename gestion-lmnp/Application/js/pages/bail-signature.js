@@ -112,7 +112,7 @@ async function publierAuxColocataires(donnees, bail) {
   }
   if (publies.length) notifier(`Bail déposé sur ${publies.length} espace(s) colocataire(s).`, 'succes');
   if (sansEmail.length) {
-    notifier(`Sans adresse e-mail, donc sans espace : ${sansEmail.join(', ')} (à renseigner dans « Bien & baux »).`, 'erreur');
+    notifier(`Sans adresse e-mail, donc sans espace : ${sansEmail.join(', ')} (à renseigner dans « Logements & baux »).`, 'erreur');
   }
   return publies;
 }

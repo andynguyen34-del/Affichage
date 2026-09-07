@@ -10,6 +10,7 @@ import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js
 import { destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { notifier, signalerErreur } from '../ui.js';
+import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, motOccupant, sejoursDe } from '../logements.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Local'].map((v) => ({ valeur: v, libelle: v }));
 const TYPES_BAIL = [
@@ -22,6 +23,8 @@ const TYPES_BAIL = [
 
 const champsBien = () => [
   { cle: 'nom', libelle: 'Nom du logement', type: 'texte', requis: true, exemple: 'Maison SML — Anika', largeur: 'pleine' },
+  { cle: 'typeLocation', libelle: 'Type de location', type: 'liste', options: TYPES_LOCATION, largeur: 'pleine',
+    aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer.' },
   { cle: 'type', libelle: 'Type', type: 'liste', options: TYPES_BIEN },
   { cle: 'surface', libelle: 'Surface (m²)', type: 'nombre' },
   { cle: 'adresse', libelle: 'Adresse', type: 'texte', requis: true, largeur: 'pleine' },
@@ -72,7 +75,7 @@ export function bailEstActif(bail, dateReference = aujourdhui()) {
 }
 
 async function ouvrirBien(donnees, bienExistant) {
-  const valeurs = bienExistant || { type: 'Maison', partTerrain: 15, dateAcquisition: '' };
+  const valeurs = bienExistant ? { typeLocation: typeLocation(bienExistant), ...bienExistant } : { type: 'Maison', typeLocation: 'colocation', partTerrain: 15, dateAcquisition: '' };
   const saisie = await formulaire({
     titre: bienExistant ? 'Modifier le logement' : 'Déclarer un logement',
     champs: champsBien(),
@@ -91,11 +94,11 @@ async function ouvrirLocataire(locataireExistant) {
   if (saisie) await executer(etat.enregistrer('locataires', saisie), 'Locataire enregistré.');
 }
 
-async function ouvrirBail(donnees, bailExistant) {
+async function ouvrirBail(donnees, bailExistant, bienIdParDefaut = '') {
   if (!donnees.biens.length) { await ouvrirBien(donnees, null); return; }
   if (!donnees.locataires.length) { await ouvrirLocataire(null); return; }
   const valeurs = bailExistant || {
-    bienId: donnees.biens[0].id,
+    bienId: donnees.biens.find((b) => b.id === bienIdParDefaut)?.id || donnees.biens[0].id,
     type: 'meuble',
     jourEcheance: 1,
     moisRevision: 1,
@@ -143,14 +146,19 @@ async function reviserLoyer(bail) {
   );
 }
 
-function carteBien(donnees, bien) {
+function carteBien(donnees, bien, contexte) {
   const bauxDuBien = donnees.baux.filter((b) => b.bienId === bien.id);
   const actif = bauxDuBien.find((b) => bailEstActif(b));
+  const courte = estCourteDuree(bien);
+  const annee = contexte?.annee || new Date().getFullYear();
+  const sejours = courte ? sejoursDe(donnees.loyers, bien.id, annee) : [];
 
   return carte({
     titre: bien.nom,
     aide: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(' — '),
     actions: [
+      badge(libelleTypeLocation(bien), courte ? 'info' : 'succes'),
+      contexte ? bouton('Voir ses loyers', () => contexte.allerA('loyers', { bienId: bien.id }), { petit: true, titre: 'Ouvrir la page Loyers sur ce logement' }) : null,
       bouton('Modifier', () => ouvrirBien(donnees, bien), { petit: true }),
       bouton('Supprimer', async () => {
         const confirme = await confirmer({
@@ -161,11 +169,16 @@ function carteBien(donnees, bien) {
         if (confirme) await executer(etat.supprimer('biens', bien.id), 'Logement supprimé.');
       }, { petit: true, type: 'danger' }),
     ],
-    corps: h('div', { class: 'grille grille-4' }, [
+    corps: h('div', { class: 'grille grille-4' }, courte ? [
+      infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
+      infoBloc(`Séjours ${annee}`, String(sejours.length)),
+      infoBloc(`Recettes ${annee}`, montant(sejours.reduce((s, x) => s + (Number(x.montant) || 0), 0))),
+      infoBloc('Suivi', 'séjours dans « Loyers »'),
+    ] : [
       infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
       infoBloc('Loyer en cours', actif ? `${montant(actif.loyerHc)} + ${montant(actif.provisionCharges || 0)}` : '—'),
       infoBloc('Baux enregistrés', String(bauxDuBien.length)),
-      infoBloc('Colocataires du bail actif', actif ? String((actif.colocataires || []).length || 1) : '—'),
+      infoBloc(`${motOccupant(bien, true)[0].toUpperCase()}${motOccupant(bien, true).slice(1)} du bail actif`, actif ? String((actif.colocataires || []).length || 1) : '—'),
     ]),
   });
 }
@@ -333,30 +346,35 @@ const infoBloc = (libelle, valeur) => h('div', {}, [
 
 export default {
   cle: 'bien',
-  libelle: 'Bien & baux',
+  libelle: 'Logements & baux',
   icone: '🏠',
-  titre: 'Bien, locataires et baux',
-  sousTitre: 'Le logement, les personnes qui l’occupent et les conditions de location.',
+  titre: 'Logements, locataires et baux',
+  sousTitre: (contexte) => (contexte.bienId
+    ? 'Le logement choisi dans l’en-tête, les personnes qui l’occupent et ses conditions de location.'
+    : 'Chaque logement, les personnes qui l’occupent et les conditions de location.'),
   rendre(contexte) {
+    // `donnees` : le logement choisi dans l'en-tête ; `tout` : le dossier
+    // entier (liste des logements dans les formulaires, locataires).
     const donnees = contexte.donnees;
+    const tout = contexte.tout || donnees;
     const conteneur = h('div');
 
     conteneur.append(barreOutils([
-      bouton('+ Logement', () => ouvrirBien(donnees, null), { type: 'primaire' }),
+      bouton('+ Logement', () => ouvrirBien(tout, null), { type: 'primaire' }),
       bouton('+ Locataire', () => ouvrirLocataire(null)),
-      bouton('+ Bail', () => ouvrirBail(donnees, null)),
+      bouton('+ Bail', () => ouvrirBail(tout, null, contexte.bienId)),
     ]));
 
-    if (!donnees.biens.length) {
+    if (!tout.biens.length) {
       conteneur.append(carte({
         titre: 'Aucun logement déclaré',
-        corps: vide('Commencez ici', 'Déclarez le logement loué : son adresse, sa date d’acquisition et son prix de revient. '
-          + 'Ces informations servent ensuite au calcul des amortissements et du rendement.'),
+        corps: vide('Commencez ici', 'Déclarez le logement loué : son adresse et son type de location (colocation, location entière, courte durée). '
+          + 'Vous pourrez en déclarer d’autres ensuite : le sélecteur « Logement » de l’en-tête passe de l’un à l’autre.'),
       }));
       return conteneur;
     }
 
-    donnees.biens.forEach((bien) => conteneur.append(carteBien(donnees, bien)));
+    donnees.biens.forEach((bien) => conteneur.append(carteBien(donnees, bien, contexte)));
 
     // ------------------------------------------------------------- baux
     const colonnesBaux = [
@@ -371,12 +389,13 @@ export default {
           b.coTitulaireId ? h('div', { class: 'legende', texte: `et ${nomLocataire(donnees, b.coTitulaireId)}` }) : null,
         ]);
       } },
-      { titre: 'Logement', valeur: (b) => donnees.biens.find((x) => x.id === b.bienId)?.nom || '—' },
+      { titre: 'Logement', valeur: (b) => tout.biens.find((x) => x.id === b.bienId)?.nom || '—' },
       { titre: 'Période', valeur: (b) => `${date(b.dateDebut)} → ${b.dateFin ? date(b.dateFin) : 'en cours'}` },
       { titre: 'Loyer HC', nombre: true, valeur: (b) => montant(b.loyerHc) },
       { titre: 'Charges', nombre: true, valeur: (b) => montant(b.provisionCharges || 0) },
       { titre: 'Dépôt', nombre: true, valeur: (b) => montant(b.depotGarantie || 0) },
-      { titre: 'État', valeur: (b) => (bailEstActif(b) ? badge('En cours', 'succes') : badge('Terminé', 'attente')) },
+      { titre: 'État', valeur: (b) => (bailEstActif(b) ? badge('En cours', 'succes')
+        : (b.dateDebut && b.dateDebut > aujourdhui() ? badge('À venir', 'attention') : badge('Terminé', 'attente'))) },
       { titre: '', actions: true, valeur: (b) => h('div', { class: 'groupe-boutons' }, [
         bouton('Répartir', () => repartirColocataires(donnees, b), {
           petit: true, titre: 'Répartir le loyer entre les colocataires (parts individuelles)',
@@ -385,7 +404,7 @@ export default {
         bouton('Bail signé', () => ouvrirBailSignatures(donnees, b), {
           petit: true, titre: 'Joindre le PDF du bail, recueillir les signatures à l’écran et le déposer sur les espaces colocataires',
         }),
-        bouton('Modifier', () => ouvrirBail(donnees, b), { petit: true }),
+        bouton('Modifier', () => ouvrirBail(tout, b), { petit: true }),
         bouton('✕', async () => {
           const confirme = await confirmer({
             titre: 'Supprimer le bail',
@@ -399,7 +418,9 @@ export default {
 
     conteneur.append(carte({
       titre: 'Baux',
-      aide: 'Le bail détermine les échéances de loyer attendues chaque mois.',
+      aide: donnees.biens.some(estCourteDuree) && donnees.biens.every(estCourteDuree)
+        ? 'Un logement de courte durée n’a pas de bail : ses séjours se suivent dans « Loyers ».'
+        : 'Le bail détermine les échéances de loyer attendues chaque mois.',
       serre: true,
       corps: tableau({
         colonnes: colonnesBaux,
@@ -418,7 +439,7 @@ export default {
           { titre: 'Nom', valeur: (l) => `${l.nom} ${l.prenom || ''}`.trim() },
           { titre: 'Courriel', valeur: (l) => l.email || '—' },
           { titre: 'Téléphone', valeur: (l) => l.telephone || '—' },
-          { titre: 'Baux', nombre: true, valeur: (l) => String(donnees.baux.filter((b) => b.locataireId === l.id
+          { titre: 'Baux', nombre: true, valeur: (l) => String(tout.baux.filter((b) => b.locataireId === l.id
             || b.coTitulaireId === l.id || (b.colocataires || []).some((c) => c.locataireId === l.id)).length) },
           { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
             bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),

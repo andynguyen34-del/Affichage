@@ -215,6 +215,7 @@ export async function rendrePortail({ seDeconnecter }) {
       h('div', {}, [
         h('div', { class: 'portail-marque', texte: '🏠 Espace colocataire' }),
         h('h1', { texte: portail?.nom ? `Bonjour ${portail.nom.split(' ')[0]}` : 'Bonjour' }),
+        portail?.logement?.nom ? h('p', { class: 'legende portail-logement', texte: `🏠 ${portail.logement.nom}${portail.logement.adresse ? ` — ${portail.logement.adresse}` : ''}` }) : null,
         h('p', { class: 'legende', texte: 'Vos documents de location : consultez-les à l’écran ou téléchargez-les.' }),
       ]),
       h('div', { class: 'groupe-boutons' }, [

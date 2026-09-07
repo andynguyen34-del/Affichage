@@ -22,7 +22,18 @@ copie de toutes les notifications.
 Chaque colocataire dépose aussi ses justificatifs depuis son espace
 (attestation d'assurance habitation, entretien des climatiseurs, ramonage
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
-« Bien & baux → Justificatifs des colocataires ».
+« Logements & baux → Justificatifs des colocataires ».
+
+**Nouveau en v35 — plusieurs logements.** L'application gère désormais
+plusieurs logements (voir la section « Plusieurs logements » plus bas) :
+sélecteur « Logement » dans l'en-tête, vue « Tous les logements » groupée
+avec sous-totaux, réglages d'appel de loyer propres à chaque logement,
+types de location (colocation, location entière, courte durée / Airbnb).
+Les données existantes (maison SML, bail, loyers, cautions, états des
+lieux) restent rattachées à la maison : rien à ressaisir. La liste des
+états d'un état des lieux gagne « Très bon état » (entre Neuf et Bon état).
+Le dossier `functions-appel-loyer/` est à redéployer (la fonction planifiée
+traite maintenant chaque logement séparément).
 
 **Important pour cette mise à jour (v33)** : la livraison contient un
 dossier `functions-appel-loyer/` (fonction planifiée d'appel de loyer et
@@ -178,7 +189,7 @@ confortable.
 ## Les comptes des colocataires
 
 1. Renseignez l'adresse e-mail du colocataire dans l'application
-   (« Bien & baux » → Locataires → Modifier).
+   (« Logements & baux » → Locataires → Modifier).
 2. Ouvrez son accès dans « Paramètres → Accès à l'application ».
 3. Créez son compte de connexion dans la console Firebase :
    Authentication → Users → « Add user » (même adresse + un mot de passe
@@ -243,12 +254,44 @@ et le mémorise pour ce navigateur (Paramètres → « Tester le stockage »
 l'indique et permet de revenir à l'accès direct). Le relais applique
 exactement les mêmes droits que les règles de sécurité du stockage.
 
-## L'appel de loyer automatique (v26, dossier `functions-appel-loyer/`)
+## Plusieurs logements (v35)
 
-Dans l'application : Paramètres → **Appel de loyer automatique** →
-« Réglages » : activez l'envoi, choisissez le jour du mois (par exemple
-le 1er), le loyer appelé (celui du mois de l'envoi, ou du mois suivant),
-l'objet, vos coordonnées de paiement (IBAN…) et un message facultatif.
+- **Déclarer un logement** : « Logements & baux » → « + Logement » : nom,
+  adresse et **type de location** —
+  *colocation* (un bail, plusieurs colocataires avec leur part),
+  *location entière* (un bail, un locataire ou un couple),
+  *courte durée* (Airbnb, Booking… : des séjours, sans bail ni appel de loyer).
+  Les logements existants sont des colocations.
+- **Le sélecteur « Logement »** en haut de l'écran, à côté de l'exercice,
+  choisit le logement affiché dans toutes les pages (Loyers, Cautions, Charges,
+  États des lieux, Logements & baux). Il est mémorisé sur l'appareil.
+  « Tous les logements » montre tout, logement par logement : dans « Loyers »,
+  un bandeau par logement (bouton « Ce logement seul ») et un sous-total
+  (attendu, encaissé, reste) sous chacun ; les tuiles du haut cumulent tout.
+- **Rattachement** : baux, loyers, cautions, régularisations et états des lieux
+  suivent le logement de leur bail. Un état des lieux peut aussi se rattacher
+  directement à un logement de courte durée (« sans bail »).
+- **Courte durée** : dans « Loyers », la carte « Séjours » du logement liste
+  chaque séjour (arrivée, départ, nombre de nuits, voyageur, plateforme, montant
+  perçu net des frais de plateforme) et son encaissement (« Encaissé »). Les
+  recettes des séjours s'ajoutent aux tuiles de l'année. Pas de caution ni de
+  régularisation de charges pour ces logements.
+- **Appel de loyer** : réglé logement par logement (voir la section suivante).
+- **Espace colocataire** : l'en-tête indique le logement du colocataire.
+- Le sélecteur n'apparaît qu'une fois au moins un logement déclaré ; avec un
+  seul logement, il propose « Tous » et ce logement.
+
+## L'appel de loyer automatique (v26, par logement depuis la v35, dossier `functions-appel-loyer/`)
+
+Dans l'application : Paramètres → **Appel de loyer automatique** : un bloc
+par logement (sauf courte durée) avec ses boutons « Réglages »,
+« E-mail de test… » et « Envoyer maintenant… ». « Réglages » : activez l'envoi,
+choisissez le jour du mois (par exemple le 1er), le loyer appelé (celui du
+mois de l'envoi, ou du mois suivant), l'objet, vos coordonnées de paiement
+(IBAN…) et un message facultatif — **propres à ce logement**. Les réglages
+faits avant la v35 (communs) servent de valeurs par défaut à tout logement
+qui n'a pas encore les siens ; l'historique indique le logement de chaque
+envoi, et les envois d'avant la v35 restent pris en compte (pas de doublon).
 Chaque colocataire reçoit alors, ce jour-là, un e-mail avec sa part du
 mois (loyer + charges, au prorata si le bail commence en cours de mois),
 le reste à régler s'il a déjà versé une partie, la date limite et vos
@@ -263,8 +306,8 @@ copie, et vous recevez un récapitulatif.
 
 Deux mécanismes d'envoi se complètent :
 1. la **fonction planifiée** du dossier `functions-appel-loyer/`, exécutée sur le
-   serveur chaque jour à 8 h 10 (heure de Paris), qui envoie si c'est le jour
-   — sans qu'il soit besoin d'ouvrir l'application ;
+   serveur chaque jour à 8 h 10 (heure de Paris), qui envoie, logement par
+   logement, si c'est le jour — sans qu'il soit besoin d'ouvrir l'application ;
 2. à défaut (fonction non déployée, ou coupure), l'application envoie
    elle-même à sa **première ouverture** à partir du jour réglé.
 

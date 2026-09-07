@@ -3,7 +3,20 @@
 // du colocataire (Firestore portail/{e-mail}) est mise à jour.
 
 import * as api from './api.js';
+import * as etat from './etat.js';
 import { aujourdhui, dateLongue } from './format.js';
+
+/**
+ * Le logement d'un colocataire : celui de son bail le plus récent.
+ * (Affiché dans l'en-tête de son espace.)
+ */
+export function logementDe(locataire) {
+  const baux = etat.liste('baux')
+    .filter((b) => b.locataireId === locataire?.id || b.coTitulaireId === locataire?.id || (b.colocataires || []).some((c) => c.locataireId === locataire?.id))
+    .sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)));
+  const bien = etat.liste('biens').find((b) => b.id === baux[0]?.bienId);
+  return bien ? { nom: bien.nom, adresse: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') } : null;
+}
 
 const nettoyerNomFichier = (nom) => String(nom)
   .replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
@@ -23,7 +36,7 @@ export async function publierDocument({ locataire, type, titre, nomFichier, octe
   const email = String(locataire?.email || '').trim().toLowerCase();
   if (!email) {
     throw new Error(`${locataire?.prenom || ''} ${locataire?.nom || 'Ce colocataire'} n'a pas d'adresse e-mail : `
-      + 'renseignez-la dans « Bien & baux » pour publier ses documents.');
+      + 'renseignez-la dans « Logements & baux » pour publier ses documents.');
   }
   const chemin = `${email}/${nettoyerNomFichier(nomFichier)}`;
   await api.deposerOctets('portail', chemin, octets, 'application/pdf');
@@ -44,6 +57,7 @@ export async function publierDocument({ locataire, type, titre, nomFichier, octe
     ...actuel,
     nom: `${locataire.prenom || ''} ${locataire.nom || ''}`.trim(),
     locataireId: locataire.id || '',
+    logement: logementDe(locataire) || actuel.logement || null,
     documents,
   });
   return { email, chemin };
@@ -58,13 +72,14 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, piece
   const email = String(locataire?.email || '').trim().toLowerCase();
   if (!email) {
     throw new Error(`${locataire?.prenom || ''} ${locataire?.nom || 'Ce colocataire'} n'a pas d'adresse e-mail : `
-      + 'renseignez-la dans « Bien & baux » pour ouvrir sa fenêtre contradictoire.');
+      + 'renseignez-la dans « Logements & baux » pour ouvrir sa fenêtre contradictoire.');
   }
   const actuel = (await api.lirePortail(email)) || {};
   await api.publierPortail(email, {
     ...actuel,
     nom: actuel.nom || `${locataire.prenom || ''} ${locataire.nom || ''}`.trim(),
     locataireId: actuel.locataireId || locataire.id || '',
+    logement: logementDe(locataire) || actuel.logement || null,
     documents: actuel.documents || [],
     contradictoire: {
       edlId: edl.id,

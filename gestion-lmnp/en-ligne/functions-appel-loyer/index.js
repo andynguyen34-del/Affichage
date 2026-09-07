@@ -2,8 +2,9 @@
 //
 // Appel de loyer planifié : chaque jour à 8 h 10 (heure de Paris), si c'est
 // le jour réglé dans l'application et que le mois n'a pas encore été appelé,
-// dépose un e-mail par colocataire dans la collection « mail » (envoyée par
-// l'extension Trigger Email) et l'inscrit au journal systeme/appels-loyer.
+// dépose un e-mail par colocataire dans la collection « mail » (expédiée par
+// la fonction envoiMail du projet) et l'inscrit au journal systeme/appels-loyer,
+// logement par logement (chacun a ses réglages).
 // Le calcul et le texte sont ceux de l'application (lib/appel-loyer.js).
 // Codebase « appel-loyer », indépendant de toute autre fonction du projet
 // (par exemple une fonction d'envoi de courriels déployée séparément) :
@@ -12,7 +13,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { preparerAppels, doitEnvoyer, moisVise, cleMois, APPEL_PAR_DEFAUT, nomMois } from './lib/appel-loyer.js';
+import { preparerAppels, doitEnvoyer, moisVise, cleEnvoi, reglageAppelDe, sansAppel, nomMois } from './lib/appel-loyer.js';
 
 initializeApp();
 
@@ -36,41 +37,56 @@ export const aujourdhuiParis = (instant = new Date()) => new Intl.DateTimeFormat
 /**
  * Cœur de la fonction, testable à part : renvoie un compte rendu.
  * `base` : Firestore (admin) ; `dateIso` : la date à considérer.
+ * Chaque logement a ses réglages (jour, textes, IBAN) et son journal : un
+ * logement de courte durée (Airbnb…) n'a pas d'appel de loyer.
  */
 export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
-  const parametres = await lireCollection(base, 'parametres');
-  const reglage = { ...APPEL_PAR_DEFAUT, ...(parametres.appelLoyer || {}) };
+  const [parametres, biens] = await Promise.all([lireCollection(base, 'parametres'), lireCollection(base, 'biens')]);
   const refJournal = base.doc('systeme/appels-loyer');
   const journal = (await refJournal.get()).data() || { envois: {} };
-  if (!doitEnvoyer(reglage, dateIso, journal)) return { envoye: false, raison: reglage.actif ? 'pas le jour, ou mois déjà appelé' : 'désactivé' };
+  const candidats = biens.filter((bien) => !sansAppel(bien) && doitEnvoyer(reglageAppelDe(parametres, bien), dateIso, journal, bien.id));
+  if (!candidats.length) {
+    const actifs = biens.filter((bien) => !sansAppel(bien) && reglageAppelDe(parametres, bien).actif).length;
+    return { envoye: false, raison: actifs ? 'pas le jour, ou mois déjà appelé' : 'désactivé' };
+  }
 
-  const [baux, locataires, loyers, biens] = await Promise.all(['baux', 'locataires', 'loyers', 'biens'].map((n) => lireCollection(base, n)));
-  const vise = moisVise(dateIso, reglage.cible);
-  const { courriels, ecartes } = preparerAppels({ baux, locataires, loyers, biens, parametres, annee: vise.annee, mois: vise.mois });
-  const details = [];
-  for (const courriel of courriels) {
-    // eslint-disable-next-line no-await-in-loop
-    await base.collection('mail').add({ to: courriel.destinataires, message: { subject: courriel.sujet, html: courriel.html } });
-    details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
-  }
+  const [baux, locataires, loyers] = await Promise.all(['baux', 'locataires', 'loyers'].map((n) => lireCollection(base, n)));
   const bailleurs = (parametres.bailleurs || []).map((b) => String(b?.email || '').trim()).filter(Boolean);
-  if (courriels.length && reglage.copieBailleur && bailleurs.length) {
-    await base.collection('mail').add({
-      to: bailleurs,
-      message: {
-        subject: `Copie — appels de loyer ${nomMois(vise.mois)} ${vise.annee} envoyés`,
-        html: `<p>${courriels.length} appel(s) de loyer envoyé(s) automatiquement pour ${nomMois(vise.mois)} ${vise.annee} :</p>`
-          + `<ul>${details.map((d) => `<li>${d}</li>`).join('')}</ul>`
-          + (ecartes.length ? `<p>Non envoyés : ${ecartes.map((e) => `${e.nom} (${e.raison})`).join(', ')}.</p>` : ''),
-      },
-    });
-  }
-  await refJournal.set({
-    envois: { ...(journal.envois || {}), [cleMois(vise.annee, vise.mois)]: {
+  const logements = [];
+  let nombre = 0;
+  const envois = { ...(journal.envois || {}) };
+  for (const bien of candidats) {
+    const reglage = reglageAppelDe(parametres, bien);
+    const vise = moisVise(dateIso, reglage.cible);
+    // eslint-disable-next-line no-await-in-loop
+    const { courriels, ecartes } = preparerAppels({ baux, locataires, loyers, biens, parametres, annee: vise.annee, mois: vise.mois, bienId: bien.id });
+    const details = [];
+    for (const courriel of courriels) {
+      // eslint-disable-next-line no-await-in-loop
+      await base.collection('mail').add({ to: courriel.destinataires, message: { subject: courriel.sujet, html: courriel.html } });
+      details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
+    }
+    if (courriels.length && reglage.copieBailleur && bailleurs.length) {
+      // eslint-disable-next-line no-await-in-loop
+      await base.collection('mail').add({
+        to: bailleurs,
+        message: {
+          subject: `Copie — appels de loyer ${nomMois(vise.mois)} ${vise.annee} — ${bien.nom} envoyés`,
+          html: `<p>${courriels.length} appel(s) de loyer envoyé(s) automatiquement pour ${nomMois(vise.mois)} ${vise.annee} (${bien.nom}) :</p>`
+            + `<ul>${details.map((d) => `<li>${d}</li>`).join('')}</ul>`
+            + (ecartes.length ? `<p>Non envoyés : ${ecartes.map((e) => `${e.nom} (${e.raison})`).join(', ')}.</p>` : ''),
+        },
+      });
+    }
+    envois[cleEnvoi(bien.id, vise.annee, vise.mois)] = {
       le: new Date().toISOString(), origine: 'automatique (fonction planifiée)', nombre: courriels.length, details, ecartes,
-    } },
-  }, { merge: true });
-  return { envoye: true, vise, nombre: courriels.length, details, ecartes };
+      bienId: bien.id, logement: bien.nom,
+    };
+    nombre += courriels.length;
+    logements.push({ bienId: bien.id, logement: bien.nom, vise, nombre: courriels.length, details, ecartes });
+  }
+  await refJournal.set({ envois }, { merge: true });
+  return { envoye: true, nombre, vise: logements[0].vise, logements };
 }
 
 export const appelLoyer = onSchedule({

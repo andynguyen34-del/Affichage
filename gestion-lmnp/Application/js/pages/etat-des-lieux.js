@@ -7,6 +7,7 @@ import * as api from '../api.js';
 import { h, carte, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
 import { date, aujourdhui, taille, nomFichierTelechargement } from '../format.js';
+import { estCourteDuree, bienDeEdl } from '../logements.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
 import { publierDocument, ouvrirFenetreContradictoire } from '../portail-publication.js';
@@ -38,6 +39,7 @@ const elementsDe = (piece) => {
 const ETATS = [
   { valeur: '', libelle: '—' },
   { valeur: 'neuf', libelle: 'Neuf' },
+  { valeur: 'tres-bon', libelle: 'Très bon état' },
   { valeur: 'bon', libelle: 'Bon état' },
   { valeur: 'usage', libelle: 'État d’usage' },
   { valeur: 'mauvais', libelle: 'Mauvais état' },
@@ -67,6 +69,10 @@ function focaliser(cle, { selectionner = false } = {}) {
 
 
 async function creerEtatDesLieux(donnees, contexte) {
+  if (!donnees.baux.length && !donnees.biens.some(estCourteDuree)) {
+    notifier('Enregistrez d’abord un bail dans « Logements & baux » (ou déclarez un logement de courte durée).', 'erreur');
+    return;
+  }
   const bailActif = [...donnees.baux].sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)))[0];
   const saisie = await formulaire({
     titre: 'Nouvel état des lieux',
@@ -77,19 +83,25 @@ async function creerEtatDesLieux(donnees, contexte) {
       ] },
       { cle: 'date', libelle: 'Date', type: 'date', requis: true },
       { cle: 'bailId', libelle: 'Bail concerné', type: 'liste', requis: true,
-        options: donnees.baux.map((b) => ({ valeur: b.id, libelle: `${date(b.dateDebut)} — ${donnees.biens.find((x) => x.id === b.bienId)?.nom || ''}` })) },
+        options: [
+          ...donnees.baux.map((b) => ({ valeur: b.id, libelle: `${donnees.biens.find((x) => x.id === b.bienId)?.nom || 'Logement ?'} — bail du ${date(b.dateDebut)}` })),
+          // Un logement de courte durée n'a pas de bail : l'état des lieux se rattache au logement lui-même.
+          ...donnees.biens.filter(estCourteDuree).map((b) => ({ valeur: `bien:${b.id}`, libelle: `${b.nom} — sans bail (courte durée)` })),
+        ] },
     ],
-    valeurs: { type: 'entree', date: aujourdhui(), bailId: bailActif?.id },
+    valeurs: { type: 'entree', date: aujourdhui(), bailId: bailActif?.id || (donnees.biens.find(estCourteDuree) ? `bien:${donnees.biens.find(estCourteDuree).id}` : '') },
   });
   if (!saisie) return;
-  const bail = donnees.baux.find((b) => b.id === saisie.bailId);
+  const sansBail = String(saisie.bailId || '').startsWith('bien:');
+  const bail = sansBail ? null : donnees.baux.find((b) => b.id === saisie.bailId);
   const locataireIds = (bail?.colocataires?.length
     ? bail.colocataires.map((c) => c.locataireId)
     : [bail?.locataireId, bail?.coTitulaireId]).filter(Boolean);
   const nouveau = await executer(etat.enregistrer('etatsDesLieux', {
     type: saisie.type,
     date: saisie.date,
-    bailId: saisie.bailId,
+    bailId: sansBail ? '' : saisie.bailId,
+    bienId: sansBail ? saisie.bailId.slice(5) : (bail?.bienId || ''),
     locataireIds,
     pieces: PIECES_PROPOSEES.slice(0, 6).map((nom) => ({ id: crypto.randomUUID(), nom, etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] })),
     compteurs: COMPTEURS_PAR_DEFAUT.map((c) => ({ ...c })),
@@ -735,8 +747,7 @@ async function genererRapport(edl, donnees) {
     if (!ok) return;
   }
   notifier('Préparation du rapport (chargement des photos)…');
-  const bail = donnees.baux.find((b) => b.id === edl.bailId);
-  const bien = donnees.biens.find((b) => b.id === bail?.bienId);
+  const bien = bienDeEdl(donnees, edl);
   const locataires = (edl.locataireIds || []).map((id) => donnees.locataires.find((l) => l.id === id)).filter(Boolean);
 
   const photosParPiece = {};
@@ -921,7 +932,7 @@ function editeur(edl, donnees, contexte) {
     h('div', { class: 'edl-bandeau-ligne' }, [
       bouton('← Liste', () => { edlOuvert = null; contexte.allerA('etat-des-lieux'); }, { petit: true, titre: 'Retour à la liste des états des lieux' }),
       h('div', { class: 'edl-titre' }, [
-        h('strong', { texte: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${date(edl.date)}` }),
+        h('strong', { texte: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${date(edl.date)}${bienDeEdl(contexte.tout || donnees, edl)?.nom ? ` — ${bienDeEdl(contexte.tout || donnees, edl).nom}` : ''}` }),
         edl.statut === 'finalise'
           ? h('span', { class: 'badge badge-succes', title: 'Rapport déjà généré — toute modification demandera une nouvelle génération.', texte: 'Rapport généré' })
           : h('span', { class: 'badge badge-attention', title: 'Brouillon — tout est modifiable.', texte: 'Brouillon' }),
@@ -986,8 +997,9 @@ export default {
       const nbPhotos = (edl.pieces || []).reduce((s, p) => s + (p.photos || []).length
         + (p.meubles || []).reduce((t, m) => t + (m.photos || []).length, 0), 0);
       const nbSignatures = (edl.signatures || []).length;
+      const logement = bienDeEdl(contexte.tout || donnees, edl);
       conteneur.append(carte({
-        titre: `${edl.type === 'sortie' ? 'Sortie' : 'Entrée'} — ${date(edl.date)}`,
+        titre: `${edl.type === 'sortie' ? 'Sortie' : 'Entrée'} — ${date(edl.date)}${logement ? ` — ${logement.nom}` : ''}`,
         aide: `${(edl.pieces || []).length} pièce(s), ${nbPhotos} photo(s), ${nbSignatures} signature(s)`,
         actions: [
           edl.statut === 'finalise' ? badge('Rapport généré', 'succes') : badge('Brouillon', 'attention'),

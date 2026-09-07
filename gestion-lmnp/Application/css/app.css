@@ -99,9 +99,20 @@ a { color: var(--accent); }
   padding: .85rem 1.4rem; background: var(--fond-carte); border-bottom: 1px solid var(--bordure);
 }
 .sous-titre { margin: .15rem 0 0; color: var(--encre-douce); font-size: .82rem; }
-.entete-droite { display: flex; align-items: center; gap: .7rem; }
-.selecteur-exercice { display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--encre-douce); }
+.entete-gauche { flex: 1; min-width: 0; }
+.entete-droite { display: flex; align-items: center; gap: .7rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.selecteur-exercice { display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--encre-douce); flex-shrink: 0; }
 .selecteur-exercice select { padding: .28rem .4rem; }
+.selecteur-logement select { max-width: 13rem; font-weight: 600; color: var(--accent-fonce); text-overflow: ellipsis; }
+@media (max-width: 900px) { .entete { flex-wrap: wrap; } .entete-droite { width: 100%; justify-content: flex-start; } }
+
+/* Vue « Tous les logements » : un bandeau par logement, puis son sous-total. */
+.section-logement { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin: 1.3rem 0 .7rem; padding-bottom: .35rem; border-bottom: 2px solid var(--accent); }
+.section-logement:first-child { margin-top: 0; }
+.section-logement h2 { font-size: 1rem; color: var(--accent-fonce); }
+.section-logement .legende { flex: 1; }
+.sous-total-logement { display: flex; justify-content: flex-end; gap: 1.4rem; flex-wrap: wrap; font-size: .86rem; color: var(--encre-douce); margin: -.4rem 0 1.1rem; padding: .35rem .6rem; border-top: 1px dashed var(--bordure-forte); }
+.sous-total-logement strong { color: var(--encre); font-variant-numeric: tabular-nums; }
 
 .synchro { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--encre-douce); }
 .synchro .pastille { width: 8px; height: 8px; border-radius: 50%; background: var(--succes); }
@@ -396,7 +407,8 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .edl-bandeau-ligne { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; }
 .edl-titre { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
 .edl-titre strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.edl-bandeau .onglets { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 0; padding-bottom: .2rem; border-bottom: 0; scrollbar-width: thin; }
+/* Les onglets passent à la ligne (pas d'ascenseur horizontal, peu pratique au doigt). */
+.edl-bandeau .onglets { flex-wrap: wrap; overflow: visible; margin-bottom: 0; padding-bottom: .2rem; border-bottom: 0; row-gap: .3rem; }
 .onglets { display: flex; flex-wrap: wrap; gap: .3rem; padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1px solid var(--bordure); }
 .onglet { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .6rem; border: 1px solid var(--bordure-forte); border-radius: 999px;
   background: var(--fond-carte, #fff); color: inherit; font: inherit; font-size: .88rem; cursor: pointer; max-width: 14rem; flex: 0 0 auto; }
