@@ -405,7 +405,7 @@ Réglages, demandés une fois au premier déploiement de la v42 :
   déjà dans le projet — la CLI le réutilise ; sinon elle demande sa valeur ;
 - le paramètre `GMAIL_COMPTE` : l'adresse Gmail du compte qui expédie (celui
   du mot de passe d'application). La CLI le demande dans le terminal et le
-  conserve dans `functions-appel-loyer/.env` ;
+  conserve dans `functions-appel-loyer/.env.gestion-lmnp-anika` (modifiable au Bloc-notes) ;
 - le paramètre `COURRIEL_EXPEDITEUR` (par défaut « Andy Nguyen
   <a-nguyen@sfr.fr> ») : l'expéditeur affiché ; l'adresse doit être autorisée
   en « Envoyer en tant que » dans Gmail.
