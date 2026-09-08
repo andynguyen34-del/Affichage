@@ -966,7 +966,7 @@ async function genererRapport(edl, donnees, { annexe = false } = {}) {
     edl, bien, bailleur: donnees.parametres.bailleurs?.[0], locataires, photosParPiece, photosParMeuble, signatures, plan,
     annexe: annexeDonnees,
   });
-  const nomFichier = `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} ${edl.date}${annexe ? ' avec annexe contradictoire' : ''}.pdf`;
+  const nomFichier = `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} ${edl.date}${bien?.nom ? ` — ${bien.nom}` : ''}${annexe ? ' avec annexe contradictoire' : ''}.pdf`;
 
   await api.deposerOctets('documents', `États des lieux/${nomFichier}`, octets, 'application/pdf');
 
@@ -975,7 +975,7 @@ async function genererRapport(edl, donnees, { annexe = false } = {}) {
     try {
       await publierDocument({
         locataire, type: 'etat-des-lieux',
-        titre: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} — ${date(edl.date)}`,
+        titre: `État des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} — ${date(edl.date)}${bien?.nom ? ` — ${bien.nom}` : ''}`,
         nomFichier, octets,
       });
       publications.push(nomDe(locataire));
