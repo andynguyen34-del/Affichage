@@ -34,6 +34,19 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v40 — page « Locataires ».** Les locataires ont leur entrée dans
+le menu : contact, bail en cours (logement, part de loyer), espace en ligne
+(documents publiés, dernière connexion) et justificatifs (un badge par pièce
+demandée, rappel par e-mail individuel ou groupé). La page suit le sélecteur
+« Logement » ; sur « Tous », un bandeau par logement ; les anciens locataires
+sans bail en cours sont repliés en bas. La pastille du menu compte les
+colocataires à qui il manque un justificatif. « Logements & baux » ne garde
+que les logements, les baux et les révisions ; le nom d'un locataire sur un
+bail ouvre sa ligne. Le titre des états des lieux publiés sur les espaces
+porte le nom du logement. Les règles Firestore changent (le colocataire note
+la date de sa visite) : déployer l'hébergement et les règles ; les fonctions
+sont inchangées.
+
 **Nouveau en v39 — plusieurs états des lieux par espace, blocs repliables.**
 Chaque espace colocataire conserve désormais tous les états des lieux publiés
 (entrée, sortie, plusieurs logements) au lieu du seul dernier : la rubrique

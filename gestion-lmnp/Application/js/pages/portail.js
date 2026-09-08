@@ -541,6 +541,8 @@ export async function rendrePortail({ seDeconnecter }) {
   let erreur = null;
   try { portail = await api.lireMonPortail(); }
   catch (e) { erreur = e; }
+  // Sa visite est notée pour le gérant (page « Locataires » : « connecté le … »).
+  if (portail) api.marquerMonAcces().catch(() => {});
   const documents = portail?.documents || [];
 
   const etatPortail = { edl: {}, justificatifsManquants: [] };

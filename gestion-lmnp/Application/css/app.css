@@ -113,6 +113,15 @@ a { color: var(--accent); }
 .section-logement .legende { flex: 1; }
 .sous-total-logement { display: flex; justify-content: flex-end; gap: 1.4rem; flex-wrap: wrap; font-size: .86rem; color: var(--encre-douce); margin: -.4rem 0 1.1rem; padding: .35rem .6rem; border-top: 1px dashed var(--bordure-forte); }
 .sous-total-logement strong { color: var(--encre); font-variant-numeric: tabular-nums; }
+/* Page Locataires : bandeaux par logement dans la carte, badges, anciens repliés. */
+.section-logement-serree { margin: .2rem .8rem .2rem; padding: .55rem 0 .3rem; }
+.section-logement-nom { font-weight: 600; color: var(--accent-fonce); }
+.groupe-badges { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+.anciens-locataires > summary { cursor: pointer; padding: .7rem 1rem; font-weight: 600; color: var(--encre-douce); }
+.anciens-locataires[open] > summary { border-bottom: 1px solid var(--bordure); }
+tr.ligne-cible td { background: var(--attention-clair); }
+.lien-locataire { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-fonce); cursor: pointer; text-decoration: underline dotted; }
+.lien-locataire:hover { color: var(--accent); }
 
 .synchro { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--encre-douce); }
 .synchro .pastille { width: 8px; height: 8px; border-radius: 50%; background: var(--succes); }

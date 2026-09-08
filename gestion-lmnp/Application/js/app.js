@@ -9,6 +9,7 @@ import cautions from './pages/cautions.js';
 import regularisation from './pages/regularisation.js';
 import etatDesLieux from './pages/etat-des-lieux.js';
 import bien from './pages/bien.js';
+import locataires, { releverTous } from './pages/locataires.js';
 import parametres from './pages/parametres.js';
 import aide from './pages/aide.js';
 import { rendrePortail } from './pages/portail.js';
@@ -23,7 +24,7 @@ import { brancherSelecteurEspace, memoriserEspace, espaceChoisi, ESPACES, appliq
 import { brancherInstallationConnexion } from './installation.js';
 import { logementMemorise, memoriserLogement, filtrerDonnees, libelleTypeLocation } from './logements.js';
 
-const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, parametres, aide];
+const PAGES = [pageLoyers, cautions, regularisation, etatDesLieux, bien, locataires, parametres, aide];
 
 const contexte = {
   annee: new Date().getFullYear(),
@@ -35,9 +36,13 @@ const contexte = {
     contexte.page = cle;
     if (options.annee) contexte.annee = options.annee;
     if (options.bienId !== undefined) contexte.definirLogement(options.bienId, { redessiner: false });
+    contexte.locataireId = options.locataireId || '';
     location.hash = cle;
     dessiner();
   },
+  /** Redessine la page courante (par exemple après un relevé en arrière-plan). */
+  redessiner(options = {}) { dessiner(options); },
+  redessinerNavigation() { dessinerNavigation(); },
   definirAnnee(annee) {
     contexte.annee = Number(annee);
     dessinerSelecteurAnnee();
@@ -135,7 +140,7 @@ function dessinerAlertes() {
     zone.append(h('div', { class: 'alerte alerte-info' }, [
       h('div', {}, [
         h('strong', { texte: 'Première utilisation. ' }),
-        'Commencez par déclarer le logement, les colocataires et le bail dans « Logements & baux ».',
+        'Commencez par déclarer le logement et le bail dans « Logements & baux », et les personnes dans « Locataires ».',
       ]),
       bouton('Déclarer le logement', () => contexte.allerA('bien'), { petit: true }),
     ]));
@@ -576,6 +581,10 @@ async function ouvrirApplication() {
   document.getElementById('application').hidden = false;
   dessinerSelecteurAnnee();
   dessiner();
+
+  // Espaces et justificatifs des locataires, relevés en arrière-plan : la
+  // pastille « Locataires » du menu compte ceux à qui il manque une pièce.
+  releverTous(etat.liste('locataires'), () => dessinerNavigation());
 
   // Appel de loyer automatique : si c'est le jour et que le mois n'a pas encore
   // été appelé (par la fonction planifiée ou un autre poste), on envoie.

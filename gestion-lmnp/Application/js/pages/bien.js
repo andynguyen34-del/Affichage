@@ -1,4 +1,5 @@
-// Logement, locataires et baux.
+// Logements et baux. Les locataires ont leur page depuis la v40 (locataires.js),
+// qui réutilise le formulaire « Locataire » exporté d'ici.
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer, barreOutils,
@@ -6,10 +7,6 @@ import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
-import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js';
-import { destinatairesDe } from '../portail-publication.js';
-import * as api from '../api.js';
-import { notifier, signalerErreur } from '../ui.js';
 import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, motOccupant, sejoursDe } from '../logements.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Local'].map((v) => ({ valeur: v, libelle: v }));
@@ -85,7 +82,7 @@ async function ouvrirBien(donnees, bienExistant) {
   if (saisie) await executer(etat.enregistrer('biens', saisie), 'Logement enregistré.');
 }
 
-async function ouvrirLocataire(locataireExistant) {
+export async function ouvrirLocataire(locataireExistant) {
   const saisie = await formulaire({
     titre: locataireExistant ? 'Modifier le locataire' : 'Nouveau locataire',
     champs: champsLocataire(),
@@ -265,79 +262,6 @@ async function repartirColocataires(donnees, bail) {
  * entretien des climatiseurs, ramonage…) : relevé par colocataire, avec
  * rappel par e-mail de ce qui manque.
  */
-function carteJustificatifs(donnees) {
-  // Bail de référence : le bail de colocation actif, sinon le plus récent
-  // (un bail signé qui démarre bientôt compte déjà — les justificatifs sont
-  // à fournir dès la remise des clés).
-  const bauxColoc = donnees.baux.filter((b) => (b.colocataires || []).length)
-    .sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)));
-  const bailRef = bauxColoc.find((b) => bailEstActif(b)) || bauxColoc[0];
-  const ids = bailRef ? bailRef.colocataires.map((c) => c.locataireId).filter(Boolean) : [];
-  const locataires = ids.map((id) => donnees.locataires.find((l) => l.id === id)).filter(Boolean);
-  const zone = h('div');
-
-  const relever = async () => {
-    zone.replaceChildren(h('p', { class: 'legende', texte: 'Relevé en cours…' }));
-    const blocs = [];
-    for (const locataire of locataires) {
-      const email = String(locataire.email || '').trim().toLowerCase();
-      const nom = `${locataire.prenom || ''} ${locataire.nom}`.trim();
-      if (!email) {
-        blocs.push(h('div', { style: 'margin-bottom:.7rem' }, [
-          h('strong', { texte: nom }),
-          h('span', { class: 'legende', texte: ' — pas d’adresse e-mail, donc pas d’espace : à renseigner (Modifier).' }),
-        ]));
-        continue;
-      }
-      let fichiers = [];
-      /* eslint-disable no-await-in-loop */
-      try { fichiers = await api.listerFichiers('portail', `${email}/justificatifs`); } catch { /* rien */ }
-      const parCategorie = new Map();
-      for (const fichier of fichiers) {
-        const cle = categorieDuChemin(fichier.chemin);
-        if (!parCategorie.has(cle)) parCategorie.set(cle, []);
-        parCategorie.get(cle).push(fichier);
-      }
-      const manquants = CATEGORIES_JUSTIFICATIFS.filter((c) => c.cle !== 'autre' && !(parCategorie.get(c.cle) || []).length);
-      blocs.push(h('div', { style: 'margin-bottom: .9rem' }, [
-        h('div', { style: 'display:flex;align-items:center;gap:.6rem;flex-wrap:wrap' }, [
-          h('strong', { texte: nom }),
-          ...CATEGORIES_JUSTIFICATIFS.filter((c) => c.cle !== 'autre').map((c) => {
-            const nb = (parCategorie.get(c.cle) || []).length;
-            return badge(`${c.libelle.split(' ')[0]} ${nb ? '✓' : '—'}`, nb ? 'succes' : 'attente');
-          }),
-          manquants.length ? bouton('Rappel par e-mail', async () => {
-            const bailleur = donnees.parametres.bailleurs?.[0];
-            await api.envoyerCourriel({
-              destinataires: destinatairesDe(locataire),
-              sujet: 'Justificatifs à déposer sur votre espace',
-              html: `<p>Bonjour ${locataire.prenom || ''},</p>`
-                + '<p>Merci de déposer sur votre espace les justificatifs suivants, prévus par le bail :</p>'
-                + `<ul>${manquants.map((c) => `<li>${c.libelle}${c.periodicite ? ` (${c.periodicite})` : ''}</li>`).join('')}</ul>`
-                + `<p><a href="${window.location.origin}">${window.location.origin}</a> — rubrique « Vos justificatifs à fournir ».</p>`
-                + `<p>Bien cordialement,<br>${bailleur?.nom || ''}</p>`,
-            });
-            notifier(`Rappel envoyé à ${email}.`, 'succes');
-          }, { petit: true }) : null,
-        ]),
-        ...[...parCategorie.entries()].map(([cle, listeFichiers]) => h('div', { style: 'margin:.25rem 0 0 .2rem' }, [
-          h('span', { class: 'legende', texte: `${CATEGORIES_JUSTIFICATIFS.find((c) => c.cle === cle)?.libelle || cle} : ` }),
-          ...listeFichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true })),
-        ])),
-      ]));
-    }
-    zone.replaceChildren(...(blocs.length ? blocs : [h('p', { class: 'legende', texte: 'Aucun colocataire sur le bail en cours.' })]));
-  };
-
-  zone.append(
-    h('p', { class: 'legende', texte: 'Chaque colocataire dépose depuis son espace : attestation d’assurance habitation '
-      + '(chaque année), entretien des climatiseurs, ramonage de la cheminée. Les documents déposés ne sont ni '
-      + 'modifiables ni supprimables par lui.' }),
-    bouton('Relever les justificatifs', () => relever().catch(signalerErreur), { type: 'primaire', petit: true }),
-  );
-
-  return carte({ titre: 'Justificatifs des colocataires', corps: zone });
-}
 
 const infoBloc = (libelle, valeur) => h('div', {}, [
   h('div', { class: 'tuile-libelle', texte: libelle }),
@@ -348,10 +272,10 @@ export default {
   cle: 'bien',
   libelle: 'Logements & baux',
   icone: '🏠',
-  titre: 'Logements, locataires et baux',
+  titre: 'Logements et baux',
   sousTitre: (contexte) => (contexte.bienId
-    ? 'Le logement choisi dans l’en-tête, les personnes qui l’occupent et ses conditions de location.'
-    : 'Chaque logement, les personnes qui l’occupent et les conditions de location.'),
+    ? 'Le logement choisi dans l’en-tête et ses conditions de location. Les personnes : page « Locataires ».'
+    : 'Chaque logement et ses conditions de location. Les personnes : page « Locataires ».'),
   rendre(contexte) {
     // `donnees` : le logement choisi dans l'en-tête ; `tout` : le dossier
     // entier (liste des logements dans les formulaires, locataires).
@@ -361,7 +285,6 @@ export default {
 
     conteneur.append(barreOutils([
       bouton('+ Logement', () => ouvrirBien(tout, null), { type: 'primaire' }),
-      bouton('+ Locataire', () => ouvrirLocataire(null)),
       bouton('+ Bail', () => ouvrirBail(tout, null, contexte.bienId)),
     ]));
 
@@ -379,14 +302,17 @@ export default {
     // ------------------------------------------------------------- baux
     const colonnesBaux = [
       { titre: 'Locataires', valeur: (b) => {
+        // Le nom ouvre la page « Locataires » sur la ligne de la personne.
+        const lien = (id) => h('button', { type: 'button', class: 'lien-locataire', title: 'Voir dans « Locataires »',
+          onclick: () => contexte.allerA('locataires', { locataireId: id }) }, nomLocataire(donnees, id));
         const colocataires = (b.colocataires || []).filter((c) => c.locataireId);
         if (colocataires.length) {
-          return h('div', {}, colocataires.map((c) => h('div', { class: colocataires.indexOf(c) ? 'legende' : '', texte:
-            `${nomLocataire(donnees, c.locataireId)} — ${montant((Number(c.partLoyer) || 0) + (Number(c.partCharges) || 0))}` })));
+          return h('div', {}, colocataires.map((c) => h('div', { class: colocataires.indexOf(c) ? 'legende' : '' }, [
+            lien(c.locataireId), ` — ${montant((Number(c.partLoyer) || 0) + (Number(c.partCharges) || 0))}`])));
         }
         return h('div', {}, [
-          h('div', { texte: nomLocataire(donnees, b.locataireId) }),
-          b.coTitulaireId ? h('div', { class: 'legende', texte: `et ${nomLocataire(donnees, b.coTitulaireId)}` }) : null,
+          h('div', {}, [lien(b.locataireId)]),
+          b.coTitulaireId ? h('div', { class: 'legende' }, ['et ', lien(b.coTitulaireId)]) : null,
         ]);
       } },
       { titre: 'Logement', valeur: (b) => tout.biens.find((x) => x.id === b.bienId)?.nom || '—' },
@@ -430,35 +356,6 @@ export default {
       }),
     }));
 
-    // -------------------------------------------------------- locataires
-    conteneur.append(carte({
-      titre: 'Locataires',
-      serre: true,
-      corps: tableau({
-        colonnes: [
-          { titre: 'Nom', valeur: (l) => `${l.nom} ${l.prenom || ''}`.trim() },
-          { titre: 'Courriel', valeur: (l) => l.email || '—' },
-          { titre: 'Téléphone', valeur: (l) => l.telephone || '—' },
-          { titre: 'Baux', nombre: true, valeur: (l) => String(tout.baux.filter((b) => b.locataireId === l.id
-            || b.coTitulaireId === l.id || (b.colocataires || []).some((c) => c.locataireId === l.id)).length) },
-          { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
-            bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
-            bouton('✕', async () => {
-              const confirme = await confirmer({
-                titre: 'Supprimer le locataire', message: `Supprimer ${l.nom} ${l.prenom || ''} ?`,
-                libelleValider: 'Supprimer', danger: true,
-              });
-              if (confirme) await executer(etat.supprimer('locataires', l.id), 'Locataire supprimé.');
-            }, { petit: true, type: 'danger' }),
-          ]) },
-        ],
-        lignes: donnees.locataires,
-        messageVide: 'Aucun locataire enregistré.',
-        cle: (l) => l.id,
-      }),
-    }));
-
-    conteneur.append(carteJustificatifs(donnees));
 
     const revisions = donnees.baux.flatMap((b) => (b.revisions || []).map((r) => ({ ...r, bail: b })));
     if (revisions.length) {

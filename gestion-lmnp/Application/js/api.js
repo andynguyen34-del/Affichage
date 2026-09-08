@@ -32,6 +32,7 @@ export async function ecrireDocumentSysteme(nom, contenu) { localStorage.setItem
 export async function publierPortail() { /* sans objet */ }
 export async function lirePortail() { return null; }
 export async function lireMonPortail() { return null; }
+export async function marquerMonAcces() { /* sans objet */ }
 export async function lireReponsesContradictoire() { return null; }
 export async function lireSignatureContradictoire() { return null; }
 export async function envoyerCodeSignature() { throw new Error('Signature à distance : version en ligne seulement.'); }

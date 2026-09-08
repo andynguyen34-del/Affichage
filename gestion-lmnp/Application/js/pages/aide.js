@@ -44,7 +44,7 @@ export default {
             + 'ou courte durée (Airbnb, Booking… : des séjours, sans bail ni appel de loyer).',
           ['Le sélecteur ', h('strong', { texte: 'Logement' }),
             ' en haut de l’écran, à côté de l’exercice, choisit le logement affiché dans toutes les pages (Loyers, Cautions, Charges, '
-            + 'États des lieux, Logements & baux). Le choix est mémorisé sur l’appareil. « Tous les logements » montre tout, '
+            + 'États des lieux, Logements & baux, Locataires). Le choix est mémorisé sur l’appareil. « Tous les logements » montre tout, '
             + 'logement par logement, avec un sous-total sous chacun dans « Loyers ».'],
           'Les baux, loyers, cautions, régularisations et états des lieux sont rattachés au logement de leur bail : rien à ressaisir '
             + 'pour les données existantes.',
@@ -53,6 +53,9 @@ export default {
             + 'à un logement de courte durée sans bail.',
           'L’appel de loyer automatique se règle logement par logement (Paramètres → « Appel de loyer automatique » : jour, coordonnées '
             + 'de paiement, textes) ; l’historique indique le logement de chaque envoi.',
+          'La page « Locataires » réunit les personnes : contact, bail en cours (logement, part de loyer), espace en ligne (documents publiés, '
+            + 'dernière connexion) et justificatifs. Sur « Tous les logements », un bandeau par logement ; les anciens locataires sans bail en cours sont repliés en bas. '
+            + 'Dans « Logements & baux », le nom d’un locataire sur un bail ouvre sa ligne.',
         ]),
       ]),
     }));
@@ -152,7 +155,7 @@ export default {
       titre: 'L’espace colocataire',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'Renseignez l’adresse e-mail du colocataire dans « Logements & baux », puis ouvrez son accès dans '
+          'Renseignez l’adresse e-mail du colocataire dans « Locataires », puis ouvrez son accès dans '
             + '« Paramètres → Accès à l’application ».',
           'Donnez-lui l’adresse de son espace : https://gestion-lmnp-anika.web.app/colocataire — la page de connexion '
             + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
@@ -165,7 +168,8 @@ export default {
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
-            + '« Logements & baux » → « Justificatifs des colocataires » → Relever, avec rappel par e-mail de ce qui manque.',
+            + 'page « Locataires » : un badge par pièce demandée pour chaque colocataire, « Rappel par e-mail » à ceux à qui il manque quelque chose ; '
+            + 'la pastille du menu compte ces retardataires.',
         ]),
       ]),
     }));

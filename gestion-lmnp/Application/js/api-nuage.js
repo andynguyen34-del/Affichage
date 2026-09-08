@@ -11,7 +11,7 @@ import {
   sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider,
 } from 'firebase/auth';
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, runTransaction,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, runTransaction,
   collection, addDoc, connectFirestoreEmulator,
 } from 'firebase/firestore';
 import {
@@ -491,6 +491,11 @@ export async function lirePortail(email) {
 
 export async function lireMonPortail() {
   return lirePortail(utilisateurEmail());
+}
+
+/** Le colocataire note sa visite sur son espace (seul champ qu'il peut écrire dans son document). */
+export async function marquerMonAcces() {
+  await updateDoc(doc(base, 'portail', cleEmail(utilisateurEmail())), { dernierAcces: new Date().toISOString() });
 }
 
 // portail/{e-mail}/reponses/{edlId} : les réponses du colocataire à l'état des

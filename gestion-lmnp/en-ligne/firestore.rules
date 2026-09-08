@@ -22,6 +22,9 @@ service cloud.firestore {
     match /portail/{email} {
       allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
       allow write: if estGerant();
+      // Le colocataire note seulement la date de sa dernière visite.
+      allow update: if connecte() && request.auth.token.email.lower() == email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dernierAcces']);
 
       // Réponses du colocataire à l'état des lieux contradictoire : il écrit
       // SES réponses (document nommé par l'identifiant de l'état des lieux
