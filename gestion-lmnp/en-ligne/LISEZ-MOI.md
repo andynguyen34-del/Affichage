@@ -34,6 +34,14 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v42 — l'envoi des e-mails fait partie de la livraison.** La
+fonction `expedierCourriel` (dossier `functions-appel-loyer/`) expédie les
+courriels de la file « mail » par Gmail et note le résultat de chaque envoi ;
+Paramètres → « Envoi des e-mails » l'affiche, relance ce qui est en attente
+et envoie un e-mail de test. Au premier déploiement, le terminal demande
+l'adresse Gmail qui expédie (`GMAIL_COMPTE`). Voir « L'envoi des e-mails »
+plus bas, et `RETIRER-ANCIEN-ENVOI.cmd` pour retirer l'ancienne fonction.
+
 **Nouveau en v41 — justificatifs communs à la résidence.** L'entretien des
 climatiseurs et le ramonage concernent la maison : un seul document, déposé
 depuis son espace par n'importe quel colocataire, vaut pour tous (il apparaît
@@ -381,28 +389,37 @@ l'écran ouvert : un colocataire ne voit que son espace (quittances, bail,
 état des lieux, dépôts), les règles de sécurité lui interdisent tout le
 reste.
 
-## L'envoi des e-mails (fonction `envoiMail`)
+## L'envoi des e-mails (fonction `expedierCourriel`, v42)
 
 L'application dépose chaque e-mail (quittances, décomptes, bail, état des
-lieux, rappels, appels de loyer) dans la collection Firestore « mail », au
-format `{ to, message: { subject, html, attachments } }`. C'est la fonction
-**`envoiMail`** du projet — déployée séparément, depuis le dossier
-`deploiementLMNPv23/functions/` (codebase « default », Node 22, région
-europe-west9) — qui l'expédie par Gmail (expéditeur « Andy Nguyen
-<a-nguyen@sfr.fr> », mot de passe d'application dans le secret
-`GMAIL_APP_PASSWORD`) et inscrit le résultat dans le champ `delivery` du
-document (`state` : SUCCESS ou ERROR, avec le détail).
+lieux, rappels, appels de loyer, codes de signature) dans la collection
+Firestore « mail », au format `{ to, message: { subject, html, attachments } }`.
+Depuis la v42, c'est la fonction **`expedierCourriel`** de cette livraison
+(dossier `functions-appel-loyer/`, fichier `courriel.js`, région
+europe-west1) qui l'expédie par Gmail, à la création du document, et inscrit
+le résultat dans son champ `delivery` (`state` : PROCESSING → SUCCESS ou
+ERROR avec le message d'erreur, `attempts`, dates).
 
-L'extension « Trigger Email » n'est plus utilisée : ne l'installez pas, les
-courriels partiraient en double.
+Réglages, demandés une fois au premier déploiement de la v42 :
+- le secret `GMAIL_APP_PASSWORD` (mot de passe d'application Google) existe
+  déjà dans le projet — la CLI le réutilise ; sinon elle demande sa valeur ;
+- le paramètre `GMAIL_COMPTE` : l'adresse Gmail du compte qui expédie (celui
+  du mot de passe d'application). La CLI le demande dans le terminal et le
+  conserve dans `functions-appel-loyer/.env` ;
+- le paramètre `COURRIEL_EXPEDITEUR` (par défaut « Andy Nguyen
+  <a-nguyen@sfr.fr> ») : l'expéditeur affiché ; l'adresse doit être autorisée
+  en « Envoyer en tant que » dans Gmail.
 
-Cette livraison ne contient pas `envoiMail` et ne la modifie pas : son
-`firebase.json` ne déclare que le codebase `appel-loyer` (voir ci-dessous),
-et la CLI Firebase ne supprime jamais une fonction d'un autre codebase.
-Il n'est donc pas nécessaire de recopier le dossier `functions/` de la v23
-dans les livraisons suivantes ; si vous le faites quand même, il est ignoré.
-Pour mettre à jour `envoiMail`, déployez depuis son propre dossier avec
-`firebase deploy --only functions`.
+Dans l'application, **Paramètres → « Envoi des e-mails »** montre la file :
+date, destinataires, objet, état (Envoyé / Échec avec l'erreur / En attente),
+avec « Relancer les envois en attente » (courriels jamais partis ou en échec,
+3 essais au plus) et « E-mail de test ».
+
+**Ancienne fonction `envoiMail`** (codebase « default », europe-west9,
+déployée à part jusqu'à la v41) : une fois l'e-mail de test reçu, lancez
+`RETIRER-ANCIEN-ENVOI.cmd` (une seule fois) pour la supprimer, sinon les
+courriels peuvent partir en double. L'extension « Trigger Email » n'est pas
+utilisée : ne l'installez pas.
 
 ## Où sont les photos et documents, et le relais de fichiers (v30)
 

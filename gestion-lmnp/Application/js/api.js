@@ -33,6 +33,9 @@ export async function publierPortail() { /* sans objet */ }
 export async function lirePortail() { return null; }
 export async function lireMonPortail() { return null; }
 export async function marquerMonAcces() { /* sans objet */ }
+export async function etatCourriels() { return { courriels: [], enAttente: 0, total: 0, local: true }; }
+export async function relancerCourriels() { return { ok: true, candidats: 0, envoyes: 0, echecs: [] }; }
+export async function testerCourriel() { throw new Error('Sans objet en mode dossier : les e-mails ne partent que depuis la version en ligne.'); }
 export async function lireReponsesContradictoire() { return null; }
 export async function lireSignatureContradictoire() { return null; }
 export async function envoyerCodeSignature() { throw new Error('Signature à distance : version en ligne seulement.'); }

@@ -19,6 +19,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { traiterSignature } from './signature-distante.js';
+import { traiterCourriels, GMAIL_APP_PASSWORD } from './courriel.js';
 
 const TAILLE_MAX_COLOCATAIRE = 10 * 1024 * 1024;
 
@@ -106,6 +107,13 @@ export async function traiter(req, res) {
   // Signature à distance de l'état des lieux (colocataire) : voir signature-distante.js.
   if (op === 'signature-envoyer' || op === 'signature-confirmer') {
     try { await traiterSignature(op, req, res, qui); }
+    catch (erreur) { if (erreur?.statut) throw refus(erreur.statut, erreur.message); throw erreur; }
+    return;
+  }
+
+  // File des courriels (gérant) : état, relance, e-mail de test. Voir courriel.js.
+  if (op.startsWith('courriels-')) {
+    try { await traiterCourriels(op, req, res, qui); }
     catch (erreur) { if (erreur?.statut) throw refus(erreur.statut, erreur.message); throw erreur; }
     return;
   }
@@ -204,6 +212,7 @@ export const fichiers = onRequest({
   memory: '256MiB',
   timeoutSeconds: 120,
   maxInstances: 5,
+  secrets: [GMAIL_APP_PASSWORD], // relance et e-mail de test (courriel.js)
 }, async (req, res) => {
   try {
     await traiter(req, res);

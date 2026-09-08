@@ -520,16 +520,22 @@ export async function lireSignatureContradictoire(email, edlId) {
   return photo.exists() ? photo.data() : null;
 }
 
-async function appelSignature(op, corps) {
+async function appelJson(op, corps = null) {
   const jeton = await auth?.currentUser?.getIdToken();
   if (!jeton) throw new Error('Connexion requise.');
-  const reponse = await fetch(`/api/fichiers?op=${op}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
-  });
+  const reponse = await fetch(`/api/fichiers?op=${op}`, corps
+    ? { method: 'POST', headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corps), cache: 'no-store' }
+    : { method: 'GET', headers: { Authorization: `Bearer ${jeton}` }, cache: 'no-store' });
   const donnees = await reponse.json().catch(() => ({}));
-  if (!reponse.ok) throw new Error(donnees.erreur || `Signature : erreur ${reponse.status}.`);
+  if (!reponse.ok) throw new Error(donnees.erreur || `${op} : erreur ${reponse.status}.`);
   return donnees;
 }
+const appelSignature = (op, corps) => appelJson(op, corps);
+
+// File des courriels (gérant) : état des derniers envois, relance, test. Voir functions/courriel.js.
+export const etatCourriels = () => appelJson('courriels-etat');
+export const relancerCourriels = () => appelJson('courriels-relancer', { relancer: true });
+export const testerCourriel = (to = '') => appelJson('courriels-test', { to });
 
 /** Demande l'envoi du code de signature à l'adresse du colocataire connecté. */
 export const envoyerCodeSignature = (edlId) => appelSignature('signature-envoyer', { edlId });
@@ -556,6 +562,7 @@ export async function supprimerPortail(email) {
 export async function envoyerCourriel({ destinataires, sujet, html, piecesJointes = [] }) {
   await addDoc(collection(base, 'mail'), {
     to: destinataires,
+    creeLe: new Date().toISOString(),
     message: {
       subject: sujet,
       html,

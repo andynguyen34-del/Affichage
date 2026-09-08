@@ -6,7 +6,7 @@ echo.
 
 echo [1/3] Controle des fichiers de la livraison
 set MANQUE=0
-for %%F in ("firebase.json" ".firebaserc" "firestore.rules" "storage.rules" "public\index.html" "public\manifest.webmanifest" "public\manifest-colocataire.webmanifest" "public\sw.js" "public\icones\icone-192.png" "public\icones\icone-colocataire-192.png" "functions-appel-loyer\index.js" "functions-appel-loyer\relais-fichiers.js" "functions-appel-loyer\signature-distante.js" "functions-appel-loyer\package.json" "functions-appel-loyer\lib\appel-loyer.js" "functions-appel-loyer\lib\contradictoire.js") do (
+for %%F in ("firebase.json" ".firebaserc" "firestore.rules" "storage.rules" "public\index.html" "public\manifest.webmanifest" "public\manifest-colocataire.webmanifest" "public\sw.js" "public\icones\icone-192.png" "public\icones\icone-colocataire-192.png" "functions-appel-loyer\index.js" "functions-appel-loyer\relais-fichiers.js" "functions-appel-loyer\signature-distante.js" "functions-appel-loyer\package.json" "functions-appel-loyer\lib\appel-loyer.js" "functions-appel-loyer\lib\contradictoire.js" "functions-appel-loyer\courriel.js") do (
   if not exist "%%~F" (echo   MANQUANT %%~F & set MANQUE=1)
 )
 if "%MANQUE%"=="1" (
@@ -20,9 +20,11 @@ echo   Tous les fichiers sont presents.
 echo.
 
 echo [2/3] Bibliotheques de la fonction
-if exist "functions-appel-loyer\node_modules\firebase-functions\package.json" (
+if exist "functions-appel-loyer\node_modules\firebase-functions\package.json" if exist "functions-appel-loyer\node_modules\nodemailer\package.json" (
   echo   Deja installees, rien a faire.
-) else (
+  goto :deployer
+)
+(
   echo   Installation ^(une seule fois par dossier, 1 a 2 minutes^)...
   pushd functions-appel-loyer
   call npm install --omit=dev --no-audit --no-fund
@@ -37,10 +39,16 @@ if exist "functions-appel-loyer\node_modules\firebase-functions\package.json" (
   popd
   echo   Bibliotheques installees.
 )
+:deployer
 echo.
 
 echo [3/3] Deploiement ^(hebergement, regles, fonctions^)
 call firebase deploy --project gestion-lmnp-anika --account andynguyen34@gmail.com
 echo.
 echo Termine. Verifiez la ligne "Deploy complete!" ci-dessus.
+echo.
+echo Premiere fois avec la v42 : le terminal a demande la valeur de GMAIL_COMPTE (adresse Gmail
+echo qui expedie) ; elle est conservee dans functions-appel-loyer\.env pour les prochaines fois.
+echo Puis, dans l'application, Parametres ^> Envoi des e-mails ^> "E-mail de test". Quand il arrive,
+echo lancez RETIRER-ANCIEN-ENVOI.cmd (une seule fois) pour que rien ne parte en double.
 pause

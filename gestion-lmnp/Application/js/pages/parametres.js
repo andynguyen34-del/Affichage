@@ -509,6 +509,69 @@ function carteAcces(donnees) {
   });
 }
 
+
+/**
+ * Envoi des e-mails (v42) : la file « mail » et l'état de chaque envoi
+ * (fonction expedierCourriel), relance de ce qui est en attente, e-mail de test.
+ */
+function carteCourriels(parametres) {
+  const zone = h('div', { class: 'courriels-etat' });
+  const LIBELLES = {
+    SUCCESS: ['Envoyé', 'succes'], ERROR: ['Échec', 'alerte'], PROCESSING: ['En cours', 'attente'], PENDING: ['En attente', 'attention'],
+  };
+  const charger = async () => {
+    zone.replaceChildren(h('p', { class: 'legende', texte: 'Lecture de la file…' }));
+    let etatFile;
+    try { etatFile = await api.etatCourriels(); } catch (erreur) { zone.replaceChildren(h('p', { class: 'legende', style: 'color:var(--alerte)', texte: `File inaccessible : ${erreur.message}` })); return; }
+    if (etatFile.local) { zone.replaceChildren(h('p', { class: 'legende', texte: 'En mode dossier, les e-mails ne partent pas : cette carte ne concerne que la version en ligne.' })); return; }
+    const lignes = etatFile.courriels || [];
+    zone.replaceChildren(
+      h('p', { class: 'legende', texte: `${etatFile.total} courriel(s) dans la file · ${etatFile.enAttente} en attente ou en échec${etatFile.emulateur ? ' · émulateur : rien n’est réellement expédié' : ''}.` }),
+      tableau({
+        colonnes: [
+          { titre: 'Quand', valeur: (c) => (c.le ? new Date(c.le).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—') },
+          { titre: 'Destinataires', valeur: (c) => c.to.join(', ') || '—' },
+          { titre: 'Objet', valeur: (c) => c.sujet || '(sans objet)' },
+          { titre: 'État', valeur: (c) => {
+            const [libelle, ton] = LIBELLES[c.etat] || LIBELLES.PENDING;
+            return h('div', {}, [badge(libelle, ton), c.erreur ? h('div', { class: 'legende', style: 'color:var(--alerte);max-width:22rem', texte: c.erreur }) : null, c.tentatives > 1 ? h('div', { class: 'legende', texte: `${c.tentatives} essais` }) : null]);
+          } },
+        ],
+        lignes,
+        messageVide: 'Aucun courriel dans la file pour l’instant.',
+        cle: (c) => c.id,
+      }),
+    );
+  };
+  charger();
+  const adresseTest = () => String(parametres.bailleurs?.[0]?.email || api.utilisateurEmail() || '').trim();
+  return carte({
+    titre: 'Envoi des e-mails',
+    aide: 'Chaque e-mail de l’application (quittances, rappels, appels de loyer, codes de signature) est déposé dans la file « mail » puis expédié par la fonction du projet, par Gmail. L’état de chaque envoi est inscrit ici.',
+    actions: [
+      bouton('Rafraîchir', () => charger(), { petit: true }),
+      bouton('Relancer les envois en attente', async () => {
+        const resultat = await api.relancerCourriels();
+        notifier(resultat.candidats ? `${resultat.envoyes} envoyé(s) sur ${resultat.candidats}${resultat.echecs?.length ? ` — échecs : ${resultat.echecs.join(' ; ')}` : ''}.` : 'Rien en attente.', resultat.echecs?.length ? 'erreur' : 'succes');
+        charger();
+      }, { petit: true, titre: 'Renvoie les courriels jamais partis ou en échec (3 essais au plus)' }),
+      bouton('E-mail de test', async () => {
+        const reponse = await formulaire({
+          titre: 'E-mail de test', aide: 'Un e-mail est déposé dans la file et expédié aussitôt : vérifiez sa réception (et les indésirables).',
+          champs: [{ cle: 'to', libelle: 'Adresse', type: 'texte', requis: true }],
+          valeurs: { to: adresseTest() },
+          libelleValider: 'Envoyer',
+        });
+        if (!reponse?.to) return;
+        const resultat = await api.testerCourriel(reponse.to);
+        notifier(resultat.ok ? `E-mail de test expédié à ${resultat.to}.` : `Échec de l’envoi : ${resultat.delivery?.error || 'voir la file'}.`, resultat.ok ? 'succes' : 'erreur');
+        charger();
+      }, { petit: true, type: 'primaire' }),
+    ],
+    corps: zone,
+  });
+}
+
 export default {
   cle: 'parametres',
   libelle: 'Paramètres',
@@ -581,6 +644,8 @@ export default {
         ]),
       ]),
     }));
+
+    conteneur.append(carteCourriels(parametres));
 
     return conteneur;
   },

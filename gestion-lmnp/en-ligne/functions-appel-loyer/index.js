@@ -3,7 +3,7 @@
 // Appel de loyer planifié : chaque jour à 8 h 10 (heure de Paris), si c'est
 // le jour réglé dans l'application et que le mois n'a pas encore été appelé,
 // dépose un e-mail par colocataire dans la collection « mail » (expédiée par
-// la fonction envoiMail du projet) et l'inscrit au journal systeme/appels-loyer,
+// la fonction expedierCourriel, courriel.js) et l'inscrit au journal systeme/appels-loyer,
 // logement par logement (chacun a ses réglages).
 // Le calcul et le texte sont ceux de l'application (lib/appel-loyer.js).
 // Codebase « appel-loyer », indépendant de toute autre fonction du projet
@@ -19,6 +19,8 @@ initializeApp();
 
 // Relais de fichiers (/api/fichiers) : voir relais-fichiers.js.
 export { fichiers } from './relais-fichiers.js';
+// Expédition des e-mails de la collection « mail » (v42) : voir courriel.js.
+export { expedierCourriel, expedier, aReprendre } from './courriel.js';
 
 const lireCollection = async (base, nom) => {
   const photo = await base.doc(`donnees/${nom}`).get();
