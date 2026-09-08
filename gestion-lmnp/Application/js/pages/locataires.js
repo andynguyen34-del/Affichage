@@ -9,37 +9,32 @@
 // L'espace en ligne (documents publiés, dernière connexion) et les
 // justificatifs déposés sont relevés dans le nuage : le relevé se fait en
 // arrière-plan à l'affichage de la page et au lancement (pour la pastille du
-// menu : nombre de colocataires à qui il manque un justificatif).
+// menu). Depuis la v41, les pièces communes du logement (entretien des
+// climatiseurs, ramonage, assurance « pour tous ») sont relevées dans
+// l'espace partage et présentées sur une ligne « Pièces communes » en tête
+// de chaque colocation ; la pastille compte les personnes sans assurance et
+// les logements auxquels il manque une pièce commune.
 
 import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur } from '../ui.js';
 import { date, montant, aujourdhui } from '../format.js';
-import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js';
-import { destinatairesDe } from '../portail-publication.js';
+import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeCommun, libelleCategorie, estCommune } from '../justificatifs.js';
+import { destinatairesDe, logementDe } from '../portail-publication.js';
 import { bailEstActif, ouvrirLocataire } from './bien.js';
 import { libelleTypeLocation } from '../logements.js';
 
-const CATEGORIES_DEMANDEES = CATEGORIES_JUSTIFICATIFS.filter((c) => c.cle !== 'autre');
-
 // ------------------------------------------------------------- relevé nuage
 
-/** Relevé par adresse e-mail : { portail, fichiers, parCategorie, manquants, le }. */
+/** Relevé par adresse e-mail : { portail, fichiers, parCategorie, le }. */
 const releves = new Map();
+/** Relevé par logement : { fichiers (espace partage), le }. */
+const relevesLogement = new Map();
 let releveEnCours = null;
 
 const emailDe = (locataire) => String(locataire?.email || '').trim().toLowerCase();
 export const nomDe = (l) => `${l.prenom || ''} ${l.nom || ''}`.trim();
-
-function classer(fichiers) {
-  const parCategorie = new Map();
-  for (const fichier of fichiers || []) {
-    const cle = categorieDuChemin(fichier.chemin);
-    if (!parCategorie.has(cle)) parCategorie.set(cle, []);
-    parCategorie.get(cle).push(fichier);
-  }
-  return parCategorie;
-}
+const prenomDe = (l) => String(l?.prenom || l?.nom || '').trim();
 
 async function releverUn(locataire) {
   const email = emailDe(locataire);
@@ -49,23 +44,40 @@ async function releverUn(locataire) {
   try { portail = await api.lirePortail(email); } catch { /* pas d'espace ou hors ligne */ }
   try { fichiers = await api.listerFichiers('portail', `${email}/justificatifs`); } catch { /* rien déposé */ }
   fichiers = fichiers.filter((f) => String(f.chemin || '').startsWith(`${email}/justificatifs`));
-  const parCategorie = classer(fichiers);
-  const releve = {
-    portail, fichiers, parCategorie,
-    manquants: CATEGORIES_DEMANDEES.filter((c) => !(parCategorie.get(c.cle) || []).length),
-    le: Date.now(),
-  };
+  // Espace créé avant la v41 : on y inscrit l'identifiant du logement, dont
+  // l'espace colocataire a besoin pour les pièces communes.
+  if (portail && !portail.logement?.id) {
+    const logement = logementDe(locataire);
+    if (logement?.id) {
+      try { await api.completerPortail(email, { logement }); portail = { ...portail, logement }; } catch { /* hors ligne */ }
+    }
+  }
+  const releve = { portail, fichiers, parCategorie: classerParCategorie(fichiers), le: Date.now() };
   releves.set(email, releve);
   return releve;
 }
 
+async function releverLogement(bien) {
+  let fichiers = [];
+  try { fichiers = await api.listerFichiers('partage', prefixeCommun(bien.id)); } catch { /* rien déposé */ }
+  fichiers = fichiers.filter((f) => String(f.chemin || '').startsWith(prefixeCommun(bien.id)));
+  const releve = { fichiers, le: Date.now() };
+  relevesLogement.set(bien.id, releve);
+  return releve;
+}
+
 /**
- * Relève l'espace et les justificatifs de chaque locataire ayant une adresse.
- * Un seul relevé à la fois ; `apres` est appelé quand tout est relevé.
+ * Relève l'espace et les justificatifs de chaque locataire ayant une adresse,
+ * et les pièces communes de chaque logement. Un seul relevé à la fois ;
+ * `apres` est appelé quand tout est relevé.
  */
-export function releverTous(locataires, apres = () => {}) {
-  if (releveEnCours) return releveEnCours;
+export function releverTous({ locataires = [], biens = [] } = {}, apres = () => {}) {
+  if (releveEnCours) { releveEnCours.then(() => apres()); return releveEnCours; }
   releveEnCours = (async () => {
+    for (const bien of biens) {
+      // eslint-disable-next-line no-await-in-loop
+      await releverLogement(bien);
+    }
     for (const locataire of locataires) {
       // eslint-disable-next-line no-await-in-loop
       await releverUn(locataire);
@@ -76,7 +88,7 @@ export function releverTous(locataires, apres = () => {}) {
 }
 
 export const releveDe = (locataire) => releves.get(emailDe(locataire)) || null;
-export const releveFait = () => releves.size > 0;
+export const releveFait = () => releves.size > 0 || relevesLogement.size > 0;
 
 // ------------------------------------------------------------ baux, parts
 
@@ -106,12 +118,43 @@ export const justificatifsDemandes = (baux, locataireId) => {
   return Boolean(bail && (bail.colocataires || []).some((c) => c.locataireId === locataireId));
 };
 
-/** Les locataires à qui il manque au moins un justificatif (d'après le relevé). */
+/** Les colocataires (justificatifs demandés) dont le bail courant est sur ce logement. */
+const colocatairesDe = (tout, bienId) => tout.locataires.filter((l) => bailCourant(tout.baux, l.id)?.bienId === bienId && justificatifsDemandes(tout.baux, l.id));
+
+/**
+ * Bilan des justificatifs d'un logement (pièces communes + personnes), ou
+ * null tant que rien n'est relevé. `colocataires` : ceux du logement.
+ */
+export function bilanLogement(tout, bien) {
+  const colocataires = colocatairesDe(tout, bien.id);
+  if (!colocataires.length) return null;
+  const commun = relevesLogement.get(bien.id);
+  const personnels = colocataires.map((l) => ({ id: l.id, nom: prenomDe(l), parCategorie: releveDe(l)?.parCategorie || new Map(), releve: Boolean(releveDe(l)) }));
+  if (!commun && !personnels.some((p) => p.releve)) return null;
+  return { colocataires, ...bilanJustificatifs({ communs: commun?.fichiers || [], personnels }) };
+}
+
+/** Les logements (colocations) auxquels il manque une pièce commune. */
+export function logementsAvecManquants(tout) {
+  return (tout?.biens || []).filter((b) => (bilanLogement(tout, b)?.logement.manquants.length || 0) > 0);
+}
+
+/** Les colocataires à qui il manque une pièce personnelle (assurance non couverte). */
 export function locatairesAvecManquants(tout) {
-  return (tout?.locataires || []).filter((l) => justificatifsDemandes(tout.baux, l.id) && (releveDe(l)?.manquants?.length || 0) > 0);
+  const resultat = [];
+  for (const bien of tout?.biens || []) {
+    const bilan = bilanLogement(tout, bien);
+    if (!bilan) continue;
+    for (const l of bilan.colocataires) {
+      if ((bilan.parPersonne.get(l.id)?.manquants.length || 0) > 0 && emailDe(l)) resultat.push(l);
+    }
+  }
+  return resultat;
 }
 
 // ------------------------------------------------------------------ rappels
+
+const lienEspace = () => `${window.location.origin}/colocataire`;
 
 async function envoyerRappel(locataire, manquants, bailleur) {
   await api.envoyerCourriel({
@@ -120,12 +163,31 @@ async function envoyerRappel(locataire, manquants, bailleur) {
     html: `<p>Bonjour ${locataire.prenom || ''},</p>`
       + '<p>Merci de déposer sur votre espace les justificatifs suivants, prévus par le bail :</p>'
       + `<ul>${manquants.map((c) => `<li>${c.libelle}${c.periodicite ? ` (${c.periodicite})` : ''}</li>`).join('')}</ul>`
-      + `<p><a href="${window.location.origin}/colocataire">${window.location.origin}/colocataire</a> — rubrique « Justificatifs ».</p>`
+      + `<p><a href="${lienEspace()}">${lienEspace()}</a> — rubrique « Justificatifs ».</p>`
+      + `<p>Bien cordialement,<br>${bailleur?.nom || ''}</p>`,
+  });
+}
+
+/** Un seul e-mail à tous les colocataires du logement pour les pièces communes manquantes. */
+async function envoyerRappelLogement(bien, colocataires, manquants, bailleur) {
+  const destinataires = colocataires.map(emailDe).filter(Boolean);
+  if (!destinataires.length) throw new Error('Aucun colocataire de ce logement n’a d’adresse e-mail.');
+  await api.envoyerCourriel({
+    destinataires,
+    sujet: `Justificatifs de la résidence à déposer — ${bien.nom}`,
+    html: '<p>Bonjour,</p>'
+      + `<p>Il manque pour ${bien.nom} les justificatifs suivants, communs à tous les colocataires :</p>`
+      + `<ul>${manquants.map((c) => `<li>${c.libelle}${c.periodicite ? ` (${c.periodicite})` : ''}</li>`).join('')}</ul>`
+      + '<p>Un seul document suffit pour la maison : l’un d’entre vous peut le déposer depuis son espace, rubrique « Justificatifs ». Il apparaîtra alors chez chacun.</p>'
+      + `<p><a href="${lienEspace()}">${lienEspace()}</a></p>`
       + `<p>Bien cordialement,<br>${bailleur?.nom || ''}</p>`,
   });
 }
 
 // -------------------------------------------------------------- cellules
+
+const motCourt = (c) => c.libelle.split(' ')[0];
+const quandParQui = (entree) => [entree.par, entree.le ? date(entree.le) : ''].filter(Boolean).join(', ');
 
 function celluleContact(l) {
   return h('div', {}, [
@@ -167,34 +229,63 @@ function celluleEspace(l) {
   ]);
 }
 
-function celluleJustificatifs(tout, l, bailleur) {
+/** Pièces personnelles d'un colocataire (assurance), d'après le bilan de son logement. */
+function celluleJustificatifs(tout, l, bilan, bailleur) {
   if (!justificatifsDemandes(tout.baux, l.id)) return badge('Non demandés', 'attente');
-  const releve = releveDe(l);
   if (!emailDe(l)) return h('span', { class: 'legende', texte: 'Sans espace' });
-  if (!releve) return h('span', { class: 'legende', texte: 'Relevé en cours…' });
+  const personne = bilan?.parPersonne.get(l.id);
+  if (!personne || !releveDe(l)) return h('span', { class: 'legende', texte: 'Relevé en cours…' });
   return h('div', { class: 'groupe-badges' }, [
-    ...CATEGORIES_DEMANDEES.map((c) => {
-      const nb = (releve.parCategorie.get(c.cle) || []).length;
-      const mot = c.libelle.split(' ')[0];
-      return badge(nb ? `${mot} ✓` : `${mot} manquant${c.cle === 'assurance' ? 'e' : ''}`, nb ? 'succes' : 'alerte');
+    ...CATEGORIES_DEMANDEES.filter((c) => c.portee === 'personne').map((c) => {
+      const nb = (personne.parCategorie.get(c.cle) || []).length;
+      if (nb) return badge(`${motCourt(c)} ✓`, 'succes');
+      if (personne.couvertPar) return badge(`${motCourt(c)} commune ✓ (${quandParQui(personne.couvertPar)})`, 'succes');
+      return badge(`${motCourt(c)} manquante`, 'alerte');
     }),
-    releve.manquants.length ? bouton('Rappel par e-mail', async () => {
-      await envoyerRappel(l, releve.manquants, bailleur);
+    personne.manquants.length ? bouton('Rappel par e-mail', async () => {
+      await envoyerRappel(l, personne.manquants, bailleur);
       notifier(`Rappel envoyé à ${emailDe(l)}.`, 'succes');
     }, { petit: true, titre: 'Lui rappeler par e-mail ce qui manque' }) : null,
   ]);
 }
 
+/** Ligne « Pièces communes » en tête d'une colocation. */
+function lignePiecesCommunes(tout, bien, bailleur) {
+  const colocataires = colocatairesDe(tout, bien.id);
+  if (!colocataires.length) return null;
+  const bilan = bilanLogement(tout, bien);
+  const contenu = [h('span', { class: 'pieces-communes-titre', texte: `Pièces communes de ${bien.nom}` })];
+  if (!bilan) {
+    contenu.push(h('span', { class: 'legende', texte: 'Relevé en cours…' }));
+  } else {
+    for (const c of CATEGORIES_DEMANDEES.filter((x) => x.portee === 'logement')) {
+      const dernier = (bilan.logement.parCategorie.get(c.cle) || [])[0];
+      contenu.push(dernier ? badge(`${motCourt(c)} ✓ (${quandParQui(dernier)})`, 'succes') : badge(`${motCourt(c)} manquant`, 'alerte'));
+    }
+    const assurance = (bilan.logement.parCategorie.get('assurance') || [])[0];
+    if (assurance) contenu.push(badge(`Assurance pour tous ✓ (${quandParQui(assurance)})`, 'succes'));
+    if (bilan.logement.manquants.length) {
+      contenu.push(bouton('Rappel à tous', async () => {
+        await envoyerRappelLogement(bien, colocataires, bilan.logement.manquants, bailleur);
+        notifier(`Rappel envoyé aux ${colocataires.length} colocataires de ${bien.nom}.`, 'succes');
+      }, { petit: true, titre: 'Un seul e-mail à tous les colocataires du logement' }));
+    }
+  }
+  return h('div', { class: 'pieces-communes', 'data-logement': bien.id }, contenu);
+}
+
 // ---------------------------------------------------------------- page
 
 function tableLocataires(tout, lignes, bailleur, contexte) {
+  const bilans = new Map(tout.biens.map((b) => [b.id, bilanLogement(tout, b)]));
+  const bilanDe = (l) => bilans.get(bailCourant(tout.baux, l.id)?.bienId) || null;
   return tableau({
     colonnes: [
       { titre: 'Nom', valeur: (l) => h('div', { 'data-locataire': l.id }, [h('strong', { texte: `${l.nom} ${l.prenom || ''}`.trim() })]) },
       { titre: 'Contact', valeur: (l) => celluleContact(l) },
       { titre: 'Bail', valeur: (l) => celluleBail(tout, l, bailCourant(tout.baux, l.id)) },
       { titre: 'Espace en ligne', valeur: (l) => celluleEspace(l) },
-      { titre: 'Justificatifs', valeur: (l) => celluleJustificatifs(tout, l, bailleur) },
+      { titre: 'Justificatifs', valeur: (l) => celluleJustificatifs(tout, l, bilanDe(l), bailleur) },
       { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
         bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
         bouton('✕', async () => {
@@ -212,44 +303,67 @@ function tableLocataires(tout, lignes, bailleur, contexte) {
   });
 }
 
-function carteJustificatifs(tout, locataires, bailleur) {
+function carteJustificatifs(tout, logements, bailleur) {
   const zone = h('div');
-  const concernes = locataires.filter((l) => justificatifsDemandes(tout.baux, l.id));
-  const dessinerReleve = () => {
-    const blocs = concernes.map((l) => {
-      const releve = releveDe(l);
+  const blocs = [];
+  for (const bien of logements) {
+    const colocataires = colocatairesDe(tout, bien.id);
+    if (!colocataires.length) continue;
+    const bilan = bilanLogement(tout, bien);
+    const ouvrir = (entree) => bouton(entree.fichier.nom, () => api.ouvrirFichier(entree.personnel ? 'portail' : 'partage', entree.fichier.chemin).catch(signalerErreur), { petit: true, titre: entree.par ? `Déposé par ${entree.par}${entree.le ? ` le ${date(entree.le)}` : ''}` : '' });
+    const bloc = h('div', { class: 'justificatifs-logement' }, [h('div', { class: 'justificatifs-logement-titre', texte: `🏠 ${bien.nom}` })]);
+    if (!bilan) { bloc.append(h('p', { class: 'legende', texte: 'Relevé en cours…' })); blocs.push(bloc); continue; }
+    // Pièces communes
+    bloc.append(h('div', { style: 'display:flex;align-items:center;gap:.6rem;flex-wrap:wrap' }, [
+      h('strong', { texte: 'Pièces communes' }),
+      ...CATEGORIES_DEMANDEES.filter((c) => c.portee === 'logement').map((c) => {
+        const nb = (bilan.logement.parCategorie.get(c.cle) || []).length;
+        return badge(`${motCourt(c)} ${nb ? '✓' : '—'}`, nb ? 'succes' : 'attente');
+      }),
+    ]));
+    for (const [cle, entrees] of bilan.logement.parCategorie.entries()) {
+      bloc.append(h('div', { style: 'margin:.25rem 0 0 .2rem' }, [
+        h('span', { class: 'legende', texte: `${libelleCategorie(cle)}${estCommune(cle) ? '' : ' (pour tous)'} : ` }),
+        ...entrees.map(ouvrir),
+      ]));
+    }
+    // Personnes
+    for (const l of colocataires) {
+      const personne = bilan.parPersonne.get(l.id);
+      const email = emailDe(l);
       const nom = nomDe(l);
-      if (!emailDe(l)) {
-        return h('div', { style: 'margin-bottom:.7rem' }, [h('strong', { texte: nom }), h('span', { class: 'legende', texte: ' — pas d’adresse e-mail, donc pas d’espace : à renseigner (Modifier).' })]);
-      }
-      if (!releve) return h('div', { style: 'margin-bottom:.7rem' }, [h('strong', { texte: nom }), h('span', { class: 'legende', texte: ' — relevé en cours…' })]);
-      return h('div', { style: 'margin-bottom: .9rem' }, [
+      if (!email) { bloc.append(h('div', { style: 'margin-top:.7rem' }, [h('strong', { texte: nom }), h('span', { class: 'legende', texte: ' — pas d’adresse e-mail, donc pas d’espace : à renseigner (Modifier).' })])); continue; }
+      if (!releveDe(l)) { bloc.append(h('div', { style: 'margin-top:.7rem' }, [h('strong', { texte: nom }), h('span', { class: 'legende', texte: ' — relevé en cours…' })])); continue; }
+      const perso = CATEGORIES_DEMANDEES.filter((c) => c.portee === 'personne');
+      bloc.append(h('div', { style: 'margin-top:.7rem' }, [
         h('div', { style: 'display:flex;align-items:center;gap:.6rem;flex-wrap:wrap' }, [
           h('strong', { texte: nom }),
-          ...CATEGORIES_DEMANDEES.map((c) => {
-            const nb = (releve.parCategorie.get(c.cle) || []).length;
-            return badge(`${c.libelle.split(' ')[0]} ${nb ? '✓' : '—'}`, nb ? 'succes' : 'attente');
+          ...perso.map((c) => {
+            const nb = (personne.parCategorie.get(c.cle) || []).length;
+            if (nb) return badge(`${motCourt(c)} ✓`, 'succes');
+            if (personne.couvertPar) return badge(`${motCourt(c)} commune ✓`, 'succes');
+            return badge(`${motCourt(c)} —`, 'attente');
           }),
-          releve.manquants.length ? bouton('Rappel par e-mail', async () => {
-            await envoyerRappel(l, releve.manquants, bailleur);
-            notifier(`Rappel envoyé à ${emailDe(l)}.`, 'succes');
+          personne.manquants.length ? bouton('Rappel par e-mail', async () => {
+            await envoyerRappel(l, personne.manquants, bailleur);
+            notifier(`Rappel envoyé à ${email}.`, 'succes');
           }, { petit: true }) : null,
         ]),
-        ...[...releve.parCategorie.entries()].map(([cle, listeFichiers]) => h('div', { style: 'margin:.25rem 0 0 .2rem' }, [
-          h('span', { class: 'legende', texte: `${CATEGORIES_JUSTIFICATIFS.find((c) => c.cle === cle)?.libelle || cle} : ` }),
-          ...listeFichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true })),
+        ...[...personne.parCategorie.entries()].filter(([cle]) => !estCommune(cle)).map(([cle, fichiers]) => h('div', { style: 'margin:.25rem 0 0 .2rem' }, [
+          h('span', { class: 'legende', texte: `${libelleCategorie(cle)} : ` }),
+          ...fichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true })),
         ])),
-      ]);
-    });
-    zone.replaceChildren(
-      h('p', { class: 'legende', texte: 'Chaque colocataire dépose depuis son espace : attestation d’assurance habitation '
-        + '(chaque année), entretien des climatiseurs, ramonage de la cheminée. Les documents déposés ne sont ni '
-        + 'modifiables ni supprimables par lui.' }),
-      ...(blocs.length ? blocs : [h('p', { class: 'legende', texte: 'Aucun colocataire sur un bail de colocation en cours.' })]),
-    );
-  };
-  dessinerReleve();
-  return { carte: carte({ titre: 'Justificatifs des colocataires', corps: zone }), redessiner: dessinerReleve };
+      ]));
+    }
+    blocs.push(bloc);
+  }
+  zone.append(
+    h('p', { class: 'legende', texte: 'Chaque colocataire dépose depuis son espace son attestation d’assurance habitation (chaque année) ; '
+      + 'l’entretien des climatiseurs et le ramonage sont communs à la maison : un seul document, déposé par n’importe lequel d’entre eux, vaut pour tous. '
+      + 'Une attestation d’assurance peut aussi être déposée « pour tous les colocataires ». Les documents déposés ne sont ni modifiables ni supprimables par eux.' }),
+    ...(blocs.length ? blocs : [h('p', { class: 'legende', texte: 'Aucun colocataire sur un bail de colocation en cours.' })]),
+  );
+  return carte({ titre: 'Justificatifs des colocataires', corps: zone });
 }
 
 export default {
@@ -260,10 +374,10 @@ export default {
   sousTitre: (contexte) => (contexte.bienId
     ? 'Les personnes qui occupent le logement choisi dans l’en-tête, leur espace en ligne et leurs justificatifs.'
     : 'Les personnes qui occupent vos logements, leur espace en ligne et leurs justificatifs.'),
-  /** Pastille : colocataires à qui il manque au moins un justificatif (d'après le dernier relevé). */
+  /** Pastille : personnes sans assurance + logements auxquels il manque une pièce commune (d'après le dernier relevé). */
   compteur(contexte) {
     if (!contexte.tout?.locataires || !releveFait()) return null;
-    return locatairesAvecManquants(contexte.tout).length || null;
+    return (locatairesAvecManquants(contexte.tout).length + logementsAvecManquants(contexte.tout).length) || null;
   },
   rendre(contexte) {
     const tout = contexte.tout || contexte.donnees;
@@ -279,26 +393,37 @@ export default {
     const sansLogement = contexte.bienId ? [] : tout.locataires.filter((l) => courants.get(l.id) && !tout.biens.some((b) => surLogement(l, b.id)));
     const visibles = [...logements.flatMap((b) => tout.locataires.filter((l) => surLogement(l, b.id))), ...sansLogement, ...anciens];
 
-    const lancerReleve = () => releverTous(visibles, () => { contexte.redessinerNavigation?.(); contexte.redessiner?.({ conserverPosition: true }); });
+    const lancerReleve = () => releverTous({ locataires: visibles, biens: logements }, () => { contexte.redessinerNavigation?.(); contexte.redessiner?.({ conserverPosition: true }); });
 
     conteneur.append(barreOutils([
       bouton('+ Locataire', () => ouvrirLocataire(null), { type: 'primaire' }),
       bouton('Relever les justificatifs', () => { lancerReleve(); notifier('Relevé en cours…'); }, { titre: 'Relire les espaces et les justificatifs déposés' }),
       bouton('Rappel par e-mail', async () => {
-        const retardataires = locatairesAvecManquants(tout).filter((l) => visibles.includes(l) && emailDe(l));
-        if (!retardataires.length) { notifier('Personne à relancer : rien ne manque (ou relevé pas encore fait).'); return; }
-        const ok = await confirmer({ titre: 'Rappel par e-mail', message: `Envoyer un rappel des justificatifs manquants à : ${retardataires.map(nomDe).join(', ')} ?`, libelleValider: 'Envoyer' });
+        const retardataires = locatairesAvecManquants(tout).filter((l) => visibles.includes(l));
+        const logementsIncomplets = logementsAvecManquants(tout).filter((b) => logements.includes(b));
+        if (!retardataires.length && !logementsIncomplets.length) { notifier('Personne à relancer : rien ne manque (ou relevé pas encore fait).'); return; }
+        const lignes = [
+          ...retardataires.map((l) => `${nomDe(l)} (assurance)`),
+          ...logementsIncomplets.map((b) => `tous les colocataires de ${b.nom} (${bilanLogement(tout, b).logement.manquants.map((c) => motCourt(c).toLowerCase()).join(', ')})`),
+        ];
+        const ok = await confirmer({ titre: 'Rappel par e-mail', message: `Envoyer un rappel à : ${lignes.join(' ; ')} ?`, libelleValider: 'Envoyer' });
         if (!ok) return;
         for (const l of retardataires) {
           // eslint-disable-next-line no-await-in-loop
-          await envoyerRappel(l, releveDe(l).manquants, bailleur);
+          await envoyerRappel(l, bilanLogement(tout, tout.biens.find((b) => b.id === courants.get(l.id)?.bienId)).parPersonne.get(l.id).manquants, bailleur);
         }
-        notifier(`Rappel envoyé à ${retardataires.length} colocataire${retardataires.length > 1 ? 's' : ''}.`, 'succes');
-      }, { titre: 'À tous ceux à qui il manque un justificatif' }),
+        for (const b of logementsIncomplets) {
+          // eslint-disable-next-line no-await-in-loop
+          await envoyerRappelLogement(b, colocatairesDe(tout, b.id), bilanLogement(tout, b).logement.manquants, bailleur);
+        }
+        notifier(`Rappel envoyé (${retardataires.length} personne${retardataires.length > 1 ? 's' : ''}, ${logementsIncomplets.length} logement${logementsIncomplets.length > 1 ? 's' : ''}).`, 'succes');
+      }, { titre: 'À tous ceux à qui il manque un justificatif, et à chaque logement incomplet' }),
     ]));
 
     const corps = h('div');
     if (contexte.bienId) {
+      const bien = logements[0];
+      if (bien) corps.append(lignePiecesCommunes(tout, bien, bailleur));
       corps.append(tableLocataires(tout, tout.locataires.filter((l) => surLogement(l, contexte.bienId)), bailleur, contexte));
     } else {
       for (const logement of logements) {
@@ -307,6 +432,7 @@ export default {
           h('span', { class: 'section-logement-nom', texte: `🏠 ${logement.nom}` }),
           h('span', { class: 'legende', texte: `${logement.ville ? `${logement.ville} · ` : ''}${libelleTypeLocation(logement)} · ${siens.length} ${siens.length > 1 ? 'personnes' : 'personne'}` }),
         ]));
+        corps.append(lignePiecesCommunes(tout, logement, bailleur));
         corps.append(tableLocataires(tout, siens, bailleur, contexte));
       }
       if (sansLogement.length) {
@@ -325,11 +451,11 @@ export default {
       conteneur.append(carte({ titre: '', serre: true, corps: details }));
     }
 
-    const justificatifs = carteJustificatifs(tout, visibles.filter((l) => !anciens.includes(l)), bailleur);
-    conteneur.append(justificatifs.carte);
+    conteneur.append(carteJustificatifs(tout, logements, bailleur));
 
     // Relevé en arrière-plan si rien n'est connu (ou relevé vieux de plus de 5 minutes).
-    const perime = visibles.some((l) => emailDe(l) && (!releveDe(l) || Date.now() - releveDe(l).le > 5 * 60 * 1000));
+    const vieux = (r) => !r || Date.now() - r.le > 5 * 60 * 1000;
+    const perime = visibles.some((l) => emailDe(l) && vieux(releveDe(l))) || logements.some((b) => colocatairesDe(tout, b.id).length && vieux(relevesLogement.get(b.id)));
     if (perime) lancerReleve();
 
     // Arrivée depuis un lien « voir le locataire » : on met sa ligne en évidence.

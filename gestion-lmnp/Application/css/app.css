@@ -120,6 +120,11 @@ a { color: var(--accent); }
 .anciens-locataires > summary { cursor: pointer; padding: .7rem 1rem; font-weight: 600; color: var(--encre-douce); }
 .anciens-locataires[open] > summary { border-bottom: 1px solid var(--bordure); }
 tr.ligne-cible td { background: var(--attention-clair); }
+.pieces-communes { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: 0 .8rem .3rem; padding: .5rem .7rem; background: var(--accent-clair); border-radius: 6px; font-size: .85rem; }
+.pieces-communes-titre { font-weight: 600; color: var(--accent-fonce); margin-right: .3rem; }
+.justificatifs-logement { margin-top: .9rem; padding-top: .6rem; border-top: 1px dashed var(--bordure-forte); }
+.etiquette-commun { display: inline-block; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; background: var(--attention-clair); color: var(--attention); padding: .05rem .4rem; border-radius: 4px; margin-left: .4rem; vertical-align: middle; }
+.justificatifs-logement-titre { font-weight: 600; color: var(--accent-fonce); margin-bottom: .4rem; }
 .lien-locataire { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-fonce); cursor: pointer; text-decoration: underline dotted; }
 .lien-locataire:hover { color: var(--accent); }
 

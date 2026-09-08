@@ -16,7 +16,7 @@ export function logementDe(locataire) {
     .filter((b) => b.locataireId === locataire?.id || b.coTitulaireId === locataire?.id || (b.colocataires || []).some((c) => c.locataireId === locataire?.id))
     .sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)));
   const bien = etat.liste('biens').find((b) => b.id === baux[0]?.bienId);
-  return bien ? { nom: bien.nom, adresse: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') } : null;
+  return bien ? { id: bien.id, nom: bien.nom, adresse: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') } : null;
 }
 
 const nettoyerNomFichier = (nom) => String(nom)

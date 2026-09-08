@@ -37,14 +37,35 @@ service firebase.storage {
       allow update, delete: if estGerant();
     }
 
-    // Espace « partage » : copies des photos de l'état des lieux publiées
-    // pour le contradictoire. Lecture par les gérants et par tout compte
+    // Espace « partage » — états des lieux : copies des photos publiées pour
+    // le contradictoire. Lecture par les gérants et par tout compte
     // colocataire de la résidence (un espace portail à son nom) ; écriture
     // par les gérants.
-    match /partage/{reste=**} {
+    function monPortail() {
+      return firestore.get(/databases/(default)/documents/portail/$(request.auth.token.email.lower())).data;
+    }
+    match /partage/etats-des-lieux/{reste=**} {
       allow read: if estGerant() || (connecte()
         && firestore.exists(/databases/(default)/documents/portail/$(request.auth.token.email.lower())));
       allow write: if estGerant();
+    }
+
+    // Espace « partage » — justificatifs communs d'un logement (entretien des
+    // climatiseurs, ramonage, assurance « pour tous ») : les colocataires DU
+    // logement (leur espace porte son identifiant) les lisent et peuvent en
+    // DÉPOSER (images ou PDF), jamais les modifier ni les supprimer.
+    match /partage/justificatifs/{bienId}/{reste=**} {
+      allow read: if estGerant() || (connecte() && monPortail().logement.id == bienId);
+      allow create: if connecte()
+        && monPortail().logement.id == bienId
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+      allow update, delete: if estGerant();
+    }
+
+    match /partage/{reste=**} {
+      allow read, write: if estGerant();
     }
 
     // Documents publiés pour un colocataire : lecture par lui seul (et les

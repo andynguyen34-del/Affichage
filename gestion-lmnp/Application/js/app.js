@@ -584,7 +584,7 @@ async function ouvrirApplication() {
 
   // Espaces et justificatifs des locataires, relevés en arrière-plan : la
   // pastille « Locataires » du menu compte ceux à qui il manque une pièce.
-  releverTous(etat.liste('locataires'), () => dessinerNavigation());
+  releverTous({ locataires: etat.liste('locataires'), biens: etat.liste('biens') }, () => dessinerNavigation());
 
   // Appel de loyer automatique : si c'est le jour et que le mois n'a pas encore
   // été appelé (par la fonction planifiée ou un autre poste), on envoie.

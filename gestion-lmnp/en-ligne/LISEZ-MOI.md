@@ -34,6 +34,22 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v41 — justificatifs communs à la résidence.** L'entretien des
+climatiseurs et le ramonage concernent la maison : un seul document, déposé
+depuis son espace par n'importe quel colocataire, vaut pour tous (il apparaît
+chez chacun avec le prénom du déposant et la date). L'assurance habitation
+reste par personne, mais une attestation peut être déposée « pour tous les
+colocataires » (case à cocher) et couvre alors chacun. Les documents communs
+vivent dans l'espace de stockage `partage/justificatifs/{logement}/`, lisible
+par les colocataires du logement (leur espace porte l'identifiant du logement,
+inscrit automatiquement au lancement de l'application). Côté gérant, la page
+« Locataires » montre une ligne « Pièces communes » par colocation, « Rappel à
+tous » envoie un seul e-mail aux colocataires du logement ; la pastille du
+menu compte les personnes sans assurance et les logements incomplets. Les
+documents d'entretien ou de ramonage déposés avant cette version dans un
+espace personnel comptent pour la maison. À déployer : hébergement, règles de
+stockage (Storage) et la fonction `fichiers` (relais) — la commande habituelle.
+
 **Nouveau en v40 — page « Locataires ».** Les locataires ont leur entrée dans
 le menu : contact, bail en cours (logement, part de loyer), espace en ligne
 (documents publiés, dernière connexion) et justificatifs (un badge par pièce

@@ -10,8 +10,9 @@
 // - colocataire : lecture de son espace portail/{email}/**, dépôt (création
 //   seulement, images ou PDF < 10 Mo) sous portail/{email}/contradictoire/**
 //   et portail/{email}/justificatifs/**, jamais de modification ni de
-//   suppression (intégrité des preuves) ; lecture de l'espace partage/**
-//   (copies des photos de l'état des lieux contradictoire).
+//   suppression (intégrité des preuves) ; lecture de partage/etats-des-lieux/**
+//   (copies des photos de l'état des lieux contradictoire) ; lecture et dépôt
+//   dans partage/justificatifs/{son logement}/** (pièces communes de la résidence).
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
@@ -48,12 +49,16 @@ async function identifier(req) {
   const gerant = admins === null || admins.includes(email);
   // Un colocataire de la résidence a un espace portail à son nom : il lit
   // aussi l'espace « partage » (photos de l'état des lieux contradictoire).
-  const colocataire = !gerant && (await base.doc(`portail/${email}`).get()).exists;
-  return { email, gerant, colocataire };
+  const portail = gerant ? null : (await base.doc(`portail/${email}`).get());
+  const colocataire = Boolean(portail?.exists);
+  // Son logement (identifiant) : donne accès aux justificatifs communs de la résidence.
+  const bienId = colocataire ? String(portail.data()?.logement?.id || '') : '';
+  return { email, gerant, colocataire, bienId };
 }
 
 const sonEspace = (qui, objet) => objet.startsWith(`portail/${qui.email}/`);
-const partage = (qui, objet) => qui.colocataire && objet.startsWith('partage/');
+const partage = (qui, objet) => qui.colocataire
+  && (objet.startsWith('partage/etats-des-lieux/') || (qui.bienId && objet.startsWith(`partage/justificatifs/${qui.bienId}/`)));
 
 function verifierLecture(qui, objet) {
   if (qui.gerant || sonEspace(qui, objet) || partage(qui, objet)) return;
@@ -66,7 +71,8 @@ function verifierDepot(qui, objet, typeMime, taille) {
   const pdf = typeMime === 'application/pdf';
   const contradictoire = objet.startsWith(`portail/${qui.email}/contradictoire/`) && image;
   const justificatif = objet.startsWith(`portail/${qui.email}/justificatifs/`) && (image || pdf);
-  if (!(contradictoire || justificatif)) throw refus(403, 'Dépôt refusé à cet emplacement.');
+  const commun = qui.colocataire && qui.bienId && objet.startsWith(`partage/justificatifs/${qui.bienId}/`) && (image || pdf);
+  if (!(contradictoire || justificatif || commun)) throw refus(403, 'Dépôt refusé à cet emplacement.');
   if (taille >= TAILLE_MAX_COLOCATAIRE) throw refus(413, 'Fichier trop volumineux (10 Mo au plus).');
 }
 

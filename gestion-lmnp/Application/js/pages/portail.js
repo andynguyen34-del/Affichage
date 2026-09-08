@@ -9,7 +9,7 @@ import { h, vider, signalerErreur, choisirFichier, notifier } from '../ui.js';
 import { date, dateLongue, taille, aujourdhui, montant, nomMois } from '../format.js';
 import { compresserPhoto } from '../photos.js';
 import { estInstallee, installable, proposerInstallation, consigneInstallation } from '../plein-ecran.js';
-import { CATEGORIES_JUSTIFICATIFS, categorieDuChemin } from '../justificatifs.js';
+import { CATEGORIES_JUSTIFICATIFS, CATEGORIES_DEMANDEES, categorie, classerParCategorie, bilanJustificatifs, prefixeCommun, nomDepotCommun, estCommune } from '../justificatifs.js';
 import { ouvrirChangementMotDePasse } from '../compte.js';
 import { pointsDe, bilanReponses, toutDaccord, estRepondu, libelleEtat } from '../contradictoire.js';
 import { demanderSignature } from '../signature.js';
@@ -368,43 +368,77 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
  * climatiseurs, ramonage… Le colocataire dépose ici ses attestations (photo
  * ou PDF) ; elles sont horodatées et non modifiables une fois déposées.
  */
-function sectionJustificatifs({ surChargement = () => {} } = {}) {
+function sectionJustificatifs({ portail, surChargement = () => {} } = {}) {
   const email = monEmail();
   const prefixe = `${email}/justificatifs`;
+  const bienId = portail?.logement?.id || '';
+  const prenom = String(portail?.nom || '').split(' ')[0];
   const listeZone = h('div', { style: 'margin-top:.6rem' });
 
   const rafraichir = async () => {
-    let fichiers = [];
-    try { fichiers = await api.listerFichiers('portail', prefixe); } catch { /* rien déposé */ }
-    const parCategorie = new Map();
-    for (const fichier of fichiers) {
-      const cle = categorieDuChemin(fichier.chemin);
-      if (!parCategorie.has(cle)) parCategorie.set(cle, []);
-      parCategorie.get(cle).push(fichier);
+    let personnels = [];
+    let communs = [];
+    try { personnels = await api.listerFichiers('portail', prefixe); } catch { /* rien déposé */ }
+    if (bienId) {
+      try { communs = await api.listerFichiers('partage', prefixeCommun(bienId)); } catch { /* rien déposé */ }
+      communs = communs.filter((f) => String(f.chemin || '').startsWith(prefixeCommun(bienId)));
     }
-    surChargement(CATEGORIES_JUSTIFICATIFS.filter((c) => c.cle !== 'autre' && !(parCategorie.get(c.cle) || []).length));
+    const parCategorie = classerParCategorie(personnels);
+    const bilan = bilanJustificatifs({ communs, personnels: [{ id: 'moi', nom: prenom, parCategorie }] });
+    const moi = bilan.parPersonne.get('moi');
+    // Ce qui manque : mes pièces personnelles, puis les pièces communes du logement.
+    surChargement([
+      ...moi.manquants.map((c) => ({ ...c, commune: false })),
+      ...(bienId ? bilan.logement.manquants.map((c) => ({ ...c, commune: true })) : CATEGORIES_DEMANDEES.filter((c) => c.portee === 'logement' && !(parCategorie.get(c.cle) || []).length).map((c) => ({ ...c, commune: false }))),
+    ]);
+    const ouvrir = (espace, fichier, titre = '') => h('button', {
+      class: 'bouton bouton-petit', type: 'button', title: titre,
+      onclick: () => api.ouvrirFichier(espace, fichier.chemin).catch(signalerErreur),
+    }, `📄 ${fichier.nom}`);
     listeZone.replaceChildren(...CATEGORIES_JUSTIFICATIFS.map((categorie) => {
-      const deposes = parCategorie.get(categorie.cle) || [];
-      if (!deposes.length && categorie.cle === 'autre') return null;
-      return h('div', { style: 'margin-bottom:.6rem' }, [
+      const miens = parCategorie.get(categorie.cle) || [];
+      const commune = categorie.portee === 'logement' && bienId;
+      const entrees = bilan.logement.parCategorie.get(categorie.cle) || [];
+      const dernier = entrees[0];
+      if (!miens.length && categorie.cle === 'autre') return null;
+      let etat;
+      if (commune) {
+        etat = dernier
+          ? h('span', { class: 'badge badge-succes', style: 'margin-left:.5rem', texte: `déposé par ${dernier.par || 'un colocataire'}${dernier.le ? ` le ${date(dernier.le)}` : ''}` })
+          : h('span', { class: 'badge badge-attention', style: 'margin-left:.5rem', texte: 'à fournir par l’un d’entre vous' });
+      } else if (miens.length) {
+        etat = h('span', { class: 'badge badge-succes', style: 'margin-left:.5rem', texte: `${miens.length} document(s)` });
+      } else if (categorie.communePossible && dernier) {
+        etat = h('span', { class: 'badge badge-succes', style: 'margin-left:.5rem', texte: `couverte par l’attestation pour tous déposée par ${dernier.par || 'un colocataire'}${dernier.le ? ` le ${date(dernier.le)}` : ''}` });
+      } else if (categorie.cle !== 'autre') {
+        etat = h('span', { class: 'badge badge-attente', style: 'margin-left:.5rem', texte: 'à fournir' });
+      }
+      const fichiers = [
+        ...miens.map((f) => ouvrir('portail', f)),
+        ...entrees.filter((e) => !e.personnel).map((e) => ouvrir('partage', e.fichier, `Déposé par ${e.par}${e.le ? ` le ${date(e.le)}` : ''}`)),
+      ];
+      return h('div', { style: 'margin-bottom:.6rem', 'data-categorie': categorie.cle }, [
         h('div', {}, [
           h('strong', { texte: categorie.libelle }),
-          categorie.periodicite ? h('span', { class: 'legende', texte: ` — ${categorie.periodicite}` }) : null,
-          h('span', { class: `badge badge-${deposes.length ? 'succes' : 'attente'}`, style: 'margin-left:.5rem',
-            texte: deposes.length ? `${deposes.length} document(s)` : 'à fournir' }),
+          commune ? h('span', { class: 'etiquette-commun', texte: 'commun à la maison' }) : null,
+          categorie.periodicite ? h('span', { class: 'legende', texte: ` — ${commune ? 'pour la maison, ' : 'par personne, '}${categorie.periodicite}` }) : null,
+          etat,
         ]),
-        deposes.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' },
-          deposes.map((f) => h('button', {
-            class: 'bouton bouton-petit', type: 'button',
-            onclick: () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur),
-          }, `📄 ${f.nom}`))) : null,
+        fichiers.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' }, fichiers) : null,
       ]);
     }).filter(Boolean));
   };
   rafraichir();
 
   const selecteur = h('select', { style: 'min-width:13rem' },
-    CATEGORIES_JUSTIFICATIFS.map((c) => h('option', { value: c.cle }, c.libelle)));
+    CATEGORIES_JUSTIFICATIFS.map((c) => h('option', { value: c.cle }, `${c.libelle}${c.portee === 'logement' && bienId ? ' (commun)' : ''}`)));
+  const casePourTous = h('input', { type: 'checkbox', id: 'justificatif-pour-tous' });
+  const blocPourTous = h('label', { class: 'legende', for: 'justificatif-pour-tous', style: 'display:flex;align-items:center;gap:.4rem' }, [
+    casePourTous, 'Cette attestation couvre tous les colocataires de la maison',
+  ]);
+  const ajusterCase = () => { blocPourTous.hidden = !(bienId && categorie(selecteur.value)?.communePossible); };
+  selecteur.addEventListener('change', ajusterCase);
+  ajusterCase();
 
   const deposer = async ({ camera = false } = {}) => {
     const accept = camera ? 'image/*' : 'image/*,application/pdf';
@@ -412,31 +446,38 @@ function sectionJustificatifs({ surChargement = () => {} } = {}) {
     const fichiers = camera ? (choisi ? [choisi] : []) : choisi;
     if (!fichiers?.length) return;
     notifier(`Envoi de ${fichiers.length} document(s)…`);
-    const categorie = selecteur.value || 'autre';
+    const cle = selecteur.value || 'autre';
+    const enCommun = Boolean(bienId) && (estCommune(cle) || (categorie(cle)?.communePossible && casePourTous.checked));
     for (const fichier of fichiers) {
       try {
         /* eslint-disable no-await-in-loop */
         const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const estPdf = (fichier.type === 'application/pdf') || /\.pdf$/i.test(fichier.name || '');
+        const nomPdf = nettoyer(fichier.name);
+        const espace = enCommun ? 'partage' : 'portail';
+        const dossier = enCommun ? `${prefixeCommun(bienId)}/${cle}` : `${prefixe}/${cle}`;
+        const nom = enCommun ? nomDepotCommun(horodatage, prenom, estPdf ? nomPdf : '') : (estPdf ? `${horodatage} ${nomPdf}` : `${horodatage}.jpg`);
         if (estPdf) {
-          await api.deposerOctets('portail', `${prefixe}/${categorie}/${horodatage} ${nettoyer(fichier.name)}`,
-            new Uint8Array(await fichier.arrayBuffer()), 'application/pdf');
+          await api.deposerOctets(espace, `${dossier}/${nom}`, new Uint8Array(await fichier.arrayBuffer()), 'application/pdf');
         } else {
           const reduite = await compresserPhoto(fichier);
-          await api.deposerOctets('portail', `${prefixe}/${categorie}/${horodatage}.jpg`,
-            new Uint8Array(await reduite.arrayBuffer()), 'image/jpeg');
+          await api.deposerOctets(espace, `${dossier}/${nom}`, new Uint8Array(await reduite.arrayBuffer()), 'image/jpeg');
         }
       } catch (erreur) { signalerErreur(erreur); }
     }
-    notifier('Document(s) déposé(s) : votre bailleur y a accès, ils ne sont plus modifiables.', 'succes');
+    notifier(enCommun
+      ? 'Document(s) déposé(s) pour la maison : vos colocataires et votre bailleur les voient, ils ne sont plus modifiables.'
+      : 'Document(s) déposé(s) : votre bailleur y a accès, ils ne sont plus modifiables.', 'succes');
+    casePourTous.checked = false;
     rafraichir();
   };
 
   return h('section', { class: 'portail-section' }, [
     h('h2', { texte: '📎 Vos justificatifs à fournir' }),
     h('p', { class: 'legende', texte:
-      'Le bail prévoit que vous fournissiez chaque année certaines attestations : assurance habitation '
-      + '(art. 11), entretien des climatiseurs et ramonage de la cheminée (entretien courant, art. 8). '
+      'Le bail prévoit une attestation d\'assurance habitation par personne (art. 11), chaque année. '
+      + 'L\'entretien des climatiseurs et le ramonage de la cheminée (entretien courant, art. 8) sont communs à la maison : '
+      + 'un seul document, déposé par n\'importe lequel d\'entre vous, vaut pour tous. '
       + 'Choisissez le type de document, puis déposez la photo ou le PDF de l\'attestation.' }),
     h('div', { style: 'display:flex;gap:.6rem;align-items:center;flex-wrap:wrap' }, [
       selecteur,
@@ -445,6 +486,7 @@ function sectionJustificatifs({ surChargement = () => {} } = {}) {
       h('button', { class: 'bouton', type: 'button', onclick: () => deposer({ camera: true }).catch(signalerErreur) },
         '📷 Photographier'),
     ]),
+    blocPourTous,
     listeZone,
   ]);
 }
@@ -471,8 +513,10 @@ function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, a
         action: signe ? 'Voir' : 'Signer', rubrique: 'edl', edlId: contradictoire.edlId });
     }
   }
-  for (const categorie of justificatifsManquants || []) {
-    taches.push({ icone: '📎', titre: `Fournir : ${categorie.libelle.toLowerCase()}`, detail: categorie.periodicite || '', action: 'Déposer', rubrique: 'justificatifs' });
+  for (const piece of justificatifsManquants || []) {
+    taches.push(piece.commune
+      ? { icone: '📎', titre: `${piece.libelle} : à déposer par l’un d’entre vous`, detail: 'Pièce commune à la maison — rien reçu pour l’instant', action: 'Déposer', rubrique: 'justificatifs' }
+      : { icone: '📎', titre: `Fournir : ${piece.libelle.toLowerCase()}`, detail: piece.periodicite || '', action: 'Déposer', rubrique: 'justificatifs' });
   }
   const dernier = [...documents].sort((a, b) => String(b.publieLe).localeCompare(String(a.publieLe)))[0];
   if (dernier) {
@@ -601,7 +645,7 @@ export async function rendrePortail({ seDeconnecter }) {
     }
     else if (cle === 'quittances') section = sectionDocuments(documents, ['quittance'], { titre: '🧾 Quittances de loyer', vide: 'Aucune quittance pour l’instant : elle est publiée ici dès que votre loyer du mois est réglé.' });
     else if (cle === 'documents') section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
-    else if (cle === 'justificatifs') section = sectionJustificatifs({ surChargement: (manquants) => { etatPortail.justificatifsManquants = manquants; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
+    else if (cle === 'justificatifs') section = sectionJustificatifs({ portail, surChargement: (manquants) => { etatPortail.justificatifsManquants = manquants; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
     else section = sectionCompte({ portail, seDeconnecter });
     // L'accueil se recalcule à chaque affichage (tâches à jour) ; les autres restent en mémoire.
     if (cle !== 'accueil') sections.set(cle, section);

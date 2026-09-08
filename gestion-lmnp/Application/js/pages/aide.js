@@ -168,8 +168,9 @@ export default {
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
-            + 'page « Locataires » : un badge par pièce demandée pour chaque colocataire, « Rappel par e-mail » à ceux à qui il manque quelque chose ; '
-            + 'la pastille du menu compte ces retardataires.',
+            + 'page « Locataires » : une ligne « Pièces communes » par colocation (entretien des climatiseurs, ramonage : un seul document pour la maison, déposé par n’importe lequel d’entre eux, '
+            + 'et l’assurance quand elle est déposée « pour tous »), puis l’assurance de chaque personne ; « Rappel par e-mail » individuel, « Rappel à tous » pour une pièce commune (un seul e-mail aux colocataires du logement). '
+            + 'La pastille du menu compte les personnes sans assurance et les logements incomplets.',
         ]),
       ]),
     }));
