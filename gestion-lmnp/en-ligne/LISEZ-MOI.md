@@ -24,6 +24,16 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Logements & baux → Justificatifs des colocataires ».
 
+**À partir de la v40 — un seul zip, un seul clic.** La livraison devient un
+zip unique `deploiement-LMNP-vNN.zip` (environ 1 Mo, sans `node_modules`)
+contenant `DEPLOYER.cmd`, qui enchaîne : contrôle des fichiers (quarantaine),
+installation des bibliothèques de la fonction si le dossier ne les a pas
+encore (`npm install`, une fois par dossier), puis `firebase deploy`. Extraire
+le zip dans le dossier de déploiement habituel (en écrasant : les
+bibliothèques déjà installées sont conservées) et double-cliquer
+`DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
+disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
+
 **Nouveau en v39 — plusieurs états des lieux par espace, blocs repliables.**
 Chaque espace colocataire conserve désormais tous les états des lieux publiés
 (entrée, sortie, plusieurs logements) au lieu du seul dernier : la rubrique
