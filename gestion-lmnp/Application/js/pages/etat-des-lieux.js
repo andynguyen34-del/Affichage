@@ -638,9 +638,10 @@ function carteContradictoire(edl, donnees, contexte) {
       try {
         /* eslint-disable no-await-in-loop */
         const actuel = (await api.lirePortail(email)) || {};
-        if (actuel.contradictoire?.edlId === edl.id) {
-          await api.completerPortail(email, { contradictoire: { ...actuel.contradictoire, finLe: saisie.finLe, finLeMs: finEnMillisecondes(saisie.finLe) } });
-        }
+        const complement = {};
+        if (actuel.contradictoire?.edlId === edl.id) complement.contradictoire = { ...actuel.contradictoire, finLe: saisie.finLe, finLeMs: finEnMillisecondes(saisie.finLe) };
+        if (actuel.contradictoires?.[edl.id]) complement.contradictoires = { ...actuel.contradictoires, [edl.id]: { ...actuel.contradictoires[edl.id], finLe: saisie.finLe, finLeMs: finEnMillisecondes(saisie.finLe) } };
+        if (Object.keys(complement).length) await api.completerPortail(email, complement);
       } catch (erreur) { notifier(`${nomDe(locataire)} : ${erreur.message}`, 'erreur'); }
     }
     await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => { e.contradictoireFinLe = saisie.finLe; }), `Fenêtre ouverte jusqu'au ${date(saisie.finLe)}.`);

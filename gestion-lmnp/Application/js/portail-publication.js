@@ -76,13 +76,10 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, duree
       + 'renseignez-la dans « Logements & baux » pour ouvrir sa fenêtre contradictoire.');
   }
   const actuel = (await api.lirePortail(email)) || {};
-  await api.publierPortail(email, {
-    ...actuel,
-    nom: actuel.nom || `${locataire.prenom || ''} ${locataire.nom || ''}`.trim(),
-    locataireId: actuel.locataireId || locataire.id || '',
-    logement: logementDe(locataire) || actuel.logement || null,
-    documents: actuel.documents || [],
-    contradictoire: {
+  // Chaque état des lieux publié est conservé sous son identifiant
+  // (`contradictoires`) : un colocataire peut en avoir plusieurs (entrée,
+  // sortie, plusieurs logements). `contradictoire` reste le dernier publié.
+  const bloc = {
       edlId: edl.id,
       type: edl.type,
       dateEdl: edl.date,
@@ -95,7 +92,15 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, duree
       apercu: apercu || null,
       logement: logement || actuel.logement || null,
       publieLe: aujourdhui(),
-    },
+  };
+  await api.publierPortail(email, {
+    ...actuel,
+    nom: actuel.nom || `${locataire.prenom || ''} ${locataire.nom || ''}`.trim(),
+    locataireId: actuel.locataireId || locataire.id || '',
+    logement: logementDe(locataire) || actuel.logement || null,
+    documents: actuel.documents || [],
+    contradictoire: bloc,
+    contradictoires: { ...(actuel.contradictoires || {}), [edl.id]: bloc },
   });
   if (envoyerEmail) {
     await api.envoyerCourriel({

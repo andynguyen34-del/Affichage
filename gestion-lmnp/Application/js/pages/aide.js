@@ -158,6 +158,8 @@ export default {
             + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
             + 'Quel que soit le bouton choisi, c’est le rôle du compte qui décide de l’écran ouvert : un colocataire ne voit jamais l’espace propriétaires.',
           'Créez aussi son compte de connexion dans la console Firebase (Authentication → Users → Add user).',
+          'Sur son espace, chaque état des lieux publié (entrée, sortie, plusieurs logements) est un bloc repliable, replié par défaut ; les pièces le sont aussi. '
+            + '« Continuer » depuis l’accueil déplie directement l’état des lieux à compléter.',
           'Son espace est organisé en rubriques : Accueil (ce qu’il a à faire, la prochaine échéance de loyer publiée par l’appel de loyer, le dernier document), '
             + 'État des lieux (le contradictoire), Quittances et Bail & documents (rangés par année), Justificatifs, Mon compte (mot de passe, icône, adresse).',
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',

@@ -454,6 +454,13 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .edl-bloc-titre { font-size: .82rem; font-weight: 600; margin-top: .2rem; }
 .edl-releves { padding: .6rem .8rem; border: 1px solid var(--bordure); border-radius: 9px; margin-bottom: .5rem; display: grid; gap: .4rem; }
 .edl-pied { display: flex; justify-content: space-between; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .6rem .2rem 0; }
+.portail-edl-bloc { border: 1px solid var(--bordure); border-radius: 10px; margin-bottom: .6rem; background: var(--fond-carte); }
+.portail-edl-bloc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .65rem .9rem; }
+.portail-edl-bloc > summary::-webkit-details-marker { display: none; }
+.portail-edl-bloc > summary::before { content: "▸"; color: #2f5fa8; font-weight: 700; }
+.portail-edl-bloc[open] > summary::before { content: "▾"; }
+.portail-edl-bloc > summary .edl-bloc-titre { font-weight: 600; flex: 1; }
+.portail-edl-bloc > .portail-edl { padding: 0 .9rem .9rem; }
 .edl-signature { margin-top: .8rem; padding: .7rem .8rem; border: 1px solid var(--bordure); border-radius: 9px; background: var(--fond-carte); display: grid; gap: .45rem; }
 .edl-signature-faite { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
 .edl-signature-image { width: 180px; height: 70px; object-fit: contain; background: #fff; border: 1px solid var(--bordure); border-radius: 6px; }

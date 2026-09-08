@@ -44,8 +44,8 @@ const lireCorps = (req) => {
 async function contexteSignature(base, qui, edlId) {
   if (qui.gerant) throw refus(403, 'La signature à distance est réservée aux colocataires ; les bailleurs signent dans l’application.');
   const portail = (await base.doc(`portail/${qui.email}`).get()).data();
-  const c = portail?.contradictoire;
-  if (!c || c.edlId !== edlId) throw refus(404, 'Aucun état des lieux publié sur votre espace pour cet identifiant.');
+  const c = portail?.contradictoires?.[edlId] || (portail?.contradictoire?.edlId === edlId ? portail.contradictoire : null);
+  if (!c) throw refus(404, 'Aucun état des lieux publié sur votre espace pour cet identifiant.');
   if (Date.now() > Number(c.finLeMs || 0)) throw refus(403, `La période de réponse est terminée (${c.finLe}) : la signature n’est plus possible depuis votre espace.`);
   const reponses = (await base.doc(`portail/${qui.email}/reponses/${edlId}`).get()).data();
   const bilan = bilanReponses(c.apercu || null, reponses?.reponses || {});

@@ -33,6 +33,15 @@ const RUBRIQUES = [
 ];
 
 const monEmail = () => String(api.utilisateurEmail() || '').trim().toLowerCase();
+
+/** Les états des lieux publiés sur l'espace (tous conservés depuis la v39), du plus récent au plus ancien. */
+function contradictoiresDe(portail) {
+  const parId = { ...(portail?.contradictoires || {}) };
+  if (portail?.contradictoire?.edlId && !parId[portail.contradictoire.edlId]) parId[portail.contradictoire.edlId] = portail.contradictoire;
+  return Object.values(parId).filter((c) => c && c.edlId)
+    .sort((a, b) => String(b.dateEdl || '').localeCompare(String(a.dateEdl || '')) || String(b.publieLe || '').localeCompare(String(a.publieLe || '')));
+}
+const libelleEdl = (c) => `État des lieux ${c.type === 'sortie' ? 'de sortie' : 'd’entrée'} du ${date(c.dateEdl)}${c.logement?.nom ? ` — ${c.logement.nom}` : ''}`;
 const nettoyer = (texte) => String(texte || '').replace(/[\\/:*?"<>|]/g, '-');
 
 function ligneDocument(document_) {
@@ -90,7 +99,7 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
   const ouverte = contradictoire.finLe >= aujourdhui();
   const apercu = contradictoire.apercu || null;
   const points = pointsDe(apercu);
-  const conteneur = h('section', { class: 'portail-section portail-edl' });
+  const conteneur = h('div', { class: 'portail-edl', 'data-edl': contradictoire.edlId });
   let reponses = {};
   let signature = null; // portail/{email}/signatures/{edlId}, écrite par le serveur
   let minuterie = null;
@@ -221,17 +230,16 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
   const dessinerPieces = () => {
     if (!apercu) { zonePieces.replaceChildren(...carteAncienne()); return; }
     const bilan = bilanReponses(apercu, reponses);
-    // Pièce ouverte d'office : la première qui a encore des points à voir, sinon la première.
-    let indexAOuvrir = apercu.pieces.findIndex((piece) => { const e = bilan.parPiece.get(piece.id); return e && e.repondus < e.total; });
-    if (indexAOuvrir < 0) indexAOuvrir = 0;
-    zonePieces.replaceChildren(...apercu.pieces.map((piece, index) => {
+    // Pièces repliées par défaut ; celles déjà dépliées le restent au redessin.
+    const deplieesAvant = new Set([...zonePieces.querySelectorAll('.edl-piece[open]')].map((d) => d.dataset.piece));
+    zonePieces.replaceChildren(...apercu.pieces.map((piece) => {
       const etatPiece = bilan.parPiece.get(piece.id) || { total: 0, repondus: 0, remarques: 0 };
-      const ouvrir = index === indexAOuvrir;
+      const ouvrir = deplieesAvant.has(piece.id);
       const mesPhotos = fichiersDe(piece);
       const resume = etatPiece.total === 0 ? 'rien à évaluer'
         : etatPiece.repondus < etatPiece.total ? `${etatPiece.total - etatPiece.repondus} à voir`
           : (etatPiece.remarques ? `${etatPiece.remarques} remarque${etatPiece.remarques > 1 ? 's' : ''}` : 'tout d’accord');
-      const details = h('details', { class: 'edl-piece', open: ouvrir || null }, [
+      const details = h('details', { class: 'edl-piece', 'data-piece': piece.id, open: ouvrir || null }, [
         h('summary', {}, [
           h('span', { class: 'edl-numero', texte: String(piece.numero) }),
           h('span', { class: 'edl-piece-nom', texte: piece.nom }),
@@ -342,7 +350,7 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
     zoneSignature.replaceChildren(h('div', { class: 'edl-bloc-titre', texte: '✍️ Votre signature' }), ...corps);
   };
 
-  conteneur.append(h('h2', { texte: '📷 État des lieux contradictoire' }), entete, zonePieces, zoneSignature);
+  conteneur.append(entete, zonePieces, zoneSignature);
   dessinerEntete();
   zonePieces.append(h('p', { class: 'legende', texte: 'Chargement…' }));
   Promise.all([
@@ -446,20 +454,21 @@ function sectionJustificatifs({ surChargement = () => {} } = {}) {
 /** L'accueil : ce qui attend le colocataire, la prochaine échéance, le dernier document. */
 function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, allerA }) {
   const taches = [];
-  const contradictoire = portail?.contradictoire;
-  if (contradictoire && contradictoire.finLe >= aujourdhui()) {
-    const bilan = etatEdl;
+  for (const contradictoire of contradictoiresDe(portail)) {
+    if (contradictoire.finLe < aujourdhui()) continue;
+    const bilan = etatEdl?.[contradictoire.edlId];
     const fait = bilan && bilan.complet;
     const signe = Boolean(bilan && bilan.signe);
+    const suffixe = `${contradictoire.type === 'sortie' ? 'de sortie' : 'd’entrée'} du ${date(contradictoire.dateEdl)}${contradictoire.logement?.nom ? ` (${contradictoire.logement.nom})` : ''}`;
     taches.push({ icone: '📷', urgent: !fait, fait,
-      titre: fait ? `État des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : 'd’entrée'} : vos réponses sont complètes` : `Répondre à l’état des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : 'd’entrée'} du ${date(contradictoire.dateEdl)}`,
+      titre: fait ? `État des lieux ${suffixe} : vos réponses sont complètes` : `Répondre à l’état des lieux ${suffixe}`,
       detail: `${bilan && bilan.total ? `${bilan.total - bilan.repondus} point(s) à voir · ` : ''}jusqu'au ${dateLongue(contradictoire.finLe)} inclus`,
-      action: fait ? 'Revoir' : 'Continuer', rubrique: 'edl' });
+      action: fait ? 'Revoir' : 'Continuer', rubrique: 'edl', edlId: contradictoire.edlId });
     if (fait) {
       taches.push({ icone: '✍️', urgent: !signe, fait: signe,
-        titre: signe ? 'État des lieux signé depuis votre espace' : 'Signer l’état des lieux',
+        titre: signe ? `État des lieux ${suffixe} signé depuis votre espace` : `Signer l’état des lieux ${suffixe}`,
         detail: signe ? 'Validé par code e-mail' : `Signature au doigt puis code reçu par e-mail · jusqu'au ${dateLongue(contradictoire.finLe)} inclus`,
-        action: signe ? 'Voir' : 'Signer', rubrique: 'edl' });
+        action: signe ? 'Voir' : 'Signer', rubrique: 'edl', edlId: contradictoire.edlId });
     }
   }
   for (const categorie of justificatifsManquants || []) {
@@ -491,7 +500,7 @@ function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, a
     taches.length ? h('div', { class: 'portail-taches' }, taches.map((t) => h('div', { class: `portail-tache${t.urgent ? ' urgent' : ''}${t.fait ? ' fait' : ''}` }, [
       h('span', { class: 'portail-tache-icone', texte: t.icone }),
       h('div', {}, [h('div', { class: 'portail-tache-titre', texte: t.titre }), t.detail ? h('div', { class: 'legende', texte: t.detail }) : null]),
-      h('button', { class: `bouton bouton-petit${t.urgent ? ' bouton-primaire' : ''}`, type: 'button', onclick: () => allerA(t.rubrique) }, t.action),
+      h('button', { class: `bouton bouton-petit${t.urgent ? ' bouton-primaire' : ''}`, type: 'button', onclick: () => allerA(t.rubrique, t.edlId) }, t.action),
     ]))) : h('p', { class: 'legende', texte: 'Rien à faire pour l’instant. Vos documents sont dans les rubriques ci-dessus.' }),
     blocEcheance ? h('h2', { texte: '📅 Prochaine échéance', style: 'margin-top:1rem' }) : null,
     blocEcheance,
@@ -534,7 +543,8 @@ export async function rendrePortail({ seDeconnecter }) {
   catch (e) { erreur = e; }
   const documents = portail?.documents || [];
 
-  const etatPortail = { edl: null, justificatifsManquants: [] };
+  const etatPortail = { edl: {}, justificatifsManquants: [] };
+  const contradictoires = contradictoiresDe(portail);
   const rubriqueDepuisHachage = () => {
     const cle = location.hash.replace('#', '');
     return RUBRIQUES.some((r) => r.cle === cle) ? cle : 'accueil';
@@ -549,8 +559,7 @@ export async function rendrePortail({ seDeconnecter }) {
 
   const pastilles = () => {
     const p = { accueil: 0, edl: 0, quittances: 0, documents: 0, justificatifs: 0, compte: 0 };
-    const c = portail?.contradictoire;
-    if (c && c.finLe >= aujourdhui() && !(etatPortail.edl && etatPortail.edl.complet && etatPortail.edl.signe)) p.edl = 1;
+    p.edl = contradictoires.filter((c) => c.finLe >= aujourdhui() && !(etatPortail.edl[c.edlId]?.complet && etatPortail.edl[c.edlId]?.signe)).length;
     p.justificatifs = etatPortail.justificatifsManquants.length;
     p.accueil = p.edl + p.justificatifs;
     return p;
@@ -558,7 +567,7 @@ export async function rendrePortail({ seDeconnecter }) {
 
   const dessinerNavigation = () => {
     const p = pastilles();
-    vider(navigation).append(...RUBRIQUES.filter((r) => r.cle !== 'edl' || portail?.contradictoire).map((r) => h('button', {
+    vider(navigation).append(...RUBRIQUES.filter((r) => r.cle !== 'edl' || contradictoires.length).map((r) => h('button', {
       class: r.cle === rubrique ? 'actif' : '', type: 'button', 'data-rubrique': r.cle,
       onclick: () => { allerA(r.cle); },
     }, [`${r.icone} ${r.libelle}`, p[r.cle] ? h('span', { class: 'pastille', texte: String(p[r.cle]) }) : null])));
@@ -568,7 +577,26 @@ export async function rendrePortail({ seDeconnecter }) {
     if (sections.has(cle)) return sections.get(cle);
     let section;
     if (cle === 'accueil') section = sectionAccueil({ portail, documents, etatEdl: etatPortail.edl, justificatifsManquants: etatPortail.justificatifsManquants, allerA });
-    else if (cle === 'edl') section = sectionContradictoire(portail.contradictoire, { surChangement: (bilan) => { etatPortail.edl = bilan; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
+    else if (cle === 'edl') {
+      // Un bloc repliable par état des lieux publié, replié par défaut ;
+      // « Continuer » depuis l'accueil déplie celui qui est visé.
+      section = h('section', { class: 'portail-section' }, [
+        h('h2', { texte: `📷 ${contradictoires.length > 1 ? 'États des lieux contradictoires' : 'État des lieux contradictoire'}` }),
+        h('p', { class: 'legende', texte: 'Dépliez un état des lieux pour le consulter et répondre point par point, pièce par pièce.' }),
+        ...contradictoires.map((c) => {
+          const ouvert = c.finLe >= aujourdhui();
+          const resume = h('span', { class: 'legende edl-bloc-resume', texte: ouvert ? `réponses jusqu'au ${date(c.finLe)}` : `clos le ${date(c.finLe)}` });
+          return h('details', { class: 'portail-edl-bloc', 'data-edl': c.edlId }, [
+            h('summary', {}, [h('span', { class: 'edl-bloc-titre', texte: libelleEdl(c) }), resume]),
+            sectionContradictoire(c, { surChangement: (bilan) => {
+              etatPortail.edl = { ...etatPortail.edl, [c.edlId]: bilan };
+              resume.textContent = `${ouvert ? `réponses jusqu'au ${date(c.finLe)}` : `clos le ${date(c.finLe)}`} · ${bilan.signe ? 'signé' : (bilan.complet ? 'réponses complètes' : `${bilan.repondus}/${bilan.total} points vus`)}`;
+              sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique();
+            } }),
+          ]);
+        }),
+      ]);
+    }
     else if (cle === 'quittances') section = sectionDocuments(documents, ['quittance'], { titre: '🧾 Quittances de loyer', vide: 'Aucune quittance pour l’instant : elle est publiée ici dès que votre loyer du mois est réglé.' });
     else if (cle === 'documents') section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
     else if (cle === 'justificatifs') section = sectionJustificatifs({ surChargement: (manquants) => { etatPortail.justificatifsManquants = manquants; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
@@ -583,10 +611,14 @@ export async function rendrePortail({ seDeconnecter }) {
     dessinerNavigation();
   };
 
-  function allerA(cle) {
+  function allerA(cle, edlId = '') {
     rubrique = RUBRIQUES.some((r) => r.cle === cle) ? cle : 'accueil';
     if (location.hash !== `#${rubrique}`) history.replaceState(null, '', `#${rubrique}`);
     dessinerRubrique();
+    if (edlId) {
+      const bloc = zone.querySelector(`.portail-edl-bloc[data-edl="${edlId}"]`);
+      if (bloc) { bloc.open = true; bloc.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    }
     zone.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
   window.addEventListener('hashchange', () => { const cle = rubriqueDepuisHachage(); if (cle !== rubrique) { rubrique = cle; dessinerRubrique(); } });
@@ -615,7 +647,7 @@ export async function rendrePortail({ seDeconnecter }) {
   // alimentent l'accueil et les pastilles : on les charge dès l'ouverture.
   if (!erreur) {
     construire('justificatifs');
-    if (portail?.contradictoire?.apercu) construire('edl');
+    if (contradictoires.some((c) => c.apercu)) construire('edl');
   }
   dessinerRubrique();
 }

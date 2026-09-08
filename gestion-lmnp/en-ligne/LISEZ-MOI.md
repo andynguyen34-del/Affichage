@@ -24,6 +24,14 @@ Chaque colocataire dépose aussi ses justificatifs depuis son espace
 de la cheminée) ; le relevé et les rappels par e-mail se font depuis
 « Logements & baux → Justificatifs des colocataires ».
 
+**Nouveau en v39 — plusieurs états des lieux par espace, blocs repliables.**
+Chaque espace colocataire conserve désormais tous les états des lieux publiés
+(entrée, sortie, plusieurs logements) au lieu du seul dernier : la rubrique
+« État des lieux » les présente en blocs repliables, repliés par défaut, et
+les pièces sont repliées par défaut. Correctif : republier un état des lieux
+n'efface plus celui d'un autre logement. À déployer : hébergement, règles
+Firestore, fonctions.
+
 **Nouveau en v38 — signature des colocataires depuis leur espace, rapport
 PDF recomposé, déconnexion à la fermeture.** Après ses réponses
 contradictoires, le colocataire signe au doigt sur son espace et confirme
