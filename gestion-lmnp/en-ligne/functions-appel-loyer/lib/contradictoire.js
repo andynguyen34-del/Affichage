@@ -16,6 +16,13 @@ function finDeFenetre(dateEdl, dureeJours = DUREE_PAR_DEFAUT) {
   return d.toISOString().slice(0, 10);
 }
 var finEnMillisecondes = (finLe) => Date.parse(`${String(finLe).slice(0, 10)}T23:59:59+02:00`);
+function legendeDepot(nom) {
+  const base = String(nom || "").replace(/\.[a-z0-9]+$/i, "");
+  const m = base.match(/^(\d+)-(.*?)(?: ~ (.*?) #\w+)? (\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})/);
+  if (!m) return base;
+  const [, , piece, meuble, a, mo, j, hh, mi] = m;
+  return `${piece}${meuble ? ` — ${meuble}` : ""} · ${j}/${mo}/${a} ${hh}:${mi}`;
+}
 var cheminPartage = (chemin) => `etats-des-lieux/${chemin}`;
 function apercuPourColocataire(edl) {
   const photos = (liste) => (liste || []).map((p) => ({ chemin: cheminPartage(p.chemin), legende: p.legende || "" }));
@@ -116,6 +123,7 @@ export {
   estRepondu,
   finDeFenetre,
   finEnMillisecondes,
+  legendeDepot,
   libelleEtat,
   pointsDe,
   toutDaccord
