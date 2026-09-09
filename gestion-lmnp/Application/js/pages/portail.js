@@ -118,7 +118,13 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
   const repondre = (cle, accord, texte) => {
     if (!ouverte) return;
     const actuel = reponses[cle] || {};
-    reponses = { ...reponses, [cle]: { accord, texte: texte !== undefined ? texte : (accord ? '' : (actuel.texte || '')) } };
+    if (accord === null) {
+      // Re-clic sur le choix déjà coché : on retire la réponse (point à revoir).
+      const { [cle]: retire, ...reste } = reponses;
+      reponses = reste;
+    } else {
+      reponses = { ...reponses, [cle]: { accord, texte: texte !== undefined ? texte : (accord ? '' : (actuel.texte || '')) } };
+    }
     enregistrer();
     dessinerEntete();
     dessinerSignature();
@@ -166,13 +172,29 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
       hidden: reponse?.accord !== false, disabled: !ouverte,
       oninput: (e) => { repondre(point.cle, false, e.target.value); },
     }, reponse?.texte || '');
+    // Un second clic sur le choix déjà coché le décoche : le point redevient « à voir ».
     const ok = h('button', {
       class: `bouton bouton-petit${reponse?.accord === true ? ' actif-ok' : ''}`, type: 'button', disabled: !ouverte,
-      onclick: (e) => { repondre(point.cle, true); e.target.classList.add('actif-ok'); e.target.nextElementSibling.classList.remove('actif-non'); zoneTexte.hidden = true; },
+      title: 'Cliquer à nouveau pour décocher',
+      onclick: (e) => {
+        const dejaCoche = e.currentTarget.classList.contains('actif-ok');
+        repondre(point.cle, dejaCoche ? null : true);
+        e.currentTarget.classList.toggle('actif-ok', !dejaCoche);
+        e.currentTarget.nextElementSibling.classList.remove('actif-non');
+        zoneTexte.hidden = true;
+      },
     }, '✓ D’accord');
     const non = h('button', {
       class: `bouton bouton-petit${reponse?.accord === false ? ' actif-non' : ''}`, type: 'button', disabled: !ouverte,
-      onclick: (e) => { repondre(point.cle, false); e.target.classList.add('actif-non'); e.target.previousElementSibling.classList.remove('actif-ok'); zoneTexte.hidden = false; zoneTexte.focus(); },
+      title: 'Cliquer à nouveau pour décocher',
+      onclick: (e) => {
+        const dejaCoche = e.currentTarget.classList.contains('actif-non');
+        repondre(point.cle, dejaCoche ? null : false);
+        e.currentTarget.classList.toggle('actif-non', !dejaCoche);
+        e.currentTarget.previousElementSibling.classList.remove('actif-ok');
+        zoneTexte.hidden = dejaCoche;
+        if (!dejaCoche) zoneTexte.focus();
+      },
     }, '✗ Remarque');
     return h('div', { class: `edl-point${point.meuble ? ' meuble' : ''}`, 'data-cle': point.cle }, [
       h('div', { class: 'edl-constat' }, [
