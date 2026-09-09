@@ -43,7 +43,17 @@ if exist "functions-appel-loyer\node_modules\firebase-functions\package.json" if
 echo.
 
 echo [3/3] Deploiement ^(hebergement, regles, fonctions^)
+rem L'analyse du code des fonctions charge la fonction sur ce PC : 10 s par defaut,
+rem trop court apres une installation des bibliotheques (antivirus, disque). 2 minutes.
+set FUNCTIONS_DISCOVERY_TIMEOUT=120000
 call firebase deploy --project gestion-lmnp-anika --account andynguyen34@gmail.com
+if errorlevel 1 (
+  echo.
+  echo   Le deploiement a echoue : second essai dans 5 secondes ^(le premier chargement des
+  echo   fonctions apres une installation est parfois trop lent^).
+  timeout /t 5 /nobreak >nul
+  call firebase deploy --project gestion-lmnp-anika --account andynguyen34@gmail.com
+)
 echo.
 echo Termine. Verifiez la ligne "Deploy complete!" ci-dessus.
 echo.
