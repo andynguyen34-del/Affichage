@@ -34,6 +34,22 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v44 — dépôts de garantie fantômes.** La mise à jour de la page
+Loyers couvre aussi les dépôts de garantie : un dépôt enregistré dont le bail
+a été supprimé ou dont le colocataire n'est plus sur le bail est proposé à la
+suppression (conservé s'il détient de l'argent, sauf « supprimer quand
+même ») ; la page Cautions a son bandeau et son bouton « Mettre à jour les
+dépôts ».
+
+**Nouveau en v44 — adresses e-mail dans Paramètres.** La carte « Adresses
+e-mail » règle l'expéditeur affiché (nom et adresse, avec avertissement si
+l'adresse n'est pas le compte qui expédie), l'adresse de réponse et les copies
+par type d'envoi (appels de loyer, documents, rappels de justificatifs,
+contradictoire et signatures), bailleurs cochables ou adresses libres. La
+fonction d'expédition lit ces réglages à chaque courriel : appliqué au
+prochain envoi, sans redéploiement. Le compte qui expédie et son mot de passe
+d'application restent réglés au déploiement.
+
 **Nouveau en v44 — déploiement depuis GitHub.** Plus de zip ni de PC : un
 bouton « Run workflow » dans l'onglet Actions du dépôt (ou la fusion d'une
 pull request dans `main`) construit et déploie tout. Réglage unique décrit

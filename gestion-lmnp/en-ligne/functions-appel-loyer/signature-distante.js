@@ -67,6 +67,8 @@ export async function traiterSignature(op, req, res, qui) {
     await base.doc(`portail/${qui.email}/codes/${edlId}`).set({ empreinte: empreinte(qui.email, edlId, code), expireMs, essais: 0, envoyeLe: new Date().toISOString() });
     await base.collection('mail').add({
       to: [qui.email],
+      type: 'code',
+      creeLe: new Date().toISOString(),
       message: {
         subject: `Votre code de signature : ${code}`,
         html: `<p>Bonjour,</p><p>Pour signer l'état des lieux ${contradictoire.type === 'sortie' ? 'de sortie' : "d'entrée"} du ${String(contradictoire.dateEdl || '').split('-').reverse().join('/')} depuis votre espace, saisissez ce code :</p>`

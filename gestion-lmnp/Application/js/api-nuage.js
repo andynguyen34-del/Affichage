@@ -559,9 +559,10 @@ export async function supprimerPortail(email) {
  * champ delivery — même format que l'extension Trigger Email). Les pièces
  * jointes sont passées en base64.
  */
-export async function envoyerCourriel({ destinataires, sujet, html, piecesJointes = [] }) {
+export async function envoyerCourriel({ destinataires, sujet, html, piecesJointes = [], type = '' }) {
   await addDoc(collection(base, 'mail'), {
     to: destinataires,
+    type: type || '',
     creeLe: new Date().toISOString(),
     message: {
       subject: sujet,

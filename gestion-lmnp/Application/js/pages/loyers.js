@@ -5,7 +5,7 @@ import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, e
   barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur } from '../ui.js';
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
-import { analyserEcheances, grouperPropositions, resumerPropositions } from '../calculs/maj-echeances.js';
+import { ouvrirMiseAJour, bandeauMiseAJour } from './maj-ui.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
@@ -107,7 +107,7 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   const notifierParEmail = async () => {
     if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Logements & baux »).', 'erreur'); return; }
     if (!publie) { notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
-    await executer(api.envoyerCourriel({
+    await executer(api.envoyerCourriel({ type: 'documents',
       destinataires: destinatairesDe(locataire),
       sujet: `Votre quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
@@ -374,113 +374,6 @@ const sousTotalLogement = (attendu, encaisse) => h('div', { class: 'sous-total-l
 ]);
 
 
-// ------------------------------------------------- mise à jour des échéances
-
-/**
- * Les échéances enregistrées ne suivent pas les modifications du bail
- * (colocataire retiré, bail supprimé, part changée) : cette fenêtre propose
- * de supprimer les orphelines, de réaligner les montants, et de conserver
- * celles qui portent un virement ou une quittance — sauf si l'on coche
- * « supprimer quand même » (double confirmation).
- */
-async function ouvrirMiseAJourEcheances(donnees) {
-  const propositions = analyserEcheances({ baux: donnees.baux, loyers: donnees.loyers });
-  const groupes = grouperPropositions(propositions);
-  const nomDuLocataire = (id) => { const l = donnees.locataires.find((x) => x.id === id); return l ? `${l.nom} ${l.prenom || ''}`.trim() : 'Locataire inconnu'; };
-  const logementDuBail = (bailId) => { const b = donnees.baux.find((x) => x.id === bailId); const bien = b && donnees.biens.find((x) => x.id === b.bienId); return bien?.nom || (b ? 'Bail' : 'Bail supprimé'); };
-  const periode = (elements) => {
-    const tri = [...elements].sort((a, b) => (a.annee - b.annee) || (a.mois - b.mois));
-    const premier = tri[0];
-    const dernier = tri[tri.length - 1];
-    if (tri.length === 1) return `${nomMois(premier.mois)} ${premier.annee}`;
-    return `${nomMois(premier.mois)}${premier.annee !== dernier.annee ? ` ${premier.annee}` : ''} → ${nomMois(dernier.mois)} ${dernier.annee} (${tri.length})`;
-  };
-  if (!groupes.length) {
-    ouvrirModale({
-      titre: 'Mettre à jour les échéances',
-      corps: h('p', { texte: 'Rien à corriger : toutes les échéances enregistrées correspondent aux baux.' }),
-      pied: [h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: () => fermerModale() }, 'Fermer')],
-    });
-    return;
-  }
-  const cases = new Map();
-  const libelleAction = { supprimer: ['Supprimer', 'alerte'], realigner: ['Réaligner le montant', 'attente'], conserver: ['Conserver', 'attention'] };
-  const lignes = groupes.map((g) => {
-    const [libelle, ton] = libelleAction[g.action];
-    const caseACocher = h('input', { type: 'checkbox', checked: g.action !== 'conserver' ? true : null, 'data-groupe': g.cle });
-    cases.set(g.cle, caseACocher);
-    return h('tr', {}, [
-      h('td', {}, [h('label', {}, [caseACocher, h('span', { texte: g.action === 'conserver' ? 'supprimer quand même' : 'appliquer' })])]),
-      h('td', {}, [h('strong', { texte: nomDuLocataire(g.locataireId) }), h('div', { class: 'legende', texte: `${logementDuBail(g.bailId)} · ${periode(g.elements)}` })]),
-      h('td', { texte: g.raison }),
-      h('td', {}, [badge(libelle, ton), h('div', { class: 'legende', texte: g.protege ? `${g.protege} : reste visible « hors bail » si conservée` : (g.action === 'realigner' ? 'aucun virement ni quittance' : 'aucun virement, aucune quittance') })]),
-    ]);
-  });
-  const boutonAppliquer = h('button', { class: 'bouton bouton-primaire', type: 'button' }, 'Appliquer');
-  const compter = () => {
-    let suppressions = 0; let realignements = 0;
-    for (const g of groupes) {
-      if (!cases.get(g.cle).checked) continue;
-      if (g.action === 'realigner') realignements += g.elements.length; else suppressions += g.elements.length;
-    }
-    boutonAppliquer.textContent = `Appliquer (${suppressions} suppression${suppressions > 1 ? 's' : ''}, ${realignements} réalignement${realignements > 1 ? 's' : ''})`;
-    boutonAppliquer.disabled = !suppressions && !realignements;
-  };
-  for (const c of cases.values()) c.addEventListener('change', compter);
-  compter();
-  boutonAppliquer.onclick = async () => {
-    const choisis = groupes.filter((g) => cases.get(g.cle).checked);
-    const proteges = choisis.filter((g) => g.protege);
-    fermerModale();
-    if (proteges.length) {
-      const n = proteges.reduce((s, g) => s + g.elements.length, 0);
-      const ok = await confirmer({
-        titre: 'Supprimer des échéances avec virement ou quittance',
-        message: `${n} échéance(s) portent un virement enregistré ou une quittance émise. Les virements enregistrés seront perdus et les quittances déjà envoyées ne seront pas rappelées. Supprimer quand même ?`,
-        libelleValider: 'Supprimer quand même', danger: true,
-      });
-      if (!ok) return;
-    }
-    const aSupprimer = new Set(choisis.filter((g) => g.action !== 'realigner').flatMap((g) => g.elements.map((e) => e.id)));
-    const aRealigner = new Map(choisis.filter((g) => g.action === 'realigner').flatMap((g) => g.elements.map((e) => [e.id, e.nouveau])));
-    const tous = etat.liste('loyers');
-    const nouvelle = tous.filter((l) => !aSupprimer.has(l.id)).map((l) => (aRealigner.has(l.id) ? { ...l, ...aRealigner.get(l.id) } : l));
-    await executer(etat.remplacerCollection('loyers', nouvelle), `Échéances mises à jour : ${aSupprimer.size} supprimée(s), ${aRealigner.size} réalignée(s).`);
-  };
-  ouvrirModale({
-    titre: 'Mettre à jour les échéances',
-    large: true,
-    corps: h('div', { class: 'maj-echeances' }, [
-      h('p', { class: 'legende', texte: 'Les échéances enregistrées (quittance, virement, montant ajusté, appel de loyer) ne suivent pas les modifications d’un bail. Voici celles qui ne correspondent plus : cochez ce qui doit être appliqué.' }),
-      h('table', {}, [
-        h('thead', {}, h('tr', {}, ['', 'Échéance', 'Pourquoi', 'Proposition'].map((t) => h('th', { texte: t })))),
-        h('tbody', {}, lignes),
-      ]),
-    ]),
-    pied: [h('button', { class: 'bouton', type: 'button', onclick: () => fermerModale() }, 'Annuler'), boutonAppliquer],
-  });
-}
-
-/** Bandeau de la page Loyers quand des échéances ne correspondent plus aux baux. */
-function bandeauEcheances(donnees) {
-  const propositions = analyserEcheances({ baux: donnees.baux, loyers: donnees.loyers });
-  if (!propositions.length) return null;
-  const compte = resumerPropositions(propositions);
-  const noms = [...new Set(propositions.map((p) => donnees.locataires.find((l) => l.id === p.locataireId)?.nom || 'Locataire inconnu'))];
-  const detail = [
-    compte.supprimer ? `${compte.supprimer} à supprimer` : '',
-    compte.realigner ? `${compte.realigner} à réaligner` : '',
-    compte.conserver ? `${compte.conserver} avec virement ou quittance` : '',
-  ].filter(Boolean).join(', ');
-  return h('div', { class: 'alerte alerte-attention alerte-echeances' }, [
-    h('div', {}, [
-      h('strong', { texte: `${propositions.length} échéance${propositions.length > 1 ? 's' : ''} ne correspond${propositions.length > 1 ? 'ent' : ''} plus aux baux` }),
-      h('div', { class: 'legende', texte: `${noms.join(', ')} — ${detail}.` }),
-    ]),
-    bouton('Mettre à jour…', () => ouvrirMiseAJourEcheances(donnees).catch(signalerErreur), { petit: true, type: 'primaire' }),
-  ]);
-}
-
 export default {
   cle: 'loyers',
   libelle: 'Loyers',
@@ -527,11 +420,11 @@ export default {
       }),
     ]));
 
-    // Échéances enregistrées qui ne correspondent plus aux baux (v43).
-    const bandeau = bandeauEcheances(donnees);
+    // Échéances (et dépôts de garantie) enregistrés qui ne correspondent plus aux baux (v43).
+    const bandeau = bandeauMiseAJour(donnees);
     if (bandeau) conteneur.append(bandeau);
     conteneur.append(barreOutils([
-      bouton('Mettre à jour les échéances', () => ouvrirMiseAJourEcheances(donnees).catch(signalerErreur), { titre: 'Compare les échéances enregistrées aux baux : orphelines, montants modifiés' }),
+      bouton('Mettre à jour les échéances', () => ouvrirMiseAJour(donnees).catch(signalerErreur), { titre: 'Compare les échéances et dépôts enregistrés aux baux : orphelins, montants modifiés' }),
     ]));
 
     // Vue « Tous les logements » : un bandeau par logement, ses cartes, puis

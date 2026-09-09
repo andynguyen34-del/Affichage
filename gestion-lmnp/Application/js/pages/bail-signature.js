@@ -121,7 +121,7 @@ async function notifierColocataires(donnees, bail, publies) {
   const bailleur = donnees.parametres.bailleurs?.[0];
   for (const locataire of publies) {
     // eslint-disable-next-line no-await-in-loop
-    await api.envoyerCourriel({
+    await api.envoyerCourriel({ type: 'documents',
       destinataires: destinatairesDe(locataire),
       sujet: 'Votre bail de colocation est disponible',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`

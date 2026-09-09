@@ -23,6 +23,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
+import { composerEnveloppe } from './lib/courriel-enveloppe.js';
 
 export const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD');
 const GMAIL_COMPTE = defineString('GMAIL_COMPTE', {
@@ -71,6 +72,15 @@ export function aReprendre(donnees, maintenant = Date.now()) {
   return Number(livraison.attempts || 0) < ESSAIS_MAX;
 }
 
+/** Paramètres → « Adresses e-mail » (parametres.courriel), dans donnees/parametres {json}. */
+export async function reglageCourriel(base) {
+  try {
+    const photo = await base.doc('donnees/parametres').get();
+    const parametres = JSON.parse(photo.data()?.json || '{}') || {};
+    return parametres.courriel || {};
+  } catch { return {}; }
+}
+
 /**
  * Expédie un document « mail ». Réclame d'abord le document dans une
  * transaction (state PROCESSING) : deux déclenchements simultanés — ou
@@ -95,10 +105,15 @@ export async function expedier(base, ref, { transport = null, force = false } = 
 
   const message = reclame.message || {};
   const destinataires = [].concat(reclame.to || []).map((a) => String(a || '').trim()).filter(Boolean);
+  // Expéditeur, adresse de réponse et copies : Paramètres → « Adresses e-mail » (v44), lus à chaque envoi.
+  const expediteurParDefaut = String(COURRIEL_EXPEDITEUR.value() || '').trim() || String(GMAIL_COMPTE.value() || '').trim();
+  const enveloppe = composerEnveloppe({ reglage: await reglageCourriel(base), type: String(reclame.type || ''), destinataires, expediteurParDefaut });
   try {
     if (!destinataires.length) throw new Error('Aucun destinataire.');
     const info = await (transport || transporteur()).sendMail({
-      from: COURRIEL_EXPEDITEUR.value(),
+      from: enveloppe.from,
+      replyTo: enveloppe.replyTo || undefined,
+      cc: enveloppe.cc.length ? enveloppe.cc : undefined,
       to: destinataires,
       subject: message.subject || '(sans objet)',
       html: message.html || undefined,
@@ -108,9 +123,9 @@ export async function expedier(base, ref, { transport = null, force = false } = 
     await ref.update({
       'delivery.state': 'SUCCESS', 'delivery.endTime': FieldValue.serverTimestamp(),
       'delivery.messageId': String(info?.messageId || ''), 'delivery.error': FieldValue.delete(),
-      'delivery.par': 'expedierCourriel', 'delivery.expediteur': String(COURRIEL_EXPEDITEUR.value() || ''),
+      'delivery.par': 'expedierCourriel', 'delivery.expediteur': enveloppe.from, 'delivery.cc': enveloppe.cc, 'delivery.replyTo': enveloppe.replyTo,
     });
-    return { ok: true, destinataires };
+    return { ok: true, destinataires, enveloppe };
   } catch (erreur) {
     const texte = String(erreur?.message || erreur).slice(0, 600);
     console.error('Envoi impossible', ref.id, texte);
@@ -165,7 +180,7 @@ export async function traiterCourriels(op, req, res, qui) {
     const photos = await lireTout(base);
     const courriels = photos.slice(0, 30).map(resume);
     const enAttente = photos.filter((p) => aReprendre(p.data())).length;
-    res.json({ courriels, enAttente, total: photos.length, emulateur: enEmulateur() });
+    res.json({ courriels, enAttente, total: photos.length, emulateur: enEmulateur(), compte: String(GMAIL_COMPTE.value() || ''), expediteurParDefaut: String(COURRIEL_EXPEDITEUR.value() || '') });
     return;
   }
 
@@ -198,6 +213,7 @@ export async function traiterCourriels(op, req, res, qui) {
       },
       creeLe: quand.toISOString(),
       test: true,
+      type: 'test',
     });
     const resultat = await expedier(base, ref);
     const final = (await ref.get()).data();

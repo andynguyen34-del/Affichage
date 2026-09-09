@@ -61,6 +61,30 @@ export function analyserEcheances({ baux = [], loyers = [] } = {}) {
   return propositions.sort((a, b) => (a.locataireId.localeCompare(b.locataireId)) || (a.annee - b.annee) || (a.mois - b.mois));
 }
 
+/** Un dépôt de garantie enregistré « protégé » : de l'argent est détenu (reçu, non restitué). */
+export function protectionCaution(caution) {
+  return (Number(caution?.montantRecu) || 0) > 0 && !caution?.restitueLe ? 'dépôt détenu' : '';
+}
+
+/**
+ * Analyse les dépôts de garantie enregistrés : bail supprimé ou colocataire
+ * retiré du bail → supprimer (conserver si de l'argent est détenu).
+ */
+export function analyserCautions({ baux = [], cautions = [] } = {}) {
+  const propositions = [];
+  for (const caution of cautions) {
+    if (!caution || !caution.bailId) continue;
+    const protege = protectionCaution(caution);
+    const base = { id: caution.id, caution, nature: 'caution', bailId: caution.bailId, locataireId: caution.locataireId || '', annee: 0, mois: 0, protege };
+    const bail = baux.find((b) => b.id === caution.bailId);
+    if (!bail) { propositions.push({ ...base, raison: 'Bail supprimé', action: protege ? 'conserver' : 'supprimer' }); continue; }
+    if (!fluxDuBail(bail).some((p) => p.locataireId === (caution.locataireId || ''))) {
+      propositions.push({ ...base, raison: 'Plus sur le bail', action: protege ? 'conserver' : 'supprimer' });
+    }
+  }
+  return propositions;
+}
+
 /**
  * Regroupe les propositions par colocataire, bail, action et raison, pour
  * les présenter en lignes lisibles (« sept. → déc. 2026 (4) »).
@@ -68,8 +92,9 @@ export function analyserEcheances({ baux = [], loyers = [] } = {}) {
 export function grouperPropositions(propositions) {
   const groupes = new Map();
   for (const p of propositions) {
-    const cle = [p.locataireId, p.bailId, p.action, p.raison, p.protege].join('|');
-    if (!groupes.has(cle)) groupes.set(cle, { cle, locataireId: p.locataireId, bailId: p.bailId, action: p.action, raison: p.raison, protege: p.protege, elements: [] });
+    const nature = p.nature || 'echeance';
+    const cle = [nature, p.locataireId, p.bailId, p.action, p.raison, p.protege].join('|');
+    if (!groupes.has(cle)) groupes.set(cle, { cle, nature, locataireId: p.locataireId, bailId: p.bailId, action: p.action, raison: p.raison, protege: p.protege, elements: [] });
     groupes.get(cle).elements.push(p);
   }
   return [...groupes.values()];

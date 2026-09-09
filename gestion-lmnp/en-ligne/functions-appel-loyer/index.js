@@ -65,7 +65,7 @@ export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
     const details = [];
     for (const courriel of courriels) {
       // eslint-disable-next-line no-await-in-loop
-      await base.collection('mail').add({ to: courriel.destinataires, message: { subject: courriel.sujet, html: courriel.html } });
+      await base.collection('mail').add({ to: courriel.destinataires, type: 'appels', creeLe: new Date().toISOString(), message: { subject: courriel.sujet, html: courriel.html } });
       details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
       // L'échéance appelée s'affiche aussi sur l'espace du colocataire (accueil).
       const email = String(locataires.find((l) => l.id === courriel.locataireId)?.email || '').trim().toLowerCase();
@@ -81,6 +81,8 @@ export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
       // eslint-disable-next-line no-await-in-loop
       await base.collection('mail').add({
         to: bailleurs,
+        type: 'appels-recap',
+        creeLe: new Date().toISOString(),
         message: {
           subject: `Copie — appels de loyer ${nomMois(vise.mois)} ${vise.annee} — ${bien.nom} envoyés`,
           html: `<p>${courriels.length} appel(s) de loyer envoyé(s) automatiquement pour ${nomMois(vise.mois)} ${vise.annee} (${bien.nom}) :</p>`

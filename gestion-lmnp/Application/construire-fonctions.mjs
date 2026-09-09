@@ -34,3 +34,12 @@ await esbuild.build({
   banner: { js: '// Fichier généré par Application/construire-fonctions.mjs — ne pas modifier à la main.' },
 });
 console.log(`Écrit : ${sortieContradictoire}`);
+
+// Enveloppe des e-mails (expéditeur, réponse, copies) pour la fonction d'expédition.
+const sortieEnveloppe = path.join(path.dirname(sortie), 'courriel-enveloppe.js');
+await esbuild.build({
+  entryPoints: [path.join(ici, 'js/courriel-enveloppe.js')],
+  bundle: true, format: 'esm', platform: 'node', target: 'node22', charset: 'utf8', outfile: sortieEnveloppe,
+  banner: { js: '// Fichier généré par Application/construire-fonctions.mjs — ne pas modifier à la main.' },
+});
+console.log(`Écrit : ${sortieEnveloppe}`);

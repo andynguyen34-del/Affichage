@@ -703,7 +703,7 @@ function carteContradictoire(edl, donnees, contexte) {
     if (!ok) return;
     for (const r of retardataires) {
       /* eslint-disable no-await-in-loop */
-      await api.envoyerCourriel({
+      await api.envoyerCourriel({ type: 'contradictoire',
         destinataires: destinatairesDe(r.locataire),
         sujet: 'Rappel : état des lieux à valider sur votre espace',
         html: `<p>Bonjour ${r.locataire.prenom || ''},</p><p>L'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du <strong>${date(edl.date)}</strong> attend vos réponses sur votre espace, jusqu'au <strong>${date(edl.contradictoireFinLe)}</strong> inclus :</p>`
@@ -1061,7 +1061,7 @@ function carteSignatures(edl, donnees) {
 }
 
 async function rappelerSignature(edl, donnees, locataire) {
-  await executer(api.envoyerCourriel({
+  await executer(api.envoyerCourriel({ type: 'contradictoire',
     destinataires: destinatairesDe(locataire),
     sujet: 'Rappel : signature de l’état des lieux sur votre espace',
     html: `<p>Bonjour ${locataire.prenom || ''},</p><p>L'état des lieux ${edl.type === 'sortie' ? 'de sortie' : "d'entrée"} du <strong>${date(edl.date)}</strong> attend votre signature sur votre espace (rubrique « État des lieux », après vos réponses), jusqu'au <strong>${date(edl.contradictoireFinLe)}</strong> inclus :</p>`

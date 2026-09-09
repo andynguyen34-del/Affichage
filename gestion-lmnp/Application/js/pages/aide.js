@@ -168,6 +168,7 @@ export default {
           'Son espace est organisé en rubriques : Accueil (ce qu’il a à faire, la prochaine échéance de loyer publiée par l’appel de loyer, le dernier document), '
             + 'État des lieux (le contradictoire), Quittances et Bail & documents (rangés par année), Justificatifs, Mon compte (mot de passe, icône, adresse).',
           'L’e-mail de mise à disposition (bouton « Notifier par e-mail ») le prévient qu’un nouveau document l’attend.',
+          'Paramètres → « Adresses e-mail » règle l’expéditeur affiché, l’adresse de réponse et les copies par type d’envoi (appels de loyer, documents, rappels de justificatifs, contradictoire) ; appliqué au prochain envoi, sans redéploiement. L’adresse d’expéditeur doit être le compte Gmail qui expédie ou une adresse déclarée dans Gmail sous « Envoyer en tant que ».',
           'Dans l’autre sens, il DÉPOSE ses justificatifs (assurance habitation, entretien des climatiseurs, '
             + 'ramonage) : rubrique « Vos justificatifs à fournir » sur son espace. Côté gérant : '
             + 'page « Locataires » : une ligne « Pièces communes » par colocation (entretien des climatiseurs, ramonage : un seul document pour la maison, déposé par n’importe lequel d’entre eux, '

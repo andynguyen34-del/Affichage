@@ -6,7 +6,7 @@ echo.
 
 echo [1/3] Controle des fichiers de la livraison
 set MANQUE=0
-for %%F in ("firebase.json" ".firebaserc" "firestore.rules" "storage.rules" "public\index.html" "public\manifest.webmanifest" "public\manifest-colocataire.webmanifest" "public\sw.js" "public\icones\icone-192.png" "public\icones\icone-colocataire-192.png" "functions-appel-loyer\index.js" "functions-appel-loyer\relais-fichiers.js" "functions-appel-loyer\signature-distante.js" "functions-appel-loyer\package.json" "functions-appel-loyer\lib\appel-loyer.js" "functions-appel-loyer\lib\contradictoire.js" "functions-appel-loyer\courriel.js") do (
+for %%F in ("firebase.json" ".firebaserc" "firestore.rules" "storage.rules" "public\index.html" "public\manifest.webmanifest" "public\manifest-colocataire.webmanifest" "public\sw.js" "public\icones\icone-192.png" "public\icones\icone-colocataire-192.png" "functions-appel-loyer\index.js" "functions-appel-loyer\relais-fichiers.js" "functions-appel-loyer\signature-distante.js" "functions-appel-loyer\package.json" "functions-appel-loyer\lib\appel-loyer.js" "functions-appel-loyer\lib\contradictoire.js" "functions-appel-loyer\lib\courriel-enveloppe.js" "functions-appel-loyer\courriel.js") do (
   if not exist "%%~F" (echo   MANQUANT %%~F & set MANQUE=1)
 )
 if "%MANQUE%"=="1" (

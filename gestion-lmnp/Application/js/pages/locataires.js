@@ -157,7 +157,7 @@ export function locatairesAvecManquants(tout) {
 const lienEspace = () => `${window.location.origin}/colocataire`;
 
 async function envoyerRappel(locataire, manquants, bailleur) {
-  await api.envoyerCourriel({
+  await api.envoyerCourriel({ type: 'justificatifs',
     destinataires: destinatairesDe(locataire),
     sujet: 'Justificatifs à déposer sur votre espace',
     html: `<p>Bonjour ${locataire.prenom || ''},</p>`
@@ -172,7 +172,7 @@ async function envoyerRappel(locataire, manquants, bailleur) {
 async function envoyerRappelLogement(bien, colocataires, manquants, bailleur) {
   const destinataires = colocataires.map(emailDe).filter(Boolean);
   if (!destinataires.length) throw new Error('Aucun colocataire de ce logement n’a d’adresse e-mail.');
-  await api.envoyerCourriel({
+  await api.envoyerCourriel({ type: 'justificatifs',
     destinataires,
     sujet: `Justificatifs de la résidence à déposer — ${bien.nom}`,
     html: '<p>Bonjour,</p>'

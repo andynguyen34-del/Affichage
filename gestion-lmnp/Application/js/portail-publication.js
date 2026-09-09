@@ -103,7 +103,7 @@ export async function ouvrirFenetreContradictoire({ locataire, edl, finLe, duree
     contradictoires: { ...(actuel.contradictoires || {}), [edl.id]: bloc },
   });
   if (envoyerEmail) {
-    await api.envoyerCourriel({
+    await api.envoyerCourriel({ type: 'contradictoire',
       destinataires: destinatairesDe(locataire),
       sujet: 'État des lieux : vos photos contradictoires',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`

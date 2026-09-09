@@ -129,6 +129,12 @@ tr.ligne-cible td { background: var(--attention-clair); }
 .alerte-echeances .bouton { margin-left: auto; }
 .maj-echeances td { vertical-align: top; }
 .maj-echeances label { display: flex; gap: .4rem; align-items: flex-start; cursor: pointer; }
+.puces-adresses { display: flex; gap: .3rem; flex-wrap: wrap; }
+.puce-adresse { display: inline-block; padding: .05rem .5rem; border-radius: 12px; background: var(--accent-clair); color: var(--accent-fonce); font-size: .8rem; }
+.copie-type { margin: .5rem 0; padding: .5rem .7rem; border: 1px solid var(--bordure); border-radius: 6px; }
+.copie-choix { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .3rem; }
+.copie-bailleur { display: inline-flex; gap: .3rem; align-items: center; font-size: .85rem; }
+.adresses-email td:first-child { color: var(--encre-douce); width: 11rem; }
 .justificatifs-logement-titre { font-weight: 600; color: var(--accent-fonce); margin-bottom: .4rem; }
 .lien-locataire { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-fonce); cursor: pointer; text-decoration: underline dotted; }
 .lien-locataire:hover { color: var(--accent); }

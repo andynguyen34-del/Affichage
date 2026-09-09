@@ -3,13 +3,15 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, formulaire, executer,
-  notifier, ouvrirModale, fermerModale, signalerErreur } from '../ui.js';
+  notifier, ouvrirModale, fermerModale, signalerErreur, barreOutils,
+} from '../ui.js';
 import { montant, date, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { fluxDuBail } from '../calculs/loyers.js';
 import { pdfRestitutionAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { bienDuBail } from '../logements.js';
+import { ouvrirMiseAJour, bandeauMiseAJour } from './maj-ui.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
 
@@ -180,7 +182,7 @@ async function restituerCaution(donnees, ligne) {
     setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
 
     if (publie && destinatairesDe(locataire).length) {
-      await executer(api.envoyerCourriel({
+      await executer(api.envoyerCourriel({ type: 'documents',
         destinataires: destinatairesDe(locataire),
         sujet: 'Restitution de votre dépôt de garantie',
         html: `<p>Bonjour ${locataire.prenom || ''},</p>`
@@ -242,6 +244,13 @@ export default {
       tuile({ libelle: 'Détenu actuellement', valeur: montant(detenu, { rond: true }), ton: 'neutre',
         detail: 'à restituer en fin de bail' }),
       tuile({ libelle: 'Lignes en attente', valeur: String(lignes.filter((l) => !l.recuLe && !l.restitueLe).length) }),
+    ]));
+
+    // Dépôts enregistrés dont le bail a disparu ou dont le colocataire n'est plus sur le bail (v44).
+    const bandeau = bandeauMiseAJour(donnees);
+    if (bandeau) conteneur.append(bandeau);
+    conteneur.append(barreOutils([
+      bouton('Mettre à jour les dépôts', () => ouvrirMiseAJour(donnees).catch(signalerErreur), { titre: 'Compare les dépôts de garantie et échéances enregistrés aux baux' }),
     ]));
 
     conteneur.append(carte({

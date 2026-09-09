@@ -42,7 +42,7 @@ export async function envoyerTest(adresse, { bienId, annee, mois } = {}) {
   const vise = annee && mois ? { annee, mois } : moisVise(aujourdhui(), reglageAppel(bienDe(bienId)).cible);
   if (!courriels.length) throw new Error(`Aucun appel à préparer pour ${nomMois(vise.mois)} ${vise.annee}${logement ? ` (${logement})` : ''} : pas d’échéance non soldée, ou aucune adresse e-mail de colocataire.`);
   const modele = courriels[0];
-  await api.envoyerCourriel({
+  await api.envoyerCourriel({ type: 'appels',
     destinataires: [adresse],
     sujet: `[TEST] ${modele.sujet}`,
     html: `<p style="color:#7d1f1f"><em>Message de test — exemplaire préparé pour ${modele.nom}${logement ? ` (${logement})` : ''}.</em></p>${modele.html}`,
@@ -69,7 +69,7 @@ export async function envoyerAppels({ bienId, annee, mois, origine = 'manuel', f
   const locataires = etat.liste('locataires');
   for (const courriel of courriels) {
     /* eslint-disable no-await-in-loop */
-    await api.envoyerCourriel({ destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html });
+    await api.envoyerCourriel({ type: 'appels', destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html });
     envoyes += 1;
     details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
     // L'échéance appelée s'affiche aussi sur l'espace du colocataire (accueil).
@@ -85,6 +85,7 @@ export async function envoyerAppels({ bienId, annee, mois, origine = 'manuel', f
   }
   if (envoyes && reglage.copieBailleur && bailleurs.length) {
     await api.envoyerCourriel({
+      type: 'appels-recap',
       destinataires: bailleurs,
       sujet: `Copie — appels de loyer ${nomMois(vise.mois)} ${vise.annee}${logement ? ` — ${logement}` : ''} envoyés`,
       html: `<p>${envoyes} appel(s) de loyer envoyé(s) pour ${nomMois(vise.mois)} ${vise.annee}${logement ? ` (${logement})` : ''} :</p><ul>${details.map((d) => `<li>${d}</li>`).join('')}</ul>`

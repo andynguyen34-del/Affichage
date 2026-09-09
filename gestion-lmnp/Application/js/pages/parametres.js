@@ -5,7 +5,7 @@ import { ouvrirChangementMotDePasse } from '../compte.js';
 import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
-  barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs } from '../ui.js';
+  barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs, ouvrirModale, fermerModale } from '../ui.js';
 import { date } from '../format.js';
 import { VERSION_APP } from '../version.js';
 import { REGLAGES_PLEIN_ECRAN, reglagePleinEcran, definirReglagePleinEcran, estInstallee, pleinEcranPossible, enPleinEcran,
@@ -15,6 +15,7 @@ import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppe
 import { moisVise, jourEnvoi, dejaEnvoye } from '../appel-loyer.js';
 import { nomLogement } from '../logements.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
+import { TYPES_COPIE, normaliserAdresses, ADRESSE_VALIDE, expediteurCoherent, decomposerExpediteur, formaterExpediteur } from '../courriel-enveloppe.js';
 
 const EXPLICATIONS_STOCKAGE = {
   'reseau/relais': 'Le serveur de stockage ne répond pas directement depuis ce poste (réseau qui bloque '
@@ -510,6 +511,125 @@ function carteAcces(donnees) {
 }
 
 
+
+/**
+ * Adresses e-mail (v44) : expéditeur affiché, adresse de réponse, copies par
+ * type d'envoi. Lu par la fonction d'expédition à chaque courriel : ce qui est
+ * enregistré ici s'applique au prochain envoi, sans redéploiement.
+ */
+let infosEnvoi = null; // { compte, expediteurParDefaut } lus une fois par session
+async function lireInfosEnvoi() {
+  if (infosEnvoi) return infosEnvoi;
+  try { const e = await api.etatCourriels(); infosEnvoi = { compte: e.compte || '', expediteurParDefaut: e.expediteurParDefaut || '', local: Boolean(e.local) }; }
+  catch { infosEnvoi = { compte: '', expediteurParDefaut: '', local: false }; }
+  return infosEnvoi;
+}
+
+async function modifierAdresses(parametres) {
+  const infos = await lireInfosEnvoi();
+  const reglage = parametres.courriel || {};
+  const bailleurs = (parametres.bailleurs || []).map((b) => ({ nom: b.nom || '', email: String(b.email || '').trim().toLowerCase() })).filter((b) => ADRESSE_VALIDE.test(b.email));
+  const defaut = decomposerExpediteur(infos.expediteurParDefaut);
+  const champNom = h('input', { type: 'text', value: reglage.expediteurNom || '', placeholder: defaut.nom || 'Nom affiché', 'data-champ': 'expediteurNom' });
+  const champAdresse = h('input', { type: 'email', value: reglage.expediteurAdresse || '', placeholder: infos.compte || defaut.adresse || 'adresse@gmail.com', 'data-champ': 'expediteurAdresse' });
+  const champReponse = h('input', { type: 'email', value: reglage.reponseA || '', placeholder: 'vide = l’adresse d’expéditeur', 'data-champ': 'reponseA' });
+  const avert = h('div', { class: 'alerte alerte-attention', style: 'font-size:.85rem', hidden: true, texte: '' });
+  const verifierAdresse = () => {
+    const a = champAdresse.value.trim().toLowerCase();
+    if (!a || !infos.compte) { avert.hidden = true; return; }
+    avert.hidden = a === infos.compte;
+    avert.textContent = `« ${a} » n’est pas le compte qui expédie (${infos.compte}). Gmail remplacera l’expéditeur, ou le destinataire refusera le message, sauf si cette adresse est déclarée dans Gmail sous « Envoyer en tant que ». Vérifiez avec un e-mail de test.`;
+  };
+  champAdresse.addEventListener('input', verifierAdresse);
+  verifierAdresse();
+  const lignesCopies = TYPES_COPIE.map((t) => {
+    const actuelles = normaliserAdresses(reglage.copies?.[t.cle] || []);
+    const cases = bailleurs.map((b) => {
+      const c = h('input', { type: 'checkbox', checked: actuelles.includes(b.email) ? true : null, 'data-bailleur': b.email });
+      return h('label', { class: 'copie-bailleur' }, [c, `${b.nom || 'Bailleur'} (${b.email})`]);
+    });
+    const libres = actuelles.filter((a) => !bailleurs.some((b) => b.email === a));
+    const champLibre = h('input', { type: 'text', value: libres.join(', '), placeholder: 'autres adresses, séparées par des virgules', 'data-copies': t.cle, style: 'width:100%' });
+    return { type: t, cases, champLibre, element: h('div', { class: 'copie-type' }, [h('strong', { texte: t.libelle }), h('div', { class: 'copie-choix' }, [...cases, champLibre])]) };
+  });
+  await new Promise((resoudre) => {
+    ouvrirModale({
+      titre: 'Adresses e-mail',
+      large: true,
+      corps: h('div', { class: 'grille-champs' }, [
+        h('label', { class: 'champ' }, ['Nom de l’expéditeur', champNom]),
+        h('label', { class: 'champ' }, ['Adresse d’expéditeur', champAdresse]),
+        h('div', { class: 'pleine-largeur' }, [avert]),
+        h('label', { class: 'champ' }, ['Adresse de réponse', champReponse]),
+        h('div', { class: 'champ legende', texte: infos.compte ? `Compte qui expédie : ${infos.compte} (réglé au déploiement).` : '' }),
+        h('div', { class: 'pleine-largeur' }, [
+          h('div', { style: 'font-weight:600;margin:.4rem 0 .2rem', texte: 'Copies par type d’envoi' }),
+          h('p', { class: 'legende', texte: 'En plus des destinataires. Les codes de signature ne sont jamais copiés.' }),
+          ...lignesCopies.map((l) => l.element),
+        ]),
+      ]),
+      pied: [
+        h('button', { class: 'bouton', type: 'button', onclick: () => { fermerModale(); resoudre(); } }, 'Annuler'),
+        h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: async () => {
+          const adresse = champAdresse.value.trim().toLowerCase();
+          const reponse = champReponse.value.trim().toLowerCase();
+          if (adresse && !ADRESSE_VALIDE.test(adresse)) { notifier('Adresse d’expéditeur invalide.', 'erreur'); return; }
+          if (reponse && !ADRESSE_VALIDE.test(reponse)) { notifier('Adresse de réponse invalide.', 'erreur'); return; }
+          const copies = {};
+          for (const l of lignesCopies) {
+            copies[l.type.cle] = normaliserAdresses([
+              ...l.cases.filter((c) => c.querySelector('input').checked).map((c) => c.querySelector('input').dataset.bailleur),
+              ...String(l.champLibre.value || '').split(/[,;\s]+/),
+            ]);
+          }
+          fermerModale();
+          await executer(etat.enregistrerParametres({ courriel: { expediteurNom: champNom.value.trim(), expediteurAdresse: adresse, reponseA: reponse, copies } }), 'Adresses e-mail enregistrées : elles s’appliquent au prochain envoi.');
+          resoudre();
+        } }, 'Enregistrer'),
+      ],
+      surFermeture: () => resoudre(),
+    });
+  });
+}
+
+function carteAdresses(parametres) {
+  const reglage = parametres.courriel || {};
+  const zone = h('div', { class: 'adresses-email' });
+  const bailleurs = parametres.bailleurs || [];
+  const nomBailleur = (a) => bailleurs.find((b) => String(b.email || '').trim().toLowerCase() === a)?.nom;
+  const dessiner = (infos) => {
+    const defaut = decomposerExpediteur(infos?.expediteurParDefaut || '');
+    const nom = reglage.expediteurNom || defaut.nom || '—';
+    const adresse = reglage.expediteurAdresse || defaut.adresse || (infos?.compte || '—');
+    const coherent = expediteurCoherent(reglage, infos?.compte);
+    zone.replaceChildren(
+      h('table', {}, h('tbody', {}, [
+        h('tr', {}, [h('td', { texte: 'Expéditeur affiché' }), h('td', {}, [
+          h('strong', { texte: formaterExpediteur(nom, adresse) }), ' ',
+          coherent === true ? badge('= compte d’envoi', 'succes') : (coherent === false ? badge('différent du compte d’envoi', 'attention') : (infos?.compte ? badge('expéditeur du déploiement', 'attente') : null)),
+        ])]),
+        h('tr', {}, [h('td', { texte: 'Adresse de réponse' }), h('td', { texte: reglage.reponseA || 'l’adresse d’expéditeur' })]),
+        h('tr', {}, [h('td', { texte: 'Compte qui expédie' }), h('td', { class: 'legende', texte: infos?.compte ? `${infos.compte} — réglé au déploiement (mot de passe d’application dans le projet)` : (infos?.local ? 'Sans objet en mode dossier.' : 'inconnu (relais injoignable)') })]),
+      ])),
+      h('div', { style: 'font-weight:600;margin:.6rem 0 .3rem', texte: 'Copies par type d’envoi' }),
+      h('table', {}, h('tbody', {}, TYPES_COPIE.map((t) => {
+        const adresses = normaliserAdresses(reglage.copies?.[t.cle] || []);
+        return h('tr', {}, [h('td', { texte: t.libelle }), h('td', { class: 'puces-adresses' }, adresses.length
+          ? adresses.map((a) => h('span', { class: 'puce-adresse', texte: nomBailleur(a) ? `${nomBailleur(a)} (${a})` : a }))
+          : [h('span', { class: 'legende', texte: 'aucune copie' })])]);
+      }))),
+    );
+  };
+  dessiner(null);
+  lireInfosEnvoi().then(dessiner);
+  return carte({
+    titre: 'Adresses e-mail',
+    aide: 'Qui apparaît comme expéditeur, où arrivent les réponses, qui reçoit une copie de chaque type d’envoi. Appliqué au prochain envoi, sans redéploiement.',
+    actions: [bouton('Modifier', () => modifierAdresses(parametres).catch(signalerErreur), { petit: true })],
+    corps: zone,
+  });
+}
+
 /**
  * Envoi des e-mails (v42) : la file « mail » et l'état de chaque envoi
  * (fonction expedierCourriel), relance de ce qui est en attente, e-mail de test.
@@ -646,6 +766,7 @@ export default {
       ]),
     }));
 
+    conteneur.append(carteAdresses(parametres));
     conteneur.append(carteCourriels(parametres));
 
     return conteneur;

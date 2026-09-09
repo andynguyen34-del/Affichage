@@ -152,7 +152,7 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
       : (solde < -0.005
         ? `Le décompte fait apparaître un complément de <strong>${montant(-solde)}</strong> à régler.`
         : 'Le décompte est équilibré : rien à régler de part ni d’autre.');
-    await executer(api.envoyerCourriel({
+    await executer(api.envoyerCourriel({ type: 'documents',
       destinataires: destinatairesDe(locataire),
       sujet: 'Votre décompte de régularisation des charges',
       html: `<p>Bonjour ${locataire.prenom || ''},</p>`
