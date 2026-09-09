@@ -3,6 +3,7 @@
 // js/courriel-enveloppe.js
 var TYPES_COPIE = [
   { cle: "appels", libelle: "Appels de loyer" },
+  { cle: "depots", libelle: "Dépôts de garantie (appels, reçus)" },
   { cle: "documents", libelle: "Quittances, décomptes, bail, restitutions" },
   { cle: "justificatifs", libelle: "Rappels de justificatifs" },
   { cle: "contradictoire", libelle: "État des lieux contradictoire, signatures" }

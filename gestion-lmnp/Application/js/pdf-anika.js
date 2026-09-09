@@ -1,5 +1,5 @@
 // Documents PDF à l'identité visuelle ANIKA : quittance de loyer,
-// régularisation des charges, restitution du dépôt de garantie.
+// régularisation des charges, reçu et restitution du dépôt de garantie.
 // Mise en page reproduite depuis les gabarits fournis (anika-documents) :
 // polices Italiana et Jura, cachet, page A4 unique, pied de page de marque.
 
@@ -365,6 +365,44 @@ export async function pdfRestitutionAnika({ bailleur, locataireNom, logement, en
     'Conformément à l\'article 22 de la loi n°89-462 du 6 juillet 1989, ce solde est restitué dans un délai '
     + `maximal de ${avecRetenues ? 'deux mois' : 'un mois'} à compter de la remise des clés`
     + (avecRetenues ? ', les retenues étant justifiées par l\'état des lieux de sortie.' : '.'));
+  signature(page, polices, c, cachet, lieu, dateSignature, bailleur.nom);
+  piedDePage(page, polices);
+  return doc.save();
+}
+
+/** Reçu de dépôt de garantie ANIKA (v46) : ce que le bailleur atteste avoir reçu à l'entrée. */
+export async function pdfRecuDepotAnika({ bailleur, locataireNom, logement, montantRecu, montantConvenu,
+  montantEnLettres, recuLe, modeVersement, bailDebut, colocation = false, lieu, dateSignature }) {
+  const { doc, page, polices, cachet } = await preparer();
+  const c = contexteDessin(page, polices);
+
+  entete(page, polices, c, 'REÇU DE DÉPÔT DE GARANTIE', `Entrée dans les lieux${bailDebut ? ` le ${bailDebut}` : ''}`);
+  titre(page, polices, c, 'Reçu de dépôt de garantie', `Versement reçu le ${recuLe}${modeVersement ? ` par ${modeVersement}` : ''}`);
+  parties(page, polices, c, bailleur, locataireNom, logement);
+
+  const recu = Math.round((Number(montantRecu) || 0) * 100) / 100;
+  const convenu = Math.round((Number(montantConvenu) || recu) * 100) / 100;
+  const reste = Math.round((convenu - recu) * 100) / 100;
+  tableauMontants(page, polices, c, [
+    { type: 'ligne', libelle: `Dépôt de garantie convenu au bail${colocation ? ' (part du colocataire)' : ''}`, montant: convenu },
+    ...(reste > 0.004 ? [
+      { type: 'ligne', libelle: 'Versement reçu', montant: recu },
+      { type: 'sousTotal', libelle: 'Reste à verser', montant: reste },
+    ] : []),
+    { type: 'total', libelle: 'Montant reçu', montant: recu },
+  ]);
+
+  attestation(page, polices, c,
+    `Je soussigné ${bailleur.nom}, bailleur du logement désigné ci-dessus, reconnais avoir reçu de ${locataireNom}`
+    + `${colocation ? ', colocataire,' : ''} la somme de ${eur(recu)} (${montantEnLettres || ''}) le ${recuLe}`
+    + `${modeVersement ? `, par ${modeVersement}` : ''}, au titre du dépôt de garantie prévu au bail`
+    + `${bailDebut ? ` prenant effet le ${bailDebut}` : ''}`
+    + (reste > 0.004 ? `. Le solde de ${eur(reste)} reste à verser.` : '.'));
+  noteLegale(page, polices, c,
+    'Ce dépôt de garantie ne produit pas d\'intérêts et n\'est pas un loyer. Conformément à l\'article 22 de la loi '
+    + 'n°89-462 du 6 juillet 1989, il sera restitué en fin de bail, déduction faite des sommes restant dues et des '
+    + 'éventuelles réparations locatives justifiées par l\'état des lieux de sortie, dans un délai d\'un mois '
+    + '(deux mois en cas de retenues) à compter de la remise des clés.');
   signature(page, polices, c, cachet, lieu, dateSignature, bailleur.nom);
   piedDePage(page, polices);
   return doc.save();

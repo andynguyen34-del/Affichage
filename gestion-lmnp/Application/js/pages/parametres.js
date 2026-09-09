@@ -13,6 +13,7 @@ import { REGLAGES_PLEIN_ECRAN, reglagePleinEcran, definirReglagePleinEcran, estI
 import { ENTREES, adresseEntree, installerEntree, telechargerRaccourci } from '../installation.js';
 import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppels, logementsAvecAppel } from '../appel-loyer-client.js';
 import { moisVise, jourEnvoi, dejaEnvoye } from '../appel-loyer.js';
+import { DEPOT_PAR_DEFAUT, reglageDepotDe } from '../depot-garantie.js';
 import { nomLogement } from '../logements.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
 import { TYPES_COPIE, normaliserAdresses, ADRESSE_VALIDE, expediteurCoherent, decomposerExpediteur, formaterExpediteur } from '../courriel-enveloppe.js';
@@ -240,6 +241,54 @@ function carteAppelLoyer(donnees) {
     aide: 'Un e-mail à chaque colocataire avec sa part du mois, la date limite et vos coordonnées de paiement — réglages propres à chaque logement (jour, IBAN, textes). '
       + 'L’envoi part le jour réglé, par la fonction planifiée du serveur ou à la première ouverture de l’application ce jour-là.',
     corps: zone,
+  });
+}
+
+/**
+ * Dépôt de garantie (v46) : le texte de l'appel de dépôt envoyé depuis la
+ * page Cautions — distinct de l'appel de loyer. Réglage commun à tous les
+ * logements ; sans coordonnées de paiement propres, celles de l'appel de
+ * loyer du logement sont reprises (libellé de virement adapté).
+ */
+async function modifierDepotGarantie(parametres) {
+  const actuel = reglageDepotDe(parametres);
+  const saisie = await formulaire({
+    titre: 'Appel de dépôt de garantie',
+    large: true,
+    aide: 'E-mail envoyé depuis la page Cautions (« Appeler le dépôt »), avant la remise des clés : montant convenu, date limite, coordonnées de paiement. '
+      + 'Variables utilisables : {prenom} {nom} {montant} {convenu} {date} {dateLongue} {logement} {adresse} {entree}.',
+    champs: [
+      { cle: 'objet', libelle: 'Objet de l’e-mail', type: 'texte', largeur: 'pleine', requis: true },
+      { cle: 'delaiJours', libelle: 'Date limite proposée : jours avant l’entrée dans les lieux (0 : le jour même)', type: 'entier', min: 0, max: 90 },
+      { cle: 'paiement', libelle: 'Coordonnées de paiement (vide : celles de l’appel de loyer du logement, libellé « Dépôt de garantie … »)', type: 'zone' },
+      { cle: 'message', libelle: 'Message complémentaire (facultatif)', type: 'zone' },
+    ],
+    valeurs: actuel,
+  });
+  if (!saisie) return;
+  await executer(etat.enregistrerParametres({ depotGarantie: {
+    objet: String(saisie.objet || '').trim() || DEPOT_PAR_DEFAUT.objet,
+    delaiJours: Math.min(90, Math.max(0, Number(saisie.delaiJours) || 0)),
+    paiement: String(saisie.paiement || ''),
+    message: String(saisie.message || ''),
+  } }), 'Appel de dépôt de garantie enregistré.');
+}
+
+function carteDepotGarantie(parametres) {
+  const reglage = reglageDepotDe(parametres);
+  return carte({
+    titre: 'Dépôt de garantie',
+    aide: 'L’appel de dépôt (e-mail) et le reçu de dépôt (PDF ANIKA publié sur l’espace du colocataire) se pilotent depuis la page Cautions, séparément de l’appel de loyer et de la quittance.',
+    actions: [bouton('Modifier le texte de l’appel', () => modifierDepotGarantie(parametres).catch(signalerErreur), { petit: true })],
+    corps: h('div', { class: 'reglage-depot' }, [
+      h('table', {}, h('tbody', {}, [
+        h('tr', {}, [h('th', { texte: 'Objet' }), h('td', { texte: reglage.objet })]),
+        h('tr', {}, [h('th', { texte: 'Date limite proposée' }), h('td', { texte: reglage.delaiJours ? `${reglage.delaiJours} jour(s) avant l’entrée dans les lieux` : 'le jour de l’entrée dans les lieux (modifiable à chaque appel)' })]),
+        h('tr', {}, [h('th', { texte: 'Paiement' }), h('td', { texte: String(reglage.paiement || '').trim() || 'coordonnées de l’appel de loyer du logement, libellé « Dépôt de garantie Prénom NOM »' })]),
+        reglage.message ? h('tr', {}, [h('th', { texte: 'Message' }), h('td', { texte: reglage.message })]) : null,
+      ])),
+      h('p', { class: 'legende', style: 'margin-top:.4rem', texte: 'Copies de ces e-mails : carte des adresses d’envoi ci-dessous, type « Dépôts de garantie (appels, reçus) ».' }),
+    ]),
   });
 }
 
@@ -751,6 +800,7 @@ export default {
     conteneur.append(carteAffichage());
     if (api.MODE === 'nuage') conteneur.append(carteIcones());
     if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer(donnees));
+    if (api.MODE === 'nuage') conteneur.append(carteDepotGarantie(parametres));
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
     conteneur.append(carte({

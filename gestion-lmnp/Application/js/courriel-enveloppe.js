@@ -5,11 +5,12 @@
 //
 // parametres.courriel = {
 //   expediteurNom, expediteurAdresse, reponseA,
-//   copies: { appels: [adresses], documents: [...], justificatifs: [...], contradictoire: [...] },
+//   copies: { appels: [adresses], depots: [...], documents: [...], justificatifs: [...], contradictoire: [...] },
 // }
 
 export const TYPES_COPIE = [
   { cle: 'appels', libelle: 'Appels de loyer' },
+  { cle: 'depots', libelle: 'Dépôts de garantie (appels, reçus)' },
   { cle: 'documents', libelle: 'Quittances, décomptes, bail, restitutions' },
   { cle: 'justificatifs', libelle: 'Rappels de justificatifs' },
   { cle: 'contradictoire', libelle: 'État des lieux contradictoire, signatures' },

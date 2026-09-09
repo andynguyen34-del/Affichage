@@ -34,6 +34,29 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v46 — appel et reçu de dépôt de garantie.** Le dépôt a ses
+propres documents, distincts de l'appel de loyer et de la quittance (l'appel
+de loyer n'en parle jamais) :
+- **Appel de dépôt** (page Cautions, « Appeler le dépôt » ligne par ligne ou
+  « Appeler les dépôts non appelés » pour tout le logement choisi) : e-mail
+  au colocataire avec le montant convenu, la date limite (l'entrée dans les
+  lieux, modifiable dans la fenêtre avant l'envoi), les coordonnées de
+  paiement de l'appel de loyer du logement avec le libellé « Dépôt de
+  garantie Prénom NOM », et l'annonce du reçu. La ligne passe « Appelée
+  le … » ; « Relancer » renvoie un rappel (objet « Relance — … »).
+- **Reçu de dépôt** : « Dépôt reçu… » enregistre la date, le montant et le
+  mode de versement, puis génère le reçu PDF ANIKA (montant en lettres,
+  référence au bail, article 22 de la loi de 1989), le dépose sur l'espace
+  du colocataire (rubrique Bail & documents, « Reçu de dépôt de garantie »)
+  et l'annonce par e-mail. « Reçu PDF » le rouvre ou le régénère.
+- **Paramètres → « Dépôt de garantie »** : objet, délai proposé avant
+  l'entrée, coordonnées de paiement propres et message complémentaire de
+  l'appel (variables {prenom} {nom} {montant} {convenu} {date} {dateLongue}
+  {logement} {adresse} {entree}). Copies : nouveau type « Dépôts de garantie
+  (appels, reçus) » dans « Adresses e-mail ».
+Les cautions déjà enregistrées gardent leurs dates ; une caution reçue sans
+reçu publié propose « Reçu PDF ».
+
 **Nouveau en v45 — dépôt de garantie aligné sur le loyer.** Le montant
 convenu de chaque colocataire est par défaut un mois de son loyer hors
 charges (sa part sur le bail), au lieu du dépôt du bail divisé à parts

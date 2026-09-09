@@ -65,11 +65,13 @@ export default {
       titre: 'Les cautions',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
-          'La page « Cautions » liste le dépôt de garantie de chaque colocataire : convenu, reçu, restitué.',
-          ['À l’encaissement : ', h('strong', { texte: 'Reçue aujourd’hui' }),
-            ' (ou « Modifier » pour une date ou un montant différents).'],
-          'À la fin du bail : « Modifier » → renseignez la restitution, déduction faite des éventuelles retenues.',
-          'Le dépôt de garantie n’est pas un loyer : il ne compte pas dans les recettes.',
+          'La page « Cautions » suit le dépôt de garantie de chaque colocataire : convenu (un mois de son loyer hors charges, modifiable), appelé, reçu, restitué.',
+          ['Avant la remise des clés : ', h('strong', { texte: 'Appeler le dépôt' }),
+            ' envoie l’e-mail d’appel de dépôt de garantie (montant, date limite, coordonnées de paiement) — un document à part, jamais mêlé à l’appel de loyer ; « Relancer » renvoie un rappel.'],
+          ['À l’encaissement : ', h('strong', { texte: 'Dépôt reçu…' }),
+            ' (date, montant, mode de versement) génère le reçu de dépôt de garantie PDF ANIKA, le dépose sur l’espace du colocataire et l’annonce par e-mail ; « Reçu PDF » le rouvre.'],
+          'À la fin du bail : « Restituer » → retenues éventuelles, décompte de restitution ANIKA sur son espace.',
+          'Le texte de l’appel se règle dans Paramètres → « Dépôt de garantie » ; le dépôt de garantie n’est pas un loyer : il ne compte pas dans les recettes.',
         ]),
       ]),
     }));

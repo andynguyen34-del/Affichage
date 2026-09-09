@@ -19,6 +19,7 @@ const LIBELLES_TYPE = {
   'etat-des-lieux': { libelle: 'État des lieux', pluriel: 'États des lieux', icone: '📷' },
   bail: { libelle: 'Bail', pluriel: 'Baux', icone: '📜' },
   regularisation: { libelle: 'Régularisation des charges', pluriel: 'Régularisations des charges', icone: '💧' },
+  depot: { libelle: 'Reçu de dépôt de garantie', pluriel: 'Reçus de dépôt de garantie', icone: '🛡️' },
   restitution: { libelle: 'Restitution du dépôt de garantie', pluriel: 'Restitutions de dépôt de garantie', icone: '💶' },
   autre: { libelle: 'Document', pluriel: 'Documents', icone: '📄' },
 };
@@ -689,7 +690,7 @@ export async function rendrePortail({ seDeconnecter }) {
       ]);
     }
     else if (cle === 'quittances') section = sectionDocuments(documents, ['quittance'], { titre: '🧾 Quittances de loyer', vide: 'Aucune quittance pour l’instant : elle est publiée ici dès que votre loyer du mois est réglé.' });
-    else if (cle === 'documents') section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
+    else if (cle === 'documents') section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'depot', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
     else if (cle === 'justificatifs') section = sectionJustificatifs({ portail, surChargement: (manquants) => { etatPortail.justificatifsManquants = manquants; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
     else section = sectionCompte({ portail, seDeconnecter });
     // L'accueil se recalcule à chaque affichage (tâches à jour) ; les autres restent en mémoire.
