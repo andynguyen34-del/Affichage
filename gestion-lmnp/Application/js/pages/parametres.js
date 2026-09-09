@@ -532,9 +532,10 @@ function carteCourriels(parametres) {
           { titre: 'Quand', valeur: (c) => (c.le ? new Date(c.le).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—') },
           { titre: 'Destinataires', valeur: (c) => c.to.join(', ') || '—' },
           { titre: 'Objet', valeur: (c) => c.sujet || '(sans objet)' },
-          { titre: 'État', valeur: (c) => {
+          { titre: 'État · expéditeur', valeur: (c) => {
             const [libelle, ton] = LIBELLES[c.etat] || LIBELLES.PENDING;
-            return h('div', {}, [badge(libelle, ton), c.erreur ? h('div', { class: 'legende', style: 'color:var(--alerte);max-width:22rem', texte: c.erreur }) : null, c.tentatives > 1 ? h('div', { class: 'legende', texte: `${c.tentatives} essais` }) : null]);
+            const par = c.par ? `${c.expediteur ? `${c.expediteur} · ` : ''}${c.par}` : (c.etat === 'SUCCESS' ? 'ancienne fonction envoiMail' : '');
+            return h('div', {}, [badge(libelle, ton), par ? h('div', { class: 'legende', texte: par }) : null, c.erreur ? h('div', { class: 'legende', style: 'color:var(--alerte);max-width:22rem', texte: c.erreur }) : null, c.tentatives > 1 ? h('div', { class: 'legende', texte: `${c.tentatives} essais` }) : null]);
           } },
         ],
         lignes,

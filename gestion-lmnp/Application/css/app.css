@@ -124,6 +124,11 @@ tr.ligne-cible td { background: var(--attention-clair); }
 .pieces-communes-titre { font-weight: 600; color: var(--accent-fonce); margin-right: .3rem; }
 .justificatifs-logement { margin-top: .9rem; padding-top: .6rem; border-top: 1px dashed var(--bordure-forte); }
 .etiquette-commun { display: inline-block; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; background: var(--attention-clair); color: var(--attention); padding: .05rem .4rem; border-radius: 4px; margin-left: .4rem; vertical-align: middle; }
+.edl-meuble-photos { grid-column: 1 / -1; display: flex; flex-direction: column; gap: .25rem; padding-top: .35rem; border-top: 1px dashed var(--bordure); }
+.alerte-echeances { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.alerte-echeances .bouton { margin-left: auto; }
+.maj-echeances td { vertical-align: top; }
+.maj-echeances label { display: flex; gap: .4rem; align-items: flex-start; cursor: pointer; }
 .justificatifs-logement-titre { font-weight: 600; color: var(--accent-fonce); margin-bottom: .4rem; }
 .lien-locataire { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-fonce); cursor: pointer; text-decoration: underline dotted; }
 .lien-locataire:hover { color: var(--accent); }

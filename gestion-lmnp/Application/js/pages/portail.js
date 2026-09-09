@@ -136,24 +136,29 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
   const rechargerFichiers = async () => {
     try { fichiers = await api.listerFichiers('portail', prefixe); } catch { fichiers = []; }
   };
-  const fichiersDe = (piece) => fichiers.filter((f) => f.nom.startsWith(`${piece.numero}-${nettoyer(piece.nom)} `));
+  // Photos de la pièce : « {numéro}-{pièce} {horodatage}.jpg » ; photos d'un
+  // meuble (v43) : « {numéro}-{pièce} ~ {meuble} #{id} {horodatage}.jpg ».
+  const nomPieceDe = (piece) => `${piece.numero}-${nettoyer(piece.nom)}`;
+  const prefixeMeuble = (piece, meuble) => `${nomPieceDe(piece)} ~ ${nettoyer(meuble.nom)} #${String(meuble.id || '').replace(/[^\w]/g, '').slice(0, 6)} `;
+  const fichiersDe = (piece) => fichiers.filter((f) => f.nom.startsWith(`${nomPieceDe(piece)} `) && !f.nom.includes(' ~ '));
+  const fichiersDuMeuble = (piece, meuble) => fichiers.filter((f) => f.nom.startsWith(prefixeMeuble(piece, meuble)));
 
-  const deposer = async (piece, { camera = false } = {}) => {
+  const deposer = async (piece, { camera = false, meuble = null } = {}) => {
     const choisi = await choisirFichier({ accept: 'image/*', multiple: !camera, camera });
     const liste = camera ? (choisi ? [choisi] : []) : choisi;
     if (!liste?.length) return;
     notifier(`Envoi de ${liste.length} photo(s)…`);
-    const nomPiece = `${piece.numero}-${nettoyer(piece.nom)}`;
+    const debut = meuble ? prefixeMeuble(piece, meuble) : `${nomPieceDe(piece)} `;
     for (const fichier of liste) {
       try {
         /* eslint-disable no-await-in-loop */
         const reduite = await compresserPhoto(fichier);
         const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        await api.deposerOctets('portail', `${prefixe}/${nomPiece} ${horodatage}.jpg`,
+        await api.deposerOctets('portail', `${prefixe}/${debut}${horodatage}.jpg`,
           new Uint8Array(await reduite.arrayBuffer()), 'image/jpeg');
       } catch (erreur) { signalerErreur(erreur); }
     }
-    notifier('Photos déposées : elles sont horodatées et ne peuvent plus être modifiées.', 'succes');
+    notifier(meuble ? `Photo(s) du meuble « ${meuble.nom} » déposée(s) : horodatées, non modifiables.` : 'Photos déposées : elles sont horodatées et ne peuvent plus être modifiées.', 'succes');
     await rechargerFichiers();
     dessinerPieces();
   };
@@ -196,6 +201,23 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
         if (!dejaCoche) zoneTexte.focus();
       },
     }, '✗ Remarque');
+    // Meuble (v43) : le colocataire peut y joindre ses propres photos.
+    let blocMeuble = null;
+    if (point.meuble) {
+      const piece = apercu.pieces.find((p) => p.id === point.pieceId);
+      const meuble = piece?.meubles.find((m) => m.id === point.cle.split(':m:')[1]);
+      if (piece && meuble) {
+        const mesPhotos = fichiersDuMeuble(piece, meuble);
+        blocMeuble = h('div', { class: 'edl-meuble-photos' }, [
+          h('span', { class: 'legende', texte: `Vos photos de ce meuble (${mesPhotos.length})` }),
+          h('div', { class: 'portail-photos' }, [
+            ...mesPhotos.map((f) => vignette('portail', f.chemin, `${meuble.nom} — ${f.nom}`)),
+            ouverte ? h('button', { class: 'bouton bouton-petit bouton-primaire', type: 'button', onclick: () => deposer(piece, { camera: true, meuble }).catch(signalerErreur) }, '📷 Photo du meuble') : null,
+            ouverte ? h('button', { class: 'bouton bouton-petit', type: 'button', onclick: () => deposer(piece, { meuble }).catch(signalerErreur) }, '+ Photos') : null,
+          ]),
+        ]);
+      }
+    }
     return h('div', { class: `edl-point${point.meuble ? ' meuble' : ''}`, 'data-cle': point.cle }, [
       h('div', { class: 'edl-constat' }, [
         h('div', { class: 'edl-constat-nom' }, [point.libelle, point.etat ? h('span', { class: `badge badge-etat etat-${point.etat}`, texte: libelleEtat(point.etat) }) : null]),
@@ -206,6 +228,7 @@ function sectionContradictoire(contradictoire, { surChangement = () => {} } = {}
         zoneTexte,
         !ouverte && !estRepondu(reponse) ? h('span', { class: 'legende', texte: 'Sans réponse : accord.' }) : null,
       ]),
+      blocMeuble,
     ]);
   };
 

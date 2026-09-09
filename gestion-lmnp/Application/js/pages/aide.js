@@ -19,6 +19,7 @@ export default {
       corps: h('div', { class: 'aide-bloc' }, [
         liste([
           'Les échéances de chaque colocataire se créent toutes seules à partir du bail et de la répartition des parts (bouton « Répartir » dans « Logements & baux »).',
+          'Une échéance enregistrée (quittance, virement, montant ajusté, appel de loyer) ne suit plus les modifications du bail : « Mettre à jour les échéances » sur la page Loyers propose de supprimer les orphelines (colocataire retiré, bail supprimé), de réaligner les montants sur la répartition, et de conserver celles qui portent un virement ou une quittance, sauf à cocher « supprimer quand même ». Un bandeau signale le cas dès qu’il se présente.',
           ['À réception d’un virement : page « Loyers » → ', h('strong', { texte: 'Virement reçu' }),
             ' sur la ligne du colocataire et du mois.'],
           'Les quittances, décomptes de régularisation et restitutions de dépôt sont édités à l’identité '
@@ -161,6 +162,7 @@ export default {
             + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
             + 'Quel que soit le bouton choisi, c’est le rôle du compte qui décide de l’écran ouvert : un colocataire ne voit jamais l’espace propriétaires.',
           'Créez aussi son compte de connexion dans la console Firebase (Authentication → Users → Add user).',
+          'Dans l’état des lieux contradictoire, le colocataire répond point par point (un second clic sur « D’accord » ou « Remarque » décoche) et peut joindre ses photos à chaque pièce et, depuis la v43, à chaque meuble (« Photo du meuble ») ; le relevé et l’annexe du rapport les rangent sous le meuble.',
           'Sur son espace, chaque état des lieux publié (entrée, sortie, plusieurs logements) est un bloc repliable, replié par défaut ; les pièces le sont aussi. '
             + '« Continuer » depuis l’accueil déplie directement l’état des lieux à compléter.',
           'Son espace est organisé en rubriques : Accueil (ce qu’il a à faire, la prochaine échéance de loyer publiée par l’appel de loyer, le dernier document), '

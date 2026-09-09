@@ -34,6 +34,19 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v43 — photos par meuble, mise à jour des échéances.** Sur son
+espace, le colocataire joint des photos à chaque meuble de l'état des lieux
+contradictoire (« Photo du meuble » sur la ligne du meuble) ; le relevé côté
+gérant et l'annexe du rapport les rangent sous le meuble. Un second clic sur
+« D'accord » ou « Remarque » décoche la réponse. Page Loyers : « Mettre à
+jour les échéances » compare les échéances enregistrées aux baux (colocataire
+retiré, bail supprimé, part modifiée) et propose de supprimer, réaligner ou
+conserver ; un bandeau apparaît dès qu'un écart existe ; une échéance qui
+porte un virement ou une quittance n'est supprimée que si l'on coche
+« supprimer quand même » (double confirmation). Paramètres → « Envoi des
+e-mails » indique l'expéditeur et la fonction de chaque envoi. À déployer :
+hébergement et fonctions (commande habituelle).
+
 **Nouveau en v42 — l'envoi des e-mails fait partie de la livraison.** La
 fonction `expedierCourriel` (dossier `functions-appel-loyer/`) expédie les
 courriels de la file « mail » par Gmail et note le résultat de chaque envoi ;

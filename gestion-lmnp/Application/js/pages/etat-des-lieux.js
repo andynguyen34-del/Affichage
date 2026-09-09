@@ -11,7 +11,7 @@ import { estCourteDuree, bienDeEdl } from '../logements.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
 import { publierDocument, ouvrirFenetreContradictoire, destinatairesDe } from '../portail-publication.js';
-import { apercuPourColocataire, annexeContradictoire, cheminPartage, finDeFenetre, finEnMillisecondes, DUREE_PAR_DEFAUT, libelleEtat } from '../contradictoire.js';
+import { apercuPourColocataire, annexeContradictoire, cheminPartage, finDeFenetre, finEnMillisecondes, DUREE_PAR_DEFAUT, libelleEtat, legendeDepot } from '../contradictoire.js';
 import { compresserPhoto } from '../photos.js';
 
 const PIECES_PROPOSEES = ['Séjour', 'Cuisine', 'Chambre 1', 'Chambre 2', 'Chambre 3',
@@ -685,7 +685,7 @@ function carteContradictoire(edl, donnees, contexte) {
           h('strong', { texte: `${rem.piece} · ${rem.libelle}` }), rem.etat ? ` (${libelleEtat(rem.etat)})` : '', ` : ${rem.texte || 'remarque sans texte'}`,
         ]))) : null,
         r.fichiers.length ? h('div', { style: 'display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem' },
-          r.fichiers.map((f) => bouton(f.nom, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true }))) : null,
+          r.fichiers.map((f) => bouton(`📷 ${legendeDepot(f.nom)}`, () => api.ouvrirFichier('portail', f.chemin).catch(signalerErreur), { petit: true, titre: f.nom }))) : null,
       ]);
     }));
     if (!resultats.length) bloc.append(h('p', { class: 'legende', texte: 'Aucun colocataire rattaché à cet état des lieux.' }));
@@ -954,7 +954,7 @@ async function genererRapport(edl, donnees, { annexe = false } = {}) {
         let fichiers = [];
         try { fichiers = await api.listerFichiers('portail', `${email}/contradictoire/${edl.id}`); } catch { fichiers = []; }
         for (const fichier of fichiers) {
-          try { photos.push({ octets: await api.lireOctets('portail', fichier.chemin), legende: fichier.nom.replace(/\.jpe?g$/i, '') }); } catch { /* photo illisible */ }
+          try { photos.push({ octets: await api.lireOctets('portail', fichier.chemin), legende: legendeDepot(fichier.nom) }); } catch { /* photo illisible */ }
         }
       }
       entrees.push({ nom: nomDe(locataire), reponses: reponses?.reponses || {}, majLe: reponses?.majLe || '', photos });

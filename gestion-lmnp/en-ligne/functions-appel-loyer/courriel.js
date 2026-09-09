@@ -108,7 +108,7 @@ export async function expedier(base, ref, { transport = null, force = false } = 
     await ref.update({
       'delivery.state': 'SUCCESS', 'delivery.endTime': FieldValue.serverTimestamp(),
       'delivery.messageId': String(info?.messageId || ''), 'delivery.error': FieldValue.delete(),
-      'delivery.par': 'expedierCourriel',
+      'delivery.par': 'expedierCourriel', 'delivery.expediteur': String(COURRIEL_EXPEDITEUR.value() || ''),
     });
     return { ok: true, destinataires };
   } catch (erreur) {
@@ -140,6 +140,8 @@ const resume = (photo) => {
     etat: livraison?.state || 'PENDING',
     erreur: livraison?.error || '',
     tentatives: Number(livraison?.attempts || 0),
+    par: String(livraison?.par || ''),
+    expediteur: String(livraison?.expediteur || ''),
     le: millis(livraison?.endTime) || millis(livraison?.startTime) || millis(d.creeLe) || 0,
   };
 };

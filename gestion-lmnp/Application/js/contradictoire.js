@@ -21,6 +21,19 @@ export function finDeFenetre(dateEdl, dureeJours = DUREE_PAR_DEFAUT) {
 /** Fin de fenêtre en millisecondes : le jour de fin est inclus (jusqu'à minuit, heure de Paris à peu près). */
 export const finEnMillisecondes = (finLe) => Date.parse(`${String(finLe).slice(0, 10)}T23:59:59+02:00`);
 
+/**
+ * Légende d'une photo déposée par un colocataire, d'après son nom de fichier :
+ * « 3-Séjour 2026-09-09T14-05-00.jpg » (pièce) ou
+ * « 3-Séjour ~ Canapé #ab12cd 2026-09-09T14-05-00.jpg » (meuble, v43).
+ */
+export function legendeDepot(nom) {
+  const base = String(nom || '').replace(/\.[a-z0-9]+$/i, '');
+  const m = base.match(/^(\d+)-(.*?)(?: ~ (.*?) #\w+)? (\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})/);
+  if (!m) return base;
+  const [, , piece, meuble, a, mo, j, hh, mi] = m;
+  return `${piece}${meuble ? ` — ${meuble}` : ''} · ${j}/${mo}/${a} ${hh}:${mi}`;
+}
+
 /** Chemin, dans l'espace « partage », de la copie d'une photo de l'état des lieux. */
 export const cheminPartage = (chemin) => `etats-des-lieux/${chemin}`;
 
