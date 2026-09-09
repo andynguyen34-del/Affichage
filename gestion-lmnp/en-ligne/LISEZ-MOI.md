@@ -34,6 +34,11 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v44 — déploiement depuis GitHub.** Plus de zip ni de PC : un
+bouton « Run workflow » dans l'onglet Actions du dépôt (ou la fusion d'une
+pull request dans `main`) construit et déploie tout. Réglage unique décrit
+plus bas, section « Déploiement depuis GitHub ».
+
 **Nouveau en v43 — photos par meuble, mise à jour des échéances.** Sur son
 espace, le colocataire joint des photos à chaque meuble de l'état des lieux
 contradictoire (« Photo du meuble » sur la ligne du meuble) ; le relevé côté
@@ -401,6 +406,33 @@ l'appareil. Quel que soit le bouton choisi, le rôle du compte décide de
 l'écran ouvert : un colocataire ne voit que son espace (quittances, bail,
 état des lieux, dépôts), les règles de sécurité lui interdisent tout le
 reste.
+
+## Déploiement depuis GitHub (v44) — sans zip ni PC
+
+Le dépôt contient `.github/workflows/deployer-lmnp.yml` : GitHub construit
+l'application et déploie hébergement, règles et fonctions sur
+`gestion-lmnp-anika`. Deux façons de le lancer :
+- **à la main** : GitHub → onglet Actions → « Déployer LMNP » → « Run
+  workflow » (choix de la branche, « tout » ou « hosting-seul ») ;
+- **automatiquement** : à chaque mise à jour de la branche `main` qui touche
+  `gestion-lmnp/` (par exemple quand une pull request est fusionnée).
+
+Réglage unique, à faire une fois :
+1. Console Google Cloud du projet → IAM et administration → Comptes de
+   service → Créer : nom `deploiement-github`, rôles **Éditeur**,
+   **Utilisateur du compte de service** et **Administrateur Firebase**.
+   Puis onglet Clés → Ajouter une clé → JSON : un fichier se télécharge.
+2. GitHub → dépôt → Settings → Secrets and variables → Actions :
+   - Secrets → New repository secret : `FIREBASE_SERVICE_ACCOUNT`, valeur =
+     tout le contenu du fichier JSON ;
+   - Variables → New repository variable : `GMAIL_COMPTE` (adresse Gmail qui
+     expédie) et `COURRIEL_EXPEDITEUR` (ex. `Andy Nguyen <adresse@gmail.com>`).
+3. Supprimez le fichier JSON de votre PC : GitHub en a une copie chiffrée,
+   personne d'autre.
+
+Le mot de passe d'application Gmail reste dans le Secret Manager du projet ;
+il ne passe ni par GitHub ni par le dépôt. Le zip et `DEPLOYER.cmd` restent
+disponibles en secours.
 
 ## L'envoi des e-mails (fonction `expedierCourriel`, v42)
 
