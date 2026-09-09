@@ -34,6 +34,12 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v45 — dépôt de garantie aligné sur le loyer.** Le montant
+convenu de chaque colocataire est par défaut un mois de son loyer hors
+charges (sa part sur le bail), au lieu du dépôt du bail divisé à parts
+égales ; pour un locataire seul, le dépôt du bail s'il est renseigné, sinon
+son loyer. « Modifier » sur la ligne fixe un autre montant, conservé.
+
 **Nouveau en v44 — dépôts de garantie fantômes.** La mise à jour de la page
 Loyers couvre aussi les dépôts de garantie : un dépôt enregistré dont le bail
 a été supprimé ou dont le colocataire n'est plus sur le bail est proposé à la

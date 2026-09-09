@@ -25,8 +25,13 @@ function lignesCautions(donnees) {
   for (const bail of donnees.baux) {
     if (bail.type === 'saisonnier') continue; // pas de caution en saisonnier
     const flux = fluxDuBail(bail);
-    const attenduParDefaut = flux.length
-      ? centimes((Number(bail.depotGarantie) || 0) / flux.length) : 0;
+    // Convenu par défaut (v45) : un mois de loyer hors charges de chaque
+    // colocataire (sa part) ; pour un locataire seul, le dépôt du bail s'il est
+    // renseigné, sinon son loyer. Modifiable ligne par ligne (« Modifier »).
+    const colocation = (bail.colocataires || []).some((c) => c && c.locataireId);
+    const attenduDe = (payeur) => (colocation
+      ? centimes(Number(payeur.loyerHc) || 0)
+      : centimes(Number(bail.depotGarantie) || Number(payeur.loyerHc) || 0));
     for (const payeur of flux) {
       const id = `${bail.id}-${String(payeur.locataireId).slice(0, 8)}`;
       const existante = enregistrees.get(id);
@@ -35,7 +40,7 @@ function lignesCautions(donnees) {
         id,
         bailId: bail.id,
         locataireId: payeur.locataireId,
-        attendu: attenduParDefaut,
+        attendu: attenduDe(payeur),
         ...existante,
         bail,
       });
@@ -255,7 +260,7 @@ export default {
 
     conteneur.append(carte({
       titre: 'Dépôts de garantie',
-      aide: 'Le dépôt de garantie n’est pas un loyer : il se suit ici, pas dans les recettes.',
+      aide: 'Le dépôt de garantie n’est pas un loyer : il se suit ici, pas dans les recettes. Convenu par défaut : un mois de loyer hors charges de chaque colocataire (sa part), modifiable ligne par ligne.',
       serre: true,
       corps: tableau({
         colonnes: [
