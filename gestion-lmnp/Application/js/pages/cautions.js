@@ -133,7 +133,7 @@ async function appelerDepot(donnees, ligne, { relance = false } = {}) {
         bouton(relance ? 'Envoyer la relance' : 'Envoyer l’appel', async () => {
           if (!champDate.value) { notifier('Indiquez la date limite.', 'erreur'); return; }
           const final = dessinerApercu();
-          fermer();
+          fermer({ valide: true });
           try {
             const envoye = await executer(api.envoyerCourriel({ type: 'depots', destinataires: final.destinataires, sujet: final.sujet, html: final.html }), null);
             if (envoye !== null) {

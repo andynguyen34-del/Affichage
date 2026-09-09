@@ -34,6 +34,20 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v47 — e-mail « Bienvenue sur votre espace ».** Page
+Locataires : « Bienvenue ✉ » (par personne) ou « Bienvenue aux nouveaux »
+crée le compte de connexion du colocataire (opération `compte-creer` de la
+fonction relais, réservée aux gérants), déclenche l'e-mail Firebase de
+choix du mot de passe, ouvre son espace (document portail, avec
+`bienvenueLe` / `compteCreeLe`) et envoie la bienvenue : adresse de
+l'espace, identifiant, quatre étapes de première connexion, icône sur PC
+et tablette, ce qu'on trouve sur l'espace, justificatifs manquants,
+raccourci « Résidence ANIKA.url » joint. La colonne « Espace en ligne »
+affiche « bienvenue envoyée le … · compte créé ». Paramètres : carte
+« Bienvenue sur l'espace » (objet, message d'accueil, exemple à
+soi-même) ; type de copie « Bienvenue, accès à l'espace ». Cette version
+redéploie la fonction `fichiers` (commande habituelle, DEPLOYER.cmd).
+
 **Nouveau en v46 — appel et reçu de dépôt de garantie.** Le dépôt a ses
 propres documents, distincts de l'appel de loyer et de la quittance (l'appel
 de loyer n'en parle jamais) :
@@ -431,17 +445,28 @@ connexion.
 ## Les comptes des colocataires
 
 1. Renseignez l'adresse e-mail du colocataire dans l'application
-   (« Logements & baux » → Locataires → Modifier).
+   (« Locataires » → Modifier).
 2. Ouvrez son accès dans « Paramètres → Accès à l'application ».
-3. Créez son compte de connexion dans la console Firebase :
-   Authentication → Users → « Add user » (même adresse + un mot de passe
-   que vous lui communiquez).
+3. Page Locataires → **« Bienvenue ✉ »** (ou « Bienvenue aux nouveaux »,
+   v47) : l'application crée son compte de connexion (fonction serveur,
+   mot de passe aléatoire jamais communiqué), Firebase lui envoie
+   « Réinitialisez votre mot de passe » pour qu'il choisisse le sien, son
+   espace est ouvert et il reçoit l'e-mail de bienvenue : adresse de
+   l'espace, identifiant, les quatre étapes de première connexion, l'icône
+   « Résidence ANIKA » (PC, tablette), les justificatifs à déposer, avec le
+   raccourci « Résidence ANIKA.url » en pièce jointe. « Renvoyer la
+   bienvenue » renvoie la procédure. Texte réglable dans Paramètres →
+   « Bienvenue sur l'espace » (« M'envoyer un exemple »).
 
-Donnez-lui l'adresse de son espace :
+L'adresse de son espace :
 
 ```
 https://gestion-lmnp-anika.web.app/colocataire
 ```
+
+(Avant la v47, le compte se créait à la main dans la console Firebase :
+Authentication → Users → « Add user ». Cela reste possible ; la bienvenue
+détecte un compte existant.)
 
 La page de connexion s'ouvre alors directement sur « Colocataires »
 (titre « Résidence ANIKA — Espace colocataires », consignes de première

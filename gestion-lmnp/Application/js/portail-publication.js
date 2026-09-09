@@ -65,6 +65,26 @@ export async function publierDocument({ locataire, type, titre, nomFichier, octe
 }
 
 /**
+ * Ouvre l'espace d'un colocataire (v47) : le document portail existe dès la
+ * bienvenue, avant tout document publié, avec son nom et son logement ;
+ * `complement` y inscrit par exemple bienvenueLe / compteCreeLe.
+ */
+export async function ouvrirEspace(locataire, complement = {}) {
+  const email = String(locataire?.email || '').trim().toLowerCase();
+  if (!email) throw new Error(`${locataire?.prenom || ''} ${locataire?.nom || 'Ce colocataire'} n'a pas d'adresse e-mail.`);
+  const actuel = (await api.lirePortail(email)) || {};
+  await api.publierPortail(email, {
+    ...actuel,
+    nom: `${locataire.prenom || ''} ${locataire.nom || ''}`.trim() || actuel.nom || '',
+    locataireId: locataire.id || actuel.locataireId || '',
+    logement: logementDe(locataire) || actuel.logement || null,
+    documents: actuel.documents || [],
+    ...complement,
+  });
+  return { email };
+}
+
+/**
  * Ouvre (ou met à jour) la fenêtre de photos contradictoires d'un état des
  * lieux sur l'espace du colocataire : jusqu'à `finLe`, il peut déposer ses
  * propres photos, pièce par pièce. Envoie aussi l'e-mail d'information.

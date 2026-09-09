@@ -17,10 +17,11 @@
 
 import * as etat from '../etat.js';
 import * as api from '../api.js';
-import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur } from '../ui.js';
+import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur, ouvrirModale } from '../ui.js';
 import { date, montant, aujourdhui } from '../format.js';
 import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeCommun, libelleCategorie, estCommune } from '../justificatifs.js';
-import { destinatairesDe, logementDe } from '../portail-publication.js';
+import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publication.js';
+import { preparerBienvenue } from '../bienvenue.js';
 import { bailEstActif, ouvrirLocataire } from './bien.js';
 import { libelleTypeLocation } from '../logements.js';
 
@@ -220,13 +221,86 @@ function celluleEspace(l) {
   const releve = releveDe(l);
   if (!releve) return h('div', { class: 'legende', texte: 'Relevé en cours…' });
   const portail = releve.portail;
-  if (!portail) return h('div', {}, [badge('Aucun document publié', 'attente'), h('div', { class: 'legende', texte: 'L’espace se crée au premier document publié.' })]);
+  if (!portail) return h('div', {}, [badge('Espace à ouvrir', 'attente'), h('div', { class: 'legende', texte: '« Bienvenue » lui ouvre son espace et crée son compte de connexion.' })]);
   const nbDocs = (portail.documents || []).length;
   const acces = portail.dernierAcces ? String(portail.dernierAcces).slice(0, 10) : '';
+  const details = [
+    `${nbDocs} document${nbDocs > 1 ? 's' : ''} publié${nbDocs > 1 ? 's' : ''}${acces ? ` · connecté le ${date(acces)}` : ''}`,
+    portail.bienvenueLe ? `bienvenue envoyée le ${date(String(portail.bienvenueLe).slice(0, 10))}${portail.compteCreeLe ? ' · compte créé' : ''}` : (acces ? '' : 'bienvenue pas encore envoyée'),
+  ].filter(Boolean);
   return h('div', {}, [
     acces ? badge('Activé', 'succes') : badge('Jamais connecté', 'attention'),
-    h('div', { class: 'legende', texte: `${nbDocs} document${nbDocs > 1 ? 's' : ''} publié${nbDocs > 1 ? 's' : ''}${acces ? ` · connecté le ${date(acces)}` : ''}` }),
+    ...details.map((d) => h('div', { class: 'legende', texte: d })),
   ]);
+}
+
+/** Les catégories de justificatifs qui manquent à une personne, d'après le dernier relevé. */
+function manquantsDe(tout, l) {
+  const bien = tout.biens.find((b) => b.id === bailCourant(tout.baux, l.id)?.bienId);
+  return (bien && bilanLogement(tout, bien)?.parPersonne.get(l.id)?.manquants) || [];
+}
+
+/**
+ * Bienvenue sur l'espace (v47) : crée le compte de connexion (fonction
+ * serveur), déclenche l'e-mail Firebase « Réinitialisez votre mot de passe »,
+ * ouvre l'espace (document portail) et envoie l'e-mail de bienvenue avec le
+ * raccourci .url en pièce jointe. `renvoi` : bienvenue déjà envoyée.
+ */
+async function envoyerBienvenue(tout, locataire, { renvoi = false, confirmerAvant = true } = {}) {
+  const email = emailDe(locataire);
+  if (!email) { notifier(`${nomDe(locataire)} n’a pas d’adresse e-mail : renseignez-la (Modifier).`, 'erreur'); return false; }
+  const bail = bailCourant(tout.baux, locataire.id);
+  const bien = tout.biens.find((b) => b.id === bail?.bienId) || null;
+  const preparer = (compteCree) => preparerBienvenue({ locataire, bail, bien, parametres: tout.parametres, origine: window.location.origin, manquants: manquantsDe(tout, locataire), compteCree, renvoi });
+  const executerEnvoi = async () => {
+    let compte = null;
+    try { compte = await api.creerCompteColocataire(email); }
+    catch (erreur) { notifier(`Compte de connexion : ${erreur.message}`, 'erreur'); }
+    try { await api.envoyerReinitialisation(email); }
+    catch (erreur) { notifier(`E-mail de mot de passe : ${erreur.message}`, 'erreur'); }
+    const courriel = preparer(Boolean(compte));
+    await api.envoyerCourriel({ type: 'bienvenue', destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html,
+      piecesJointes: [{ nom: courriel.raccourci.nom, base64: btoa(courriel.raccourci.contenu) }] });
+    const quand = new Date().toISOString();
+    const complement = { bienvenueLe: quand, ...(compte ? { compteCreeLe: quand } : {}) };
+    await ouvrirEspace(locataire, complement);
+    // Le relevé en mémoire reflète tout de suite l'envoi ; le prochain relevé relit l'espace.
+    const actuel = releves.get(email);
+    if (actuel) releves.set(email, { ...actuel, portail: { ...(actuel.portail || {}), ...complement } });
+    return compte;
+  };
+  if (!confirmerAvant) return executerEnvoi();
+
+  const apercu = h('div', { class: 'apercu-courriel', style: 'border:1px solid var(--bordure);border-radius:6px;padding:.4rem .8rem;margin-top:.6rem;max-height:24rem;overflow:auto;background:var(--fond-carte)' });
+  const courriel = preparer(true);
+  apercu.append(h('div', { class: 'legende', style: 'margin:.3rem 0', texte: `Objet : ${courriel.sujet}` }));
+  const corps = h('div');
+  corps.innerHTML = courriel.html;
+  apercu.append(corps);
+  return new Promise((resoudre) => {
+    const fermer = ouvrirModale({
+      titre: `${renvoi ? 'Renvoyer la bienvenue' : 'Bienvenue sur l’espace'} — ${nomDe(locataire)}`,
+      large: true,
+      surFermeture: () => resoudre(false),
+      corps: h('div', {}, [
+        h('p', { class: 'legende', texte: `E-mail à ${courriel.destinataires.join(', ')}, avec le raccourci « ${courriel.raccourci.nom} » en pièce jointe. `
+          + 'À l’envoi : le compte de connexion est créé s’il n’existe pas (mot de passe aléatoire, jamais communiqué), puis Firebase lui envoie « Réinitialisez votre mot de passe » pour qu’il choisisse le sien. '
+          + 'Le texte se règle dans Paramètres → « Bienvenue sur l’espace ».' }),
+        apercu,
+      ]),
+      pied: [
+        bouton('Annuler', () => { fermer(); resoudre(false); }),
+        bouton(renvoi ? 'Renvoyer' : 'Envoyer la bienvenue', async () => {
+          fermer({ valide: true });
+          try {
+            const compte = await executerEnvoi();
+            notifier(`Bienvenue envoyée à ${email}${compte?.cree ? ' · compte de connexion créé' : (compte?.existait ? ' · compte déjà existant' : '')}.`, 'succes');
+            resoudre(true);
+          } catch (erreur) { signalerErreur(erreur); resoudre(false); }
+        }, { type: 'primaire' }),
+      ],
+    });
+  });
 }
 
 /** Pièces personnelles d'un colocataire (assurance), d'après le bilan de son logement. */
@@ -276,7 +350,7 @@ function lignePiecesCommunes(tout, bien, bailleur) {
 
 // ---------------------------------------------------------------- page
 
-function tableLocataires(tout, lignes, bailleur, contexte) {
+function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => {}) {
   const bilans = new Map(tout.biens.map((b) => [b.id, bilanLogement(tout, b)]));
   const bilanDe = (l) => bilans.get(bailCourant(tout.baux, l.id)?.bienId) || null;
   return tableau({
@@ -287,6 +361,9 @@ function tableLocataires(tout, lignes, bailleur, contexte) {
       { titre: 'Espace en ligne', valeur: (l) => celluleEspace(l) },
       { titre: 'Justificatifs', valeur: (l) => celluleJustificatifs(tout, l, bilanDe(l), bailleur) },
       { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
+        emailDe(l) && api.MODE === 'nuage' && releveDe(l) ? (releveDe(l).portail?.bienvenueLe
+          ? bouton('Renvoyer la bienvenue', () => envoyerBienvenue(tout, l, { renvoi: true }).then((fait) => { if (fait) lancerReleve(); }).catch(signalerErreur), { petit: true, titre: 'Nouvel e-mail « Rappel — Bienvenue… » avec la procédure de connexion' })
+          : bouton('Bienvenue ✉', () => envoyerBienvenue(tout, l).then((fait) => { if (fait) lancerReleve(); }).catch(signalerErreur), { petit: true, type: 'primaire', titre: 'Ouvre son espace, crée son compte de connexion et lui envoie la procédure' })) : null,
         bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
         bouton('✕', async () => {
           const confirme = await confirmer({
@@ -395,8 +472,22 @@ export default {
 
     const lancerReleve = () => releverTous({ locataires: visibles, biens: logements }, () => { contexte.redessinerNavigation?.(); contexte.redessiner?.({ conserverPosition: true }); });
 
+    const nouveaux = () => visibles.filter((l) => emailDe(l) && releveDe(l) && !releveDe(l).portail?.bienvenueLe && !releveDe(l).portail?.dernierAcces);
     conteneur.append(barreOutils([
       bouton('+ Locataire', () => ouvrirLocataire(null), { type: 'primaire' }),
+      api.MODE === 'nuage' ? bouton('Bienvenue aux nouveaux', async () => {
+        const liste = nouveaux();
+        if (!liste.length) { notifier('Personne à accueillir : chacun a reçu sa bienvenue ou s’est déjà connecté (ou relevé pas encore fait).'); return; }
+        const ok = await confirmer({ titre: 'Bienvenue sur l’espace', message: `Envoyer la bienvenue (compte de connexion, e-mail de mot de passe, procédure et raccourci) à : ${liste.map(nomDe).join(', ')} ?`, libelleValider: 'Envoyer' });
+        if (!ok) return;
+        let envoyes = 0;
+        for (const l of liste) {
+          // eslint-disable-next-line no-await-in-loop
+          try { await envoyerBienvenue(tout, l, { confirmerAvant: false }); envoyes += 1; } catch (erreur) { notifier(`${nomDe(l)} : ${erreur.message}`, 'erreur'); }
+        }
+        notifier(`Bienvenue envoyée à ${envoyes} personne${envoyes > 1 ? 's' : ''}.`, envoyes ? 'succes' : 'erreur');
+        lancerReleve();
+      }, { titre: 'À tous ceux qui ont une adresse e-mail et n’ont ni reçu la bienvenue ni ouvert leur espace' }) : null,
       bouton('Relever les justificatifs', () => { lancerReleve(); notifier('Relevé en cours…'); }, { titre: 'Relire les espaces et les justificatifs déposés' }),
       bouton('Rappel par e-mail', async () => {
         const retardataires = locatairesAvecManquants(tout).filter((l) => visibles.includes(l));
@@ -424,7 +515,7 @@ export default {
     if (contexte.bienId) {
       const bien = logements[0];
       if (bien) corps.append(lignePiecesCommunes(tout, bien, bailleur));
-      corps.append(tableLocataires(tout, tout.locataires.filter((l) => surLogement(l, contexte.bienId)), bailleur, contexte));
+      corps.append(tableLocataires(tout, tout.locataires.filter((l) => surLogement(l, contexte.bienId)), bailleur, contexte, lancerReleve));
     } else {
       for (const logement of logements) {
         const siens = tout.locataires.filter((l) => surLogement(l, logement.id));
@@ -433,20 +524,20 @@ export default {
           h('span', { class: 'legende', texte: `${logement.ville ? `${logement.ville} · ` : ''}${libelleTypeLocation(logement)} · ${siens.length} ${siens.length > 1 ? 'personnes' : 'personne'}` }),
         ]));
         corps.append(lignePiecesCommunes(tout, logement, bailleur));
-        corps.append(tableLocataires(tout, siens, bailleur, contexte));
+        corps.append(tableLocataires(tout, siens, bailleur, contexte, lancerReleve));
       }
       if (sansLogement.length) {
         corps.append(h('div', { class: 'section-logement section-logement-serree' }, [h('span', { class: 'section-logement-nom', texte: 'Bail sans logement connu' })]));
-        corps.append(tableLocataires(tout, sansLogement, bailleur, contexte));
+        corps.append(tableLocataires(tout, sansLogement, bailleur, contexte, lancerReleve));
       }
-      if (!tout.biens.length) corps.append(tableLocataires(tout, tout.locataires.filter((l) => !anciens.includes(l)), bailleur, contexte));
+      if (!tout.biens.length) corps.append(tableLocataires(tout, tout.locataires.filter((l) => !anciens.includes(l)), bailleur, contexte, lancerReleve));
     }
     conteneur.append(carte({ titre: 'Locataires', serre: true, corps }));
 
     if (anciens.length) {
       const details = h('details', { class: 'anciens-locataires' }, [
         h('summary', { texte: `Anciens locataires — sans bail en cours (${anciens.length})` }),
-        tableLocataires(tout, anciens, bailleur, contexte),
+        tableLocataires(tout, anciens, bailleur, contexte, lancerReleve),
       ]);
       conteneur.append(carte({ titre: '', serre: true, corps: details }));
     }

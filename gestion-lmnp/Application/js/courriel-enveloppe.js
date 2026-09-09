@@ -14,6 +14,7 @@ export const TYPES_COPIE = [
   { cle: 'documents', libelle: 'Quittances, décomptes, bail, restitutions' },
   { cle: 'justificatifs', libelle: 'Rappels de justificatifs' },
   { cle: 'contradictoire', libelle: 'État des lieux contradictoire, signatures' },
+  { cle: 'bienvenue', libelle: 'Bienvenue, accès à l’espace' },
 ];
 
 export const ADRESSE_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

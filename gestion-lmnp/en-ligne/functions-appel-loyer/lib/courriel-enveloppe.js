@@ -6,7 +6,8 @@ var TYPES_COPIE = [
   { cle: "depots", libelle: "Dépôts de garantie (appels, reçus)" },
   { cle: "documents", libelle: "Quittances, décomptes, bail, restitutions" },
   { cle: "justificatifs", libelle: "Rappels de justificatifs" },
-  { cle: "contradictoire", libelle: "État des lieux contradictoire, signatures" }
+  { cle: "contradictoire", libelle: "État des lieux contradictoire, signatures" },
+  { cle: "bienvenue", libelle: "Bienvenue, accès à l’espace" }
 ];
 var ADRESSE_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function normaliserAdresses(liste) {

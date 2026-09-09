@@ -57,6 +57,11 @@ async function identifier(req) {
   return { email, gerant, colocataire, bienId };
 }
 
+const lireCorpsJson = (req) => {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
+  try { return JSON.parse((req.rawBody || req.body || '').toString() || '{}'); } catch { return {}; }
+};
+
 const sonEspace = (qui, objet) => objet.startsWith(`portail/${qui.email}/`);
 const partage = (qui, objet) => qui.colocataire
   && (objet.startsWith('partage/etats-des-lieux/') || (qui.bienId && objet.startsWith(`partage/justificatifs/${qui.bienId}/`)));
@@ -108,6 +113,29 @@ export async function traiter(req, res) {
   if (op === 'signature-envoyer' || op === 'signature-confirmer') {
     try { await traiterSignature(op, req, res, qui); }
     catch (erreur) { if (erreur?.statut) throw refus(erreur.statut, erreur.message); throw erreur; }
+    return;
+  }
+
+  // Compte de connexion d'un colocataire (gérant, v47) : créé s'il n'existe
+  // pas, avec un mot de passe aléatoire jamais communiqué — le colocataire
+  // choisit le sien via l'e-mail « Réinitialisez votre mot de passe » que
+  // l'application déclenche ensuite. Renvoie { ok, cree, existait }.
+  if (op === 'compte-creer') {
+    if (!qui.gerant) throw refus(403, 'Réservé aux gérants.');
+    if (req.method !== 'POST') throw refus(405, 'Méthode non autorisée.');
+    const corps = lireCorpsJson(req);
+    const email = String(corps.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw refus(400, 'Adresse e-mail invalide.');
+    try {
+      const existant = await getAuth().getUserByEmail(email);
+      res.json({ ok: true, cree: false, existait: true, uid: existant.uid });
+      return;
+    } catch (erreur) {
+      if (erreur?.code !== 'auth/user-not-found') throw erreur;
+    }
+    const motDePasse = Array.from(crypto.getRandomValues(new Uint8Array(24)), (o) => 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'[o % 54]).join('');
+    const cree = await getAuth().createUser({ email, password: motDePasse, emailVerified: false });
+    res.json({ ok: true, cree: true, existait: false, uid: cree.uid });
     return;
   }
 

@@ -160,10 +160,12 @@ export default {
         liste([
           'Renseignez l’adresse e-mail du colocataire dans « Locataires », puis ouvrez son accès dans '
             + '« Paramètres → Accès à l’application ».',
-          'Donnez-lui l’adresse de son espace : https://gestion-lmnp-anika.web.app/colocataire — la page de connexion '
-            + 's’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
+          ['Puis, sur la page Locataires : ', h('strong', { texte: 'Bienvenue ✉' }),
+            ' (ou « Bienvenue aux nouveaux ») crée son compte de connexion, lui envoie l’e-mail Firebase « Réinitialisez votre mot de passe » pour qu’il choisisse le sien, '
+            + 'ouvre son espace et lui envoie l’e-mail de bienvenue : adresse https://gestion-lmnp-anika.web.app/colocataire, identifiant, les quatre étapes de première connexion, l’icône « Résidence ANIKA » sur PC et tablette, '
+            + 'les justificatifs à déposer, avec le raccourci « Résidence ANIKA.url » joint. Plus besoin de passer par la console Firebase. Texte réglable dans Paramètres → « Bienvenue sur l’espace ».'],
+          'La page de connexion s’ouvre directement sur « Colocataires » (le sélecteur Propriétaires / Colocataires en haut de la page permet de changer). '
             + 'Quel que soit le bouton choisi, c’est le rôle du compte qui décide de l’écran ouvert : un colocataire ne voit jamais l’espace propriétaires.',
-          'Créez aussi son compte de connexion dans la console Firebase (Authentication → Users → Add user).',
           'Dans l’état des lieux contradictoire, le colocataire répond point par point (un second clic sur « D’accord » ou « Remarque » décoche) et peut joindre ses photos à chaque pièce et, depuis la v43, à chaque meuble (« Photo du meuble ») ; le relevé et l’annexe du rapport les rangent sous le meuble.',
           'Sur son espace, chaque état des lieux publié (entrée, sortie, plusieurs logements) est un bloc repliable, replié par défaut ; les pièces le sont aussi. '
             + '« Continuer » depuis l’accueil déplie directement l’état des lieux à compléter.',

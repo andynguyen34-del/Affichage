@@ -536,6 +536,8 @@ const appelSignature = (op, corps) => appelJson(op, corps);
 export const etatCourriels = () => appelJson('courriels-etat');
 export const relancerCourriels = () => appelJson('courriels-relancer', { relancer: true });
 export const testerCourriel = (to = '') => appelJson('courriels-test', { to });
+/** Crée le compte de connexion d'un colocataire s'il n'existe pas (gérant, v47) : { cree, existait }. */
+export const creerCompteColocataire = (email) => appelJson('compte-creer', { email });
 
 /** Demande l'envoi du code de signature à l'adresse du colocataire connecté. */
 export const envoyerCodeSignature = (edlId) => appelSignature('signature-envoyer', { edlId });

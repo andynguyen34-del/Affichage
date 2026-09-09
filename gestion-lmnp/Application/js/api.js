@@ -42,6 +42,7 @@ export async function envoyerCodeSignature() { throw new Error('Signature à dis
 export async function confirmerSignature() { throw new Error('Signature à distance : version en ligne seulement.'); }
 export async function ecrireMesReponses() { /* sans objet */ }
 export async function completerPortail() { /* sans objet */ }
+export async function creerCompteColocataire() { throw new Error('Création de compte indisponible en version dossier.'); }
 export async function supprimerPortail() { /* sans objet */ }
 export async function envoyerCourriel() { throw new Error('Envoi de courriel indisponible en version dossier.'); }
 export async function telechargerFichier(espace, chemin) { return ouvrirFichier(espace, chemin); }

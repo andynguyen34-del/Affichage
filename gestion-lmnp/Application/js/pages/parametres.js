@@ -14,6 +14,7 @@ import { ENTREES, adresseEntree, installerEntree, telechargerRaccourci } from '.
 import { reglageAppel, apercuAppels, envoyerTest, envoyerAppels, lireJournalAppels, logementsAvecAppel } from '../appel-loyer-client.js';
 import { moisVise, jourEnvoi, dejaEnvoye } from '../appel-loyer.js';
 import { DEPOT_PAR_DEFAUT, reglageDepotDe } from '../depot-garantie.js';
+import { BIENVENUE_PAR_DEFAUT, reglageBienvenueDe, preparerBienvenue } from '../bienvenue.js';
 import { nomLogement } from '../logements.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
 import { TYPES_COPIE, normaliserAdresses, ADRESSE_VALIDE, expediteurCoherent, decomposerExpediteur, formaterExpediteur } from '../courriel-enveloppe.js';
@@ -288,6 +289,68 @@ function carteDepotGarantie(parametres) {
         reglage.message ? h('tr', {}, [h('th', { texte: 'Message' }), h('td', { texte: reglage.message })]) : null,
       ])),
       h('p', { class: 'legende', style: 'margin-top:.4rem', texte: 'Copies de ces e-mails : carte des adresses d’envoi ci-dessous, type « Dépôts de garantie (appels, reçus) ».' }),
+    ]),
+  });
+}
+
+/**
+ * Bienvenue sur l'espace (v47) : le texte de l'e-mail envoyé aux nouveaux
+ * colocataires depuis la page Locataires (objet, message d'accueil), et un
+ * exemple envoyé à soi-même.
+ */
+async function modifierBienvenue(parametres) {
+  const actuel = reglageBienvenueDe(parametres);
+  const saisie = await formulaire({
+    titre: 'Bienvenue sur l’espace',
+    large: true,
+    aide: 'E-mail envoyé depuis la page Locataires (« Bienvenue ») : adresse de l’espace, identifiant, première connexion, icône, justificatifs manquants. '
+      + 'Le message d’accueil remplace le paragraphe d’introduction ; les étapes de connexion restent fixes. Variables : {prenom} {nom} {logement} {adresse} {entree} {espace}.',
+    champs: [
+      { cle: 'objet', libelle: 'Objet de l’e-mail', type: 'texte', largeur: 'pleine', requis: true },
+      { cle: 'message', libelle: 'Message d’accueil (vide : texte standard)', type: 'zone' },
+    ],
+    valeurs: actuel,
+  });
+  if (!saisie) return;
+  await executer(etat.enregistrerParametres({ bienvenue: {
+    objet: String(saisie.objet || '').trim() || BIENVENUE_PAR_DEFAUT.objet,
+    message: String(saisie.message || ''),
+  } }), 'Bienvenue sur l’espace enregistrée.');
+}
+
+async function envoyerExempleBienvenue(donnees) {
+  const parametres = donnees.parametres;
+  const saisie = await formulaire({
+    titre: 'M’envoyer un exemple de bienvenue',
+    aide: 'L’e-mail tel qu’un colocataire le recevrait (exemplaire d’un locataire de votre dossier), envoyé à cette adresse avec la mention [EXEMPLE]. Aucun compte n’est créé.',
+    champs: [{ cle: 'adresse', libelle: 'Adresse de réception', type: 'texte', requis: true, largeur: 'pleine' }],
+    valeurs: { adresse: api.utilisateurEmail() || '' },
+    libelleValider: 'Envoyer l’exemple',
+  });
+  if (!saisie) return;
+  const locataire = donnees.locataires.find((l) => l.email) || { prenom: 'Prénom', nom: 'NOM', email: 'colocataire@exemple.fr' };
+  const bail = donnees.baux.find((b) => (b.colocataires || []).some((c) => c.locataireId === locataire.id) || b.locataireId === locataire.id) || null;
+  const bien = donnees.biens.find((b) => b.id === bail?.bienId) || donnees.biens[0] || null;
+  const courriel = preparerBienvenue({ locataire, bail, bien, parametres, origine: window.location.origin, manquants: [{ libelle: 'Attestation d’assurance habitation', periodicite: 'chaque année' }] });
+  await executer(api.envoyerCourriel({ type: 'test', destinataires: [saisie.adresse.trim()], sujet: `[EXEMPLE] ${courriel.sujet}`, html: courriel.html,
+    piecesJointes: [{ nom: courriel.raccourci.nom, base64: btoa(courriel.raccourci.contenu) }] }), `Exemple déposé pour ${saisie.adresse.trim()} — il part dans les secondes qui suivent.`);
+}
+
+function carteBienvenue(donnees) {
+  const reglage = reglageBienvenueDe(donnees.parametres);
+  return carte({
+    titre: 'Bienvenue sur l’espace',
+    aide: 'Le premier e-mail d’un colocataire : adresse de son espace, première connexion (le mot de passe se choisit via le lien Firebase, jamais par e-mail), icône « Résidence ANIKA », justificatifs à déposer, raccourci .url joint. Envoi depuis la page Locataires, qui crée aussi son compte de connexion.',
+    actions: [
+      bouton('Modifier le texte', () => modifierBienvenue(donnees.parametres).catch(signalerErreur), { petit: true }),
+      bouton('M’envoyer un exemple', () => envoyerExempleBienvenue(donnees).catch(signalerErreur), { petit: true }),
+    ],
+    corps: h('div', { class: 'reglage-bienvenue' }, [
+      h('table', {}, h('tbody', {}, [
+        h('tr', {}, [h('th', { texte: 'Objet' }), h('td', { texte: reglage.objet })]),
+        h('tr', {}, [h('th', { texte: 'Message d’accueil' }), h('td', { texte: String(reglage.message || '').trim() || 'texte standard (logement, adresse, ce qu’on trouve sur l’espace)' })]),
+      ])),
+      h('p', { class: 'legende', style: 'margin-top:.4rem', texte: 'Copies de ces e-mails : carte des adresses d’envoi ci-dessous, type « Bienvenue, accès à l’espace ».' }),
     ]),
   });
 }
@@ -801,6 +864,7 @@ export default {
     if (api.MODE === 'nuage') conteneur.append(carteIcones());
     if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer(donnees));
     if (api.MODE === 'nuage') conteneur.append(carteDepotGarantie(parametres));
+    if (api.MODE === 'nuage') conteneur.append(carteBienvenue(donnees));
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
     conteneur.append(carte({
