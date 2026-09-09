@@ -74,7 +74,7 @@ courriels de la file « mail » par Gmail et note le résultat de chaque envoi ;
 Paramètres → « Envoi des e-mails » l'affiche, relance ce qui est en attente
 et envoie un e-mail de test. Au premier déploiement, le terminal demande
 l'adresse Gmail qui expédie (`GMAIL_COMPTE`). Voir « L'envoi des e-mails »
-plus bas, et `RETIRER-ANCIEN-ENVOI.cmd` pour retirer l'ancienne fonction.
+plus bas.
 
 **Nouveau en v41 — justificatifs communs à la résidence.** L'entretien des
 climatiseurs et le ramonage concernent la maison : un seul document, déposé
@@ -477,10 +477,8 @@ avec « Relancer les envois en attente » (courriels jamais partis ou en échec,
 3 essais au plus) et « E-mail de test ».
 
 **Ancienne fonction `envoiMail`** (codebase « default », europe-west9,
-déployée à part jusqu'à la v41) : une fois l'e-mail de test reçu, lancez
-`RETIRER-ANCIEN-ENVOI.cmd` (une seule fois) pour la supprimer, sinon les
-courriels peuvent partir en double. L'extension « Trigger Email » n'est pas
-utilisée : ne l'installez pas.
+déployée à part jusqu'à la v41) : supprimée le 8 septembre 2026. L'extension
+« Trigger Email » n'est pas utilisée : ne l'installez pas.
 
 ## Où sont les photos et documents, et le relais de fichiers (v30)
 

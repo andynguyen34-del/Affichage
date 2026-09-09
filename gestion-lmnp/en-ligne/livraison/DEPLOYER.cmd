@@ -49,6 +49,5 @@ echo Termine. Verifiez la ligne "Deploy complete!" ci-dessus.
 echo.
 echo Premiere fois avec la v42 : le terminal a demande la valeur de GMAIL_COMPTE (adresse Gmail
 echo qui expedie) ; elle est conservee dans functions-appel-loyer\.env.gestion-lmnp-anika (modifiable au Bloc-notes).
-echo Puis, dans l'application, Parametres ^> Envoi des e-mails ^> "E-mail de test". Quand il arrive,
-echo lancez RETIRER-ANCIEN-ENVOI.cmd (une seule fois) pour que rien ne parte en double.
+echo Puis, dans l'application, Parametres ^> Envoi des e-mails ^> "E-mail de test".
 pause
