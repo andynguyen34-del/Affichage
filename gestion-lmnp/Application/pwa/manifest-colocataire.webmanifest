@@ -1,0 +1,18 @@
+{
+  "id": "/colocataire",
+  "name": "Résidence ANIKA",
+  "short_name": "Résidence ANIKA",
+  "description": "Votre espace colocataire : quittances, bail, état des lieux, dépôt de photos et de justificatifs.",
+  "lang": "fr",
+  "start_url": "/colocataire",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7f9",
+  "theme_color": "#2f5fa8",
+  "icons": [
+    { "src": "/icones/icone-colocataire-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icones/icone-colocataire-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icones/icone-colocataire-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

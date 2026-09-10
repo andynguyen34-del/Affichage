@@ -1,0 +1,331 @@
+// Fichier généré par Application/construire-fonctions.mjs — ne pas modifier à la main.
+
+// js/format.js
+var MOIS = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre"
+];
+var nomMois = (mois) => MOIS[mois - 1] || "";
+var euros = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
+var eurosRonds = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+var nombres = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+function montant(valeur, options = {}) {
+  const n = Number(valeur);
+  if (!Number.isFinite(n)) return "—";
+  if (options.rond) return eurosRonds.format(n);
+  return euros.format(n);
+}
+function dateLongue(iso) {
+  if (!iso) return "—";
+  const [a, m, j] = String(iso).slice(0, 10).split("-");
+  if (!a || !m || !j) return String(iso);
+  return `${Number(j)} ${nomMois(Number(m))} ${a}`;
+}
+function isoDepuis(annee, mois, jour) {
+  const dernierJour = new Date(annee, mois, 0).getDate();
+  const j = Math.min(Math.max(1, jour || 1), dernierJour);
+  return `${annee}-${String(mois).padStart(2, "0")}-${String(j).padStart(2, "0")}`;
+}
+function centimes(valeur) {
+  return Math.round((Number(valeur) + Number.EPSILON) * 100) / 100;
+}
+
+// js/calculs/loyers.js
+var dernierJourDuMois = (annee, mois) => new Date(annee, mois, 0).getDate();
+function proportionDuMois(bail, annee, mois) {
+  const jours = dernierJourDuMois(annee, mois);
+  const debutMois = isoDepuis(annee, mois, 1);
+  const finMois = isoDepuis(annee, mois, jours);
+  const debutBail = String(bail.dateDebut || "").slice(0, 10);
+  const finBail = String(bail.dateFin || "").slice(0, 10);
+  if (!debutBail || debutBail > finMois) return 0;
+  if (finBail && finBail < debutMois) return 0;
+  const premier = debutBail > debutMois ? Number(debutBail.slice(8, 10)) : 1;
+  const dernier = finBail && finBail < finMois ? Number(finBail.slice(8, 10)) : jours;
+  const couverts = dernier - premier + 1;
+  if (couverts <= 0) return 0;
+  return couverts / jours;
+}
+function fluxDuBail(bail) {
+  const colocataires = Array.isArray(bail.colocataires) ? bail.colocataires.filter((c) => c && c.locataireId) : [];
+  if (colocataires.length) {
+    return colocataires.map((c) => ({
+      locataireId: c.locataireId,
+      loyerHc: Number(c.partLoyer) || 0,
+      charges: Number(c.partCharges) || 0,
+      // Le suffixe rend l'identifiant d'échéance propre à chaque colocataire.
+      suffixe: `-${String(c.locataireId).slice(0, 8)}`
+    }));
+  }
+  return [{
+    locataireId: bail.locataireId || "",
+    loyerHc: Number(bail.loyerHc) || 0,
+    charges: Number(bail.provisionCharges) || 0,
+    suffixe: ""
+  }];
+}
+function echeancesTheoriques(bail, annee) {
+  const lignes = [];
+  const flux = fluxDuBail(bail);
+  for (let mois = 1; mois <= 12; mois += 1) {
+    const proportion = proportionDuMois(bail, annee, mois);
+    if (proportion <= 0) continue;
+    let dateEcheance = isoDepuis(annee, mois, Number(bail.jourEcheance) || 1);
+    const debutBail = String(bail.dateDebut || "").slice(0, 10);
+    const finBail = String(bail.dateFin || "").slice(0, 10);
+    if (debutBail && dateEcheance < debutBail) dateEcheance = debutBail;
+    if (finBail && dateEcheance > finBail) dateEcheance = finBail;
+    for (const payeur of flux) {
+      const loyerHc = centimes(payeur.loyerHc * proportion);
+      const charges = centimes(payeur.charges * proportion);
+      lignes.push({
+        // Identifiant déterministe : deux postes qui « créent » le même mois
+        // visent le même enregistrement, jamais deux doublons.
+        id: `${bail.id}-${annee}-${String(mois).padStart(2, "0")}${payeur.suffixe}`,
+        bailId: bail.id,
+        locataireId: payeur.locataireId,
+        annee,
+        mois,
+        proportion,
+        partiel: proportion < 1,
+        dateEcheance,
+        loyerHc,
+        charges,
+        autres: 0,
+        total: centimes(loyerHc + charges)
+      });
+    }
+  }
+  return lignes;
+}
+var totalEncaisse = (echeance) => centimes((echeance?.encaissements || []).reduce((somme, e) => somme + (Number(e.montant) || 0), 0));
+function echeancesAnnee(bail, annee, loyersEnregistres) {
+  const parId = /* @__PURE__ */ new Map();
+  for (const loyer of loyersEnregistres) {
+    if (loyer.bailId === bail.id && Number(loyer.annee) === Number(annee)) parId.set(loyer.id, loyer);
+  }
+  const lignes = echeancesTheoriques(bail, annee).map((theorique) => {
+    const reel = parId.get(theorique.id);
+    if (!reel) return { ...theorique, encaissements: [], enregistre: false };
+    parId.delete(theorique.id);
+    const loyerHc = reel.loyerHc ?? theorique.loyerHc;
+    const charges = reel.charges ?? theorique.charges;
+    const autres = reel.autres ?? 0;
+    return {
+      ...theorique,
+      ...reel,
+      loyerHc,
+      charges,
+      autres,
+      total: centimes(loyerHc + charges + autres),
+      enregistre: true
+    };
+  });
+  for (const reste of parId.values()) {
+    const loyerHc = reste.loyerHc ?? 0;
+    const charges = reste.charges ?? 0;
+    const autres = reste.autres ?? 0;
+    lignes.push({
+      ...reste,
+      proportion: 1,
+      partiel: false,
+      horsBail: true,
+      enregistre: true,
+      total: centimes(loyerHc + charges + autres)
+    });
+  }
+  return lignes.sort((a, b) => a.mois - b.mois);
+}
+function echeancesGlobales(baux, annee, loyersEnregistres) {
+  return baux.flatMap((bail) => echeancesAnnee(bail, annee, loyersEnregistres));
+}
+
+// js/appel-loyer.js
+var APPEL_PAR_DEFAUT = {
+  actif: false,
+  jour: 1,
+  // jour du mois de l'envoi (1 à 28)
+  cible: "courant",
+  // 'courant' : le loyer du mois de l'envoi ; 'suivant' : celui du mois d'après
+  objet: "Appel de loyer — {mois} {annee}",
+  message: "",
+  paiement: "",
+  copieBailleur: true
+};
+var cleMois = (annee, mois) => `${annee}-${String(mois).padStart(2, "0")}`;
+var cleEnvoi = (bienId, annee, mois) => `${bienId || ""}:${cleMois(annee, mois)}`;
+var sansAppel = (bien) => bien?.typeLocation === "courte";
+function reglageAppelDe(parametres = {}, bien = null) {
+  return { ...APPEL_PAR_DEFAUT, ...parametres?.appelLoyer || {}, ...bien?.appelLoyer || {} };
+}
+function dejaEnvoye(historique, bienId, annee, mois) {
+  const envois = historique?.envois || {};
+  return envois[cleEnvoi(bienId, annee, mois)] || envois[cleMois(annee, mois)] || null;
+}
+function moisVise(dateIso, cible = "courant") {
+  let annee = Number(dateIso.slice(0, 4));
+  let mois = Number(dateIso.slice(5, 7));
+  if (cible === "suivant") {
+    mois += 1;
+    if (mois > 12) {
+      mois = 1;
+      annee += 1;
+    }
+  }
+  return { annee, mois };
+}
+function jourEnvoi(reglage, annee, mois) {
+  const dernier = new Date(annee, mois, 0).getDate();
+  return Math.min(Math.max(1, Number(reglage.jour) || 1), dernier);
+}
+var JOURS_RATTRAPAGE = 7;
+function doitEnvoyer(reglage, dateIso, historique = {}, bienId = "") {
+  const r = { ...APPEL_PAR_DEFAUT, ...reglage || {} };
+  if (!r.actif) return false;
+  const annee = Number(dateIso.slice(0, 4));
+  const mois = Number(dateIso.slice(5, 7));
+  const jour = Number(dateIso.slice(8, 10));
+  const cible = jourEnvoi(r, annee, mois);
+  if (jour < cible || jour > cible + JOURS_RATTRAPAGE) return false;
+  const vise = moisVise(dateIso, r.cible);
+  return !dejaEnvoye(historique, bienId, vise.annee, vise.mois);
+}
+var echapper = (texte) => String(texte ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var remplir = (gabarit, valeurs) => String(gabarit || "").replace(/\{(\w+)\}/g, (tout, cle) => valeurs[cle] !== void 0 ? valeurs[cle] : tout);
+var nomComplet = (l) => `${l?.prenom || ""} ${l?.nom || ""}`.trim();
+var adresseBien = (bien) => [bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+var appelsDe = (journal, echeanceId) => [].concat(journal?.personnes?.[echeanceId] || []).filter((a) => a && a.le).sort((a, b) => String(a.le).localeCompare(String(b.le)));
+function resumeAppels(journal, echeanceId) {
+  const appels = appelsDe(journal, echeanceId);
+  if (!appels.length) return null;
+  const premier = appels.find((a) => a.type !== "relance") || appels[0];
+  const relances = appels.filter((a) => a.type === "relance");
+  return { premier, derniereRelance: relances[relances.length - 1] || null, nombre: appels.length };
+}
+function noterAppel(journal, echeanceId, { le = (/* @__PURE__ */ new Date()).toISOString(), type = "appel", origine = "manuel" } = {}) {
+  const personnes = { ...journal?.personnes || {} };
+  personnes[echeanceId] = [...appelsDe(journal, echeanceId), { le, type, origine }];
+  return { ...journal || {}, envois: journal?.envois || {}, personnes };
+}
+var dateCourte = (iso) => {
+  const [a, m, j] = String(iso || "").slice(0, 10).split("-");
+  return a && m && j ? `${j}/${m}/${a}` : String(iso || "");
+};
+function composerAppel({ echeance, locataire, bail, bien, parametres = {}, relance = false, journal = null, dateJour = "" }) {
+  const reglage = reglageAppelDe(parametres, bien);
+  const bailleurs = (parametres.bailleurs || []).filter((b) => b?.nom);
+  const signature = bailleurs.map((b) => b.nom).join(" et ") || parametres.nomActivite || "Le bailleur";
+  const nom = nomComplet(locataire) || "colocataire";
+  const reste = centimes((Number(echeance.total) || 0) - totalEncaisse(echeance));
+  if (reste <= 5e-3) return null;
+  const destinataires = [locataire?.email, locataire?.email2].map((e) => String(e || "").trim()).filter(Boolean);
+  if (!destinataires.length) return null;
+  const annee = Number(echeance.annee);
+  const mois = Number(echeance.mois);
+  const valeurs = {
+    prenom: locataire?.prenom || nom,
+    nom,
+    mois: nomMois(mois),
+    annee,
+    montant: montant(reste),
+    total: montant(echeance.total),
+    date: dateLongue(echeance.dateEcheance),
+    logement: adresseBien(bien) || bien?.nom || "le logement",
+    activite: parametres.nomActivite || ""
+  };
+  const objet = remplir(reglage.objet || APPEL_PAR_DEFAUT.objet, valeurs);
+  const sujet = relance ? `Relance — ${objet}` : objet;
+  const partiel = totalEncaisse(echeance) > 5e-3;
+  const depassee = Boolean(dateJour && echeance.dateEcheance && String(echeance.dateEcheance) < String(dateJour));
+  const premier = relance ? resumeAppels(journal, echeance.id)?.premier : null;
+  const lignes = [
+    `<p>Bonjour ${echapper(valeurs.prenom)},</p>`,
+    relance ? `<p>Sauf erreur de notre part, nous n’avons pas encore reçu votre loyer de <strong>${echapper(valeurs.mois)} ${annee}</strong>${premier ? `, appelé le ${echapper(dateCourte(premier.le))}` : ""}. Pour rappel :</p>` : `<p>Voici l’appel de loyer pour <strong>${echapper(valeurs.mois)} ${annee}</strong>, pour le logement situé ${echapper(valeurs.logement)}${echeance.partiel ? " (mois partiel, calculé au prorata)" : ""} :</p>`,
+    '<table cellpadding="6" style="border-collapse:collapse;border:1px solid #ccd">',
+    `<tr><td>Loyer hors charges</td><td align="right">${echapper(montant(echeance.loyerHc))}</td></tr>`,
+    `<tr><td>Provision pour charges (eau, ordures ménagères)</td><td align="right">${echapper(montant(echeance.charges))}</td></tr>`,
+    echeance.autres ? `<tr><td>Autres sommes</td><td align="right">${echapper(montant(echeance.autres))}</td></tr>` : "",
+    `<tr><td><strong>Total du mois</strong></td><td align="right"><strong>${echapper(montant(echeance.total))}</strong></td></tr>`,
+    partiel ? `<tr><td>Déjà reçu</td><td align="right">${echapper(montant(totalEncaisse(echeance)))}</td></tr><tr><td><strong>Reste à régler</strong></td><td align="right"><strong>${echapper(montant(reste))}</strong></td></tr>` : "",
+    "</table>",
+    depassee && relance ? `<p>Montant à régler : <strong>${echapper(montant(reste))}</strong>, échéance dépassée depuis le <strong>${echapper(valeurs.date)}</strong>.</p>` : `<p>Montant à régler : <strong>${echapper(montant(reste))}</strong>, au plus tard le <strong>${echapper(valeurs.date)}</strong>.</p>`,
+    reglage.paiement ? `<p>${echapper(remplir(reglage.paiement, valeurs)).replace(/\n/g, "<br>")}</p>` : "",
+    reglage.message ? `<p>${echapper(remplir(reglage.message, valeurs)).replace(/\n/g, "<br>")}</p>` : "",
+    relance ? "<p>Si le règlement vient d’être fait, merci de ne pas tenir compte de ce message.</p>" : "<p>Si le règlement a déjà été fait, merci de ne pas tenir compte de ce message.</p>",
+    `<p>Cordialement,<br>${echapper(signature)}${parametres.nomActivite ? `<br>${echapper(parametres.nomActivite)}` : ""}</p>`
+  ];
+  return {
+    echeanceId: echeance.id,
+    locataireId: echeance.locataireId,
+    nom,
+    destinataires,
+    sujet,
+    html: lignes.filter(Boolean).join("\n"),
+    montantDu: reste,
+    dateLimite: echeance.dateEcheance,
+    bienId: bien?.id || "",
+    annee,
+    mois,
+    relance
+  };
+}
+function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois, bienId = "", journal = null, inclureAppeles = false, dateJour = "" }) {
+  const bienVise = bienId ? biens.find((b) => b.id === bienId) || null : null;
+  const reglage = reglageAppelDe(parametres, bienVise);
+  const courriels = [];
+  const ecartes = [];
+  const bauxVises = bienId ? baux.filter((b) => b.bienId === bienId) : baux;
+  if (bienVise && sansAppel(bienVise)) return { courriels, ecartes, reglage, logement: bienVise.nom };
+  const echeances = echeancesGlobales(bauxVises, annee, loyers).filter((e) => Number(e.mois) === Number(mois) && (Number(e.total) || 0) > 0);
+  for (const echeance of echeances) {
+    const locataire = locataires.find((l) => l.id === echeance.locataireId);
+    const nom = nomComplet(locataire) || "colocataire";
+    const reste = centimes((Number(echeance.total) || 0) - totalEncaisse(echeance));
+    if (reste <= 5e-3) {
+      ecartes.push({ nom, raison: "déjà réglé" });
+      continue;
+    }
+    const destinataires = [locataire?.email, locataire?.email2].map((e) => String(e || "").trim()).filter(Boolean);
+    if (!destinataires.length) {
+      ecartes.push({ nom, raison: "aucune adresse e-mail" });
+      continue;
+    }
+    const deja = journal && !inclureAppeles ? resumeAppels(journal, echeance.id) : null;
+    if (deja) {
+      ecartes.push({ nom, raison: `déjà appelé le ${dateCourte(deja.premier.le)}` });
+      continue;
+    }
+    const bail = baux.find((b) => b.id === echeance.bailId);
+    const bien = biens.find((b) => b.id === bail?.bienId);
+    const courriel = composerAppel({ echeance, locataire, bail, bien, parametres, journal, dateJour });
+    if (courriel) courriels.push(courriel);
+  }
+  return { courriels, ecartes, reglage, logement: bienVise?.nom || "" };
+}
+export { nomMois, 
+  APPEL_PAR_DEFAUT,
+  JOURS_RATTRAPAGE,
+  appelsDe,
+  cleEnvoi,
+  cleMois,
+  composerAppel,
+  dejaEnvoye,
+  doitEnvoyer,
+  jourEnvoi,
+  moisVise,
+  noterAppel,
+  preparerAppels,
+  reglageAppelDe,
+  resumeAppels,
+  sansAppel
+};

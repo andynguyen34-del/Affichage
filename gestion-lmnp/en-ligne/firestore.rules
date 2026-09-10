@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Les gérants sont listés dans systeme/roles (admins).
+    // Au tout premier lancement, le document n'existe pas encore : le premier
+    // compte connecté (créé à la main dans la console) est alors gérant et
+    // l'application crée le document immédiatement.
+    function connecte() { return request.auth != null; }
+    function docRoles() { return get(/databases/$(database)/documents/systeme/roles); }
+    function rolesExiste() { return exists(/databases/$(database)/documents/systeme/roles); }
+    function estGerant() {
+      return connecte() && (!rolesExiste() || request.auth.token.email in docRoles().data.admins);
+    }
+
+    // Données de gestion : gérants uniquement.
+    match /donnees/{document} { allow read, write: if estGerant(); }
+    match /sauvegardes/{document} { allow read, write: if estGerant(); }
+    match /systeme/{document} { allow read, write: if estGerant(); }
+
+    // Espace colocataire : le gérant écrit ; le colocataire lit uniquement le
+    // document dont l'identifiant est SON adresse e-mail.
+    match /portail/{email} {
+      allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+      allow write: if estGerant();
+      // Le colocataire note seulement la date de sa dernière visite.
+      allow update: if connecte() && request.auth.token.email.lower() == email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dernierAcces']);
+
+      // Réponses du colocataire à l'état des lieux contradictoire : il écrit
+      // SES réponses (document nommé par l'identifiant de l'état des lieux
+      // publié sur son espace), tant que la fenêtre est ouverte.
+      match /reponses/{edlId} {
+        function portail() { return get(/databases/$(database)/documents/portail/$(email)).data; }
+        function fenetreOuverte() {
+          return (portail().contradictoire.edlId == edlId
+              && request.time.toMillis() <= portail().contradictoire.finLeMs)
+            || ('contradictoires' in portail() && edlId in portail().contradictoires
+              && request.time.toMillis() <= portail().contradictoires[edlId].finLeMs);
+        }
+        allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+        allow create, update: if connecte() && request.auth.token.email.lower() == email
+          && request.resource.data.edlId == edlId
+          && request.resource.data.keys().hasOnly(['edlId', 'reponses', 'majLe'])
+          && fenetreOuverte();
+        allow delete: if estGerant();
+      }
+
+      // Signature à distance : écrite par la fonction serveur seulement
+      // (code e-mail validé) ; lue par le colocataire et les gérants.
+      match /signatures/{edlId} {
+        allow read: if estGerant() || (connecte() && request.auth.token.email.lower() == email);
+        allow write: if false;
+      }
+      // Codes de signature : serveur seulement.
+      match /codes/{edlId} { allow read, write: if false; }
+    }
+
+    // File d'envoi des courriels (extension Trigger Email) : dépôt par les
+    // gérants ; personne ne lit (l'extension passe par l'accès serveur).
+    match /mail/{document} {
+      allow create: if estGerant();
+      allow read, update, delete: if false;
+    }
+  }
+}
