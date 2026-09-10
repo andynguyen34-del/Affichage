@@ -221,7 +221,15 @@ export async function traiterCourriels(op, req, res, qui) {
       type: 'test',
     });
     const resultat = await expedier(base, ref);
-    const final = (await ref.get()).data();
+    let final = (await ref.get()).data();
+    // Le déclencheur expedierCourriel a pu réclamer le document le premier :
+    // on attend son résultat (jusqu'à 10 s) pour répondre avec l'état final.
+    for (let i = 0; i < 20 && resultat.ignore && !['SUCCESS', 'ERROR'].includes(final?.delivery?.state); i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => { setTimeout(r, 500); });
+      // eslint-disable-next-line no-await-in-loop
+      final = (await ref.get()).data();
+    }
     res.json({ ok: Boolean(resultat.ok || final?.delivery?.state === 'SUCCESS'), id: ref.id, to, delivery: final?.delivery ? { state: final.delivery.state, error: final.delivery.error || '' } : null });
     return;
   }

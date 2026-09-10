@@ -5,7 +5,7 @@
 
 import * as etat from './etat.js';
 import * as api from './api.js';
-import { preparerAppels, doitEnvoyer, moisVise, cleEnvoi, dejaEnvoye, reglageAppelDe, sansAppel } from './appel-loyer.js';
+import { preparerAppels, composerAppel, noterAppel, doitEnvoyer, moisVise, cleEnvoi, dejaEnvoye, reglageAppelDe, sansAppel } from './appel-loyer.js';
 import { aujourdhui, nomMois } from './format.js';
 
 const DOCUMENT_JOURNAL = 'appels-loyer';
@@ -30,10 +30,47 @@ function donneesCourantes() {
 const bienDe = (bienId) => etat.liste('biens').find((b) => b.id === bienId) || null;
 
 /** Les courriels qui partiraient pour un logement et un mois donnés (aperçu, test, envoi). */
-export function apercuAppels({ bienId, annee, mois } = {}) {
+export function apercuAppels({ bienId, annee, mois, journal = null, inclureAppeles = false } = {}) {
   const bien = bienDe(bienId);
   const vise = annee && mois ? { annee, mois } : moisVise(aujourdhui(), reglageAppel(bien).cible);
-  return preparerAppels({ ...donneesCourantes(), ...vise, bienId: bien?.id || '' });
+  return preparerAppels({ ...donneesCourantes(), ...vise, bienId: bien?.id || '', journal, inclureAppeles, dateJour: aujourdhui() });
+}
+
+/** L'échéance appelée s'affiche sur l'accueil de l'espace du colocataire. */
+async function publierEcheanceSurEspace(courriel, logement) {
+  const email = String(etat.liste('locataires').find((l) => l.id === courriel.locataireId)?.email || '').trim().toLowerCase();
+  if (!email) return;
+  try {
+    await api.completerPortail(email, { echeance: {
+      annee: courriel.annee, mois: courriel.mois, montant: courriel.montantDu, dateLimite: courriel.dateLimite,
+      logement: logement || '', libelle: `Loyer ${nomMois(courriel.mois)} ${courriel.nom}`, appeleLe: aujourdhui(),
+      ...(courriel.relance ? { relanceLe: aujourdhui() } : {}),
+    } });
+  } catch (erreur) { console.warn('Échéance sur l’espace :', email, erreur); }
+}
+
+/** Le courriel d'appel ou de relance d'une échéance précise (page Loyers, v49), ou null. */
+export function apercuAppelEcheance({ echeance, relance = false, journal = null }) {
+  const d = donneesCourantes();
+  const locataire = d.locataires.find((l) => l.id === echeance.locataireId) || null;
+  const bail = d.baux.find((b) => b.id === echeance.bailId) || null;
+  const bien = d.biens.find((b) => b.id === bail?.bienId) || null;
+  return composerAppel({ echeance, locataire, bail, bien, parametres: d.parametres, relance, journal, dateJour: aujourdhui() });
+}
+
+/**
+ * Envoie l'appel (ou la relance) d'une échéance à son colocataire, l'inscrit
+ * au journal par personne et sur son espace (v49).
+ */
+export async function envoyerAppelEcheance({ echeance, relance = false, origine = 'manuel (page Loyers)' }) {
+  const journal = await lireJournalAppels();
+  const courriel = apercuAppelEcheance({ echeance, relance, journal });
+  if (!courriel) throw new Error('Rien à appeler : échéance soldée ou colocataire sans adresse e-mail.');
+  await api.envoyerCourriel({ type: 'appels', destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html });
+  const bail = etat.liste('baux').find((b) => b.id === echeance.bailId);
+  await publierEcheanceSurEspace(courriel, bienDe(bail?.bienId)?.nom || '');
+  await api.ecrireDocumentSysteme(DOCUMENT_JOURNAL, noterAppel(journal, echeance.id, { type: relance ? 'relance' : 'appel', origine }));
+  return courriel;
 }
 
 /** Envoie un exemplaire de test (le premier appel préparé) à une adresse. */
@@ -62,26 +99,20 @@ export async function envoyerAppels({ bienId, annee, mois, origine = 'manuel', f
   if (deja && !force) {
     throw new Error(`L’appel de ${nomMois(vise.mois)} ${vise.annee}${bien ? ` pour ${bien.nom}` : ''} a déjà été envoyé le ${deja.le?.slice(0, 10) || '?'}.`);
   }
-  const { courriels, ecartes, reglage, logement } = apercuAppels({ bienId: bien?.id, ...vise });
+  // v49 : un colocataire déjà appelé pour ce mois (page Loyers, fonction) n'est
+  // pas appelé une seconde fois, sauf renvoi forcé.
+  const { courriels, ecartes, reglage, logement } = apercuAppels({ bienId: bien?.id, ...vise, journal, inclureAppeles: force });
   const bailleurs = (etat.parametres().bailleurs || []).map((b) => String(b?.email || '').trim()).filter(Boolean);
   let envoyes = 0;
   const details = [];
-  const locataires = etat.liste('locataires');
+  let journalMaj = journal;
   for (const courriel of courriels) {
     /* eslint-disable no-await-in-loop */
     await api.envoyerCourriel({ type: 'appels', destinataires: courriel.destinataires, sujet: courriel.sujet, html: courriel.html });
     envoyes += 1;
     details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
-    // L'échéance appelée s'affiche aussi sur l'espace du colocataire (accueil).
-    const email = String(locataires.find((l) => l.id === courriel.locataireId)?.email || '').trim().toLowerCase();
-    if (email) {
-      try {
-        await api.completerPortail(email, { echeance: {
-          annee: vise.annee, mois: vise.mois, montant: courriel.montantDu, dateLimite: courriel.dateLimite,
-          logement: logement || '', libelle: `Loyer ${nomMois(vise.mois)} ${courriel.nom}`, appeleLe: new Date().toISOString().slice(0, 10),
-        } });
-      } catch (erreur) { console.warn('Échéance sur l’espace :', email, erreur); }
-    }
+    await publierEcheanceSurEspace(courriel, logement);
+    journalMaj = noterAppel(journalMaj, courriel.echeanceId, { type: 'appel', origine });
   }
   if (envoyes && reglage.copieBailleur && bailleurs.length) {
     await api.envoyerCourriel({
@@ -92,13 +123,13 @@ export async function envoyerAppels({ bienId, annee, mois, origine = 'manuel', f
         + (ecartes.length ? `<p>Non envoyés : ${ecartes.map((e) => `${e.nom} (${e.raison})`).join(', ')}.</p>` : ''),
     });
   }
-  journal.envois = {
-    ...(journal.envois || {}),
+  journalMaj.envois = {
+    ...(journalMaj.envois || {}),
     [cleEnvoi(bien?.id || '', vise.annee, vise.mois)]: {
       le: new Date().toISOString(), origine, nombre: envoyes, details, ecartes, bienId: bien?.id || '', logement: logement || '',
     },
   };
-  await api.ecrireDocumentSysteme(DOCUMENT_JOURNAL, journal);
+  await api.ecrireDocumentSysteme(DOCUMENT_JOURNAL, journalMaj);
   return { envoyes, ecartes, vise, logement: logement || '' };
 }
 

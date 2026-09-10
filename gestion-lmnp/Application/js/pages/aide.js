@@ -29,6 +29,10 @@ export default {
             ' part automatiquement par e-mail à chaque colocataire au jour choisi (Paramètres → « Appel de loyer automatique ») : '
             + 'sa part du mois, la date limite, vos coordonnées de paiement. « E-mail de test… » vous en envoie un exemplaire ; '
             + '« Envoyer maintenant… » déclenche l’appel du mois à la main. L’historique évite tout doublon.'],
+          ['Depuis la page Loyers (v49) : ', h('strong', { texte: 'Appel ✉' }),
+            ' sur une échéance non soldée envoie l’appel à ce colocataire (aperçu avant envoi), puis « Relancer ✉ » renvoie un rappel « Relance — … » ; '
+            + 'la ligne note « appelé le … · relancé le … ». « Appeler le loyer de {mois} » en haut appelle tous les colocataires du logement pas encore appelés. '
+            + 'L’envoi automatique n’insiste pas auprès de quelqu’un déjà appelé pour le mois.'],
           ['Quand le mois est soldé : bouton ', h('strong', { texte: 'Quittance' }),
             ' — le PDF est déposé sur l’espace du colocataire, téléchargeable, et un clic envoie '
             + 'l’e-mail de mise à disposition. « Imprimer » édite la version papier.'],

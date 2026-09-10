@@ -34,6 +34,19 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v49 — appel de loyer depuis « Virements et quittances ».**
+Sur chaque échéance non soldée : « Appel ✉ » (aperçu de l'e-mail, envoi au
+colocataire), puis « Relancer ✉ » (objet « Relance — … », rappel de la date
+du premier appel, « échéance dépassée depuis le … »). Sous le mois :
+« ✉ appelé le … · relancé le … ». En haut : « Appeler le loyer de {mois}
+(n) » envoie l'appel du mois à tous les colocataires du logement choisi pas
+encore appelés. Le journal `systeme/appels-loyer` gagne une entrée par
+échéance (`personnes`) : l'envoi automatique (fonction planifiée ou
+ouverture de l'application) et « Envoyer maintenant » de Paramètres
+n'insistent pas auprès d'un colocataire déjà appelé pour le mois (sauf
+« Renvoyer quand même »). L'échéance appelée s'affiche sur l'accueil de son
+espace. Cette version redéploie la fonction planifiée.
+
 **Nouveau en v48 — expéditeur toujours égal au compte d'envoi.** Les
 messages partaient au nom de l'adresse réglée dans « Adresses e-mail »
 (a-nguyen@sfr.fr) : Gmail, Hotmail et Orange les rejetaient (« Unauthenticated

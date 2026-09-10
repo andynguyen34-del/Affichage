@@ -85,18 +85,106 @@ const remplir = (gabarit, valeurs) => String(gabarit || '')
 const nomComplet = (l) => `${l?.prenom || ''} ${l?.nom || ''}`.trim();
 const adresseBien = (bien) => [bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 
+// ------------------------------------------------ journal par personne (v49)
+// systeme/appels-loyer.personnes = { [idEcheance]: [{ le, type: 'appel'|'relance', origine }] }
+// L'identifiant d'une échéance (bail + colocataire + mois) est stable : le
+// journal se lit depuis la page Loyers, l'application et la fonction planifiée.
+
+/** Les appels déjà envoyés pour une échéance (du plus ancien au plus récent). */
+export const appelsDe = (journal, echeanceId) => [].concat(journal?.personnes?.[echeanceId] || [])
+  .filter((a) => a && a.le).sort((a, b) => String(a.le).localeCompare(String(b.le)));
+
+/** Le premier appel et la dernière relance d'une échéance, ou null. */
+export function resumeAppels(journal, echeanceId) {
+  const appels = appelsDe(journal, echeanceId);
+  if (!appels.length) return null;
+  const premier = appels.find((a) => a.type !== 'relance') || appels[0];
+  const relances = appels.filter((a) => a.type === 'relance');
+  return { premier, derniereRelance: relances[relances.length - 1] || null, nombre: appels.length };
+}
+
+/** Journal complété d'un appel (nouvel objet, l'original n'est pas modifié). */
+export function noterAppel(journal, echeanceId, { le = new Date().toISOString(), type = 'appel', origine = 'manuel' } = {}) {
+  const personnes = { ...(journal?.personnes || {}) };
+  personnes[echeanceId] = [...appelsDe(journal, echeanceId), { le, type, origine }];
+  return { ...(journal || {}), envois: journal?.envois || {}, personnes };
+}
+
+const dateCourte = (iso) => {
+  const [a, m, j] = String(iso || '').slice(0, 10).split('-');
+  return a && m && j ? `${j}/${m}/${a}` : String(iso || '');
+};
+
+/**
+ * Le courriel d'appel (ou de relance) d'une échéance pour son colocataire.
+ *   relance   : objet « Relance — … », rappel du premier appel, échéance dépassée
+ *   dateJour  : date ISO du jour (pour « échéance dépassée depuis le … »)
+ * Renvoie null si rien n'est dû ou sans adresse.
+ */
+export function composerAppel({ echeance, locataire, bail, bien, parametres = {}, relance = false, journal = null, dateJour = '' }) {
+  const reglage = reglageAppelDe(parametres, bien);
+  const bailleurs = (parametres.bailleurs || []).filter((b) => b?.nom);
+  const signature = bailleurs.map((b) => b.nom).join(' et ') || parametres.nomActivite || 'Le bailleur';
+  const nom = nomComplet(locataire) || 'colocataire';
+  const reste = centimes((Number(echeance.total) || 0) - totalEncaisse(echeance));
+  if (reste <= 0.005) return null;
+  const destinataires = [locataire?.email, locataire?.email2].map((e) => String(e || '').trim()).filter(Boolean);
+  if (!destinataires.length) return null;
+  const annee = Number(echeance.annee);
+  const mois = Number(echeance.mois);
+  const valeurs = {
+    prenom: locataire?.prenom || nom, nom, mois: nomMois(mois), annee,
+    montant: montant(reste), total: montant(echeance.total), date: dateLongue(echeance.dateEcheance),
+    logement: adresseBien(bien) || bien?.nom || 'le logement', activite: parametres.nomActivite || '',
+  };
+  const objet = remplir(reglage.objet || APPEL_PAR_DEFAUT.objet, valeurs);
+  const sujet = relance ? `Relance — ${objet}` : objet;
+  const partiel = totalEncaisse(echeance) > 0.005;
+  const depassee = Boolean(dateJour && echeance.dateEcheance && String(echeance.dateEcheance) < String(dateJour));
+  const premier = relance ? resumeAppels(journal, echeance.id)?.premier : null;
+  const lignes = [
+    `<p>Bonjour ${echapper(valeurs.prenom)},</p>`,
+    relance
+      ? `<p>Sauf erreur de notre part, nous n’avons pas encore reçu votre loyer de <strong>${echapper(valeurs.mois)} ${annee}</strong>`
+        + `${premier ? `, appelé le ${echapper(dateCourte(premier.le))}` : ''}. Pour rappel :</p>`
+      : `<p>Voici l’appel de loyer pour <strong>${echapper(valeurs.mois)} ${annee}</strong>, `
+        + `pour le logement situé ${echapper(valeurs.logement)}${echeance.partiel ? ' (mois partiel, calculé au prorata)' : ''} :</p>`,
+    '<table cellpadding="6" style="border-collapse:collapse;border:1px solid #ccd">',
+    `<tr><td>Loyer hors charges</td><td align="right">${echapper(montant(echeance.loyerHc))}</td></tr>`,
+    `<tr><td>Provision pour charges (eau, ordures ménagères)</td><td align="right">${echapper(montant(echeance.charges))}</td></tr>`,
+    echeance.autres ? `<tr><td>Autres sommes</td><td align="right">${echapper(montant(echeance.autres))}</td></tr>` : '',
+    `<tr><td><strong>Total du mois</strong></td><td align="right"><strong>${echapper(montant(echeance.total))}</strong></td></tr>`,
+    partiel ? `<tr><td>Déjà reçu</td><td align="right">${echapper(montant(totalEncaisse(echeance)))}</td></tr>`
+      + `<tr><td><strong>Reste à régler</strong></td><td align="right"><strong>${echapper(montant(reste))}</strong></td></tr>` : '',
+    '</table>',
+    depassee && relance
+      ? `<p>Montant à régler : <strong>${echapper(montant(reste))}</strong>, échéance dépassée depuis le <strong>${echapper(valeurs.date)}</strong>.</p>`
+      : `<p>Montant à régler : <strong>${echapper(montant(reste))}</strong>, au plus tard le <strong>${echapper(valeurs.date)}</strong>.</p>`,
+    reglage.paiement ? `<p>${echapper(remplir(reglage.paiement, valeurs)).replace(/\n/g, '<br>')}</p>` : '',
+    reglage.message ? `<p>${echapper(remplir(reglage.message, valeurs)).replace(/\n/g, '<br>')}</p>` : '',
+    relance ? '<p>Si le règlement vient d’être fait, merci de ne pas tenir compte de ce message.</p>'
+      : '<p>Si le règlement a déjà été fait, merci de ne pas tenir compte de ce message.</p>',
+    `<p>Cordialement,<br>${echapper(signature)}${parametres.nomActivite ? `<br>${echapper(parametres.nomActivite)}` : ''}</p>`,
+  ];
+  return {
+    echeanceId: echeance.id, locataireId: echeance.locataireId, nom, destinataires, sujet,
+    html: lignes.filter(Boolean).join('\n'),
+    montantDu: reste, dateLimite: echeance.dateEcheance, bienId: bien?.id || '', annee, mois, relance,
+  };
+}
+
 /**
  * Prépare les courriels d'appel de loyer d'un mois : un par colocataire ayant
  * une échéance non soldée. Renvoie aussi les colocataires laissés de côté
- * (déjà réglé, sans adresse) pour le compte rendu.
- * `bienId` : un logement précis (ses réglages, ses baux) ; sans lui, tous les
- * baux avec les réglages communs.
+ * (déjà réglé, sans adresse, déjà appelé) pour le compte rendu.
+ * `bienId`  : un logement précis (ses réglages, ses baux) ; sans lui, tous les
+ *             baux avec les réglages communs.
+ * `journal` : journal des appels ; avec lui, un colocataire déjà appelé pour
+ *             ce mois est écarté (« déjà appelé le … »), sauf `inclureAppeles`.
  */
-export function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois, bienId = '' }) {
+export function preparerAppels({ baux = [], locataires = [], loyers = [], biens = [], parametres = {}, annee, mois, bienId = '', journal = null, inclureAppeles = false, dateJour = '' }) {
   const bienVise = bienId ? biens.find((b) => b.id === bienId) || null : null;
   const reglage = reglageAppelDe(parametres, bienVise);
-  const bailleurs = (parametres.bailleurs || []).filter((b) => b?.nom);
-  const signature = bailleurs.map((b) => b.nom).join(' et ') || parametres.nomActivite || 'Le bailleur';
   const courriels = [];
   const ecartes = [];
   const bauxVises = bienId ? baux.filter((b) => b.bienId === bienId) : baux;
@@ -109,38 +197,12 @@ export function preparerAppels({ baux = [], locataires = [], loyers = [], biens 
     if (reste <= 0.005) { ecartes.push({ nom, raison: 'déjà réglé' }); continue; }
     const destinataires = [locataire?.email, locataire?.email2].map((e) => String(e || '').trim()).filter(Boolean);
     if (!destinataires.length) { ecartes.push({ nom, raison: 'aucune adresse e-mail' }); continue; }
+    const deja = journal && !inclureAppeles ? resumeAppels(journal, echeance.id) : null;
+    if (deja) { ecartes.push({ nom, raison: `déjà appelé le ${dateCourte(deja.premier.le)}` }); continue; }
     const bail = baux.find((b) => b.id === echeance.bailId);
     const bien = biens.find((b) => b.id === bail?.bienId);
-    const valeurs = {
-      prenom: locataire?.prenom || nom, nom, mois: nomMois(mois), annee,
-      montant: montant(reste), total: montant(echeance.total), date: dateLongue(echeance.dateEcheance),
-      logement: adresseBien(bien) || bien?.nom || 'le logement', activite: parametres.nomActivite || '',
-    };
-    const sujet = remplir(reglage.objet || APPEL_PAR_DEFAUT.objet, valeurs);
-    const partiel = totalEncaisse(echeance) > 0.005;
-    const lignes = [
-      `<p>Bonjour ${echapper(valeurs.prenom)},</p>`,
-      `<p>Voici l’appel de loyer pour <strong>${echapper(valeurs.mois)} ${annee}</strong>, `
-        + `pour le logement situé ${echapper(valeurs.logement)}${echeance.partiel ? ' (mois partiel, calculé au prorata)' : ''} :</p>`,
-      '<table cellpadding="6" style="border-collapse:collapse;border:1px solid #ccd">',
-      `<tr><td>Loyer hors charges</td><td align="right">${echapper(montant(echeance.loyerHc))}</td></tr>`,
-      `<tr><td>Provision pour charges (eau, ordures ménagères)</td><td align="right">${echapper(montant(echeance.charges))}</td></tr>`,
-      echeance.autres ? `<tr><td>Autres sommes</td><td align="right">${echapper(montant(echeance.autres))}</td></tr>` : '',
-      `<tr><td><strong>Total du mois</strong></td><td align="right"><strong>${echapper(montant(echeance.total))}</strong></td></tr>`,
-      partiel ? `<tr><td>Déjà reçu</td><td align="right">${echapper(montant(totalEncaisse(echeance)))}</td></tr>`
-        + `<tr><td><strong>Reste à régler</strong></td><td align="right"><strong>${echapper(montant(reste))}</strong></td></tr>` : '',
-      '</table>',
-      `<p>Montant à régler : <strong>${echapper(montant(reste))}</strong>, au plus tard le <strong>${echapper(valeurs.date)}</strong>.</p>`,
-      reglage.paiement ? `<p>${echapper(remplir(reglage.paiement, valeurs)).replace(/\n/g, '<br>')}</p>` : '',
-      reglage.message ? `<p>${echapper(remplir(reglage.message, valeurs)).replace(/\n/g, '<br>')}</p>` : '',
-      '<p>Si le règlement a déjà été fait, merci de ne pas tenir compte de ce message.</p>',
-      `<p>Cordialement,<br>${echapper(signature)}${parametres.nomActivite ? `<br>${echapper(parametres.nomActivite)}` : ''}</p>`,
-    ];
-    courriels.push({
-      locataireId: echeance.locataireId, nom, destinataires, sujet,
-      html: lignes.filter(Boolean).join('\n'),
-      montantDu: reste, dateLimite: echeance.dateEcheance, bienId: bien?.id || '',
-    });
+    const courriel = composerAppel({ echeance, locataire, bail, bien, parametres, journal, dateJour });
+    if (courriel) courriels.push(courriel);
   }
   return { courriels, ecartes, reglage, logement: bienVise?.nom || '' };
 }

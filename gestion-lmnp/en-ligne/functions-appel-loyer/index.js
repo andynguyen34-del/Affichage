@@ -13,7 +13,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { preparerAppels, doitEnvoyer, moisVise, cleEnvoi, reglageAppelDe, sansAppel, nomMois } from './lib/appel-loyer.js';
+import { preparerAppels, noterAppel, doitEnvoyer, moisVise, cleEnvoi, reglageAppelDe, sansAppel, nomMois } from './lib/appel-loyer.js';
 
 initializeApp();
 
@@ -57,13 +57,16 @@ export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
   const logements = [];
   let nombre = 0;
   const envois = { ...(journal.envois || {}) };
+  let personnes = { ...(journal.personnes || {}) };
   for (const bien of candidats) {
     const reglage = reglageAppelDe(parametres, bien);
     const vise = moisVise(dateIso, reglage.cible);
     // eslint-disable-next-line no-await-in-loop
-    const { courriels, ecartes } = preparerAppels({ baux, locataires, loyers, biens, parametres, annee: vise.annee, mois: vise.mois, bienId: bien.id });
+    // v49 : un colocataire déjà appelé pour ce mois depuis l'application n'est pas appelé une seconde fois.
+    const { courriels, ecartes } = preparerAppels({ baux, locataires, loyers, biens, parametres, annee: vise.annee, mois: vise.mois, bienId: bien.id, journal: { envois, personnes }, dateJour: dateIso });
     const details = [];
     for (const courriel of courriels) {
+      personnes = noterAppel({ personnes }, courriel.echeanceId, { type: 'appel', origine: 'automatique (fonction planifiée)' }).personnes;
       // eslint-disable-next-line no-await-in-loop
       await base.collection('mail').add({ to: courriel.destinataires, type: 'appels', creeLe: new Date().toISOString(), message: { subject: courriel.sujet, html: courriel.html } });
       details.push(`${courriel.nom} (${courriel.destinataires.join(', ')})`);
@@ -98,7 +101,7 @@ export async function executerAppelLoyer(base, dateIso = aujourdhuiParis()) {
     nombre += courriels.length;
     logements.push({ bienId: bien.id, logement: bien.nom, vise, nombre: courriels.length, details, ecartes });
   }
-  await refJournal.set({ envois }, { merge: true });
+  await refJournal.set({ envois, personnes }, { merge: true });
   return { envoye: true, nombre, vise: logements[0].vise, logements };
 }
 

@@ -11,6 +11,107 @@ import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { estCourteDuree, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
+import { apercuAppels, apercuAppelEcheance, envoyerAppelEcheance, envoyerAppels, lireJournalAppels, reglageAppel, logementsAvecAppel } from '../appel-loyer-client.js';
+import { resumeAppels, moisVise, sansAppel } from '../appel-loyer.js';
+
+// ------------------------------------------------ appels de loyer (v49)
+// Le journal des appels (systeme/appels-loyer) est lu à l'affichage de la
+// page ; la page est redessinée dès qu'il arrive.
+let journalAppels = null;
+let journalDemande = 0;
+
+function chargerJournalAppels(contexte) {
+  const demande = Date.now();
+  journalDemande = demande;
+  lireJournalAppels().then((journal) => {
+    if (journalDemande !== demande) return;
+    journalAppels = journal || { envois: {}, personnes: {} };
+    contexte.redessiner?.({ conserverPosition: true });
+  }).catch((erreur) => console.warn('Journal des appels illisible :', erreur));
+}
+
+/** Sous le mois : « ✉ appelé le … · relancé le … ». */
+function traceAppels(echeance) {
+  const resume = resumeAppels(journalAppels, echeance.id);
+  if (!resume) return null;
+  const morceaux = [`✉ appelé le ${date(String(resume.premier.le).slice(0, 10))}`];
+  if (resume.derniereRelance) morceaux.push(`relancé le ${date(String(resume.derniereRelance.le).slice(0, 10))}`);
+  return h('div', { class: 'legende trace-appels', texte: morceaux.join(' · ') });
+}
+
+/**
+ * Appel ou relance d'une échéance depuis la page (v49) : aperçu de l'e-mail,
+ * envoi, journal par personne, échéance sur l'espace du colocataire.
+ */
+async function appelerEcheance(contexte, echeance, { relance = false } = {}) {
+  const journal = journalAppels || await lireJournalAppels();
+  const courriel = apercuAppelEcheance({ echeance, relance, journal });
+  if (!courriel) { notifier('Rien à appeler : échéance soldée ou colocataire sans adresse e-mail (Locataires → Modifier).', 'erreur'); return; }
+  const apercu = h('div', { class: 'apercu-courriel', style: 'border:1px solid var(--bordure);border-radius:6px;padding:.4rem .8rem;margin-top:.6rem;max-height:24rem;overflow:auto;background:var(--fond-carte)' });
+  apercu.append(h('div', { class: 'legende', style: 'margin:.3rem 0', texte: `Objet : ${courriel.sujet}` }));
+  const corps = h('div');
+  corps.innerHTML = courriel.html;
+  apercu.append(corps);
+  await new Promise((resoudre) => {
+    const fermer = ouvrirModale({
+      titre: `${relance ? 'Relancer l’appel de loyer' : 'Appel de loyer'} — ${courriel.nom} — ${nomMois(echeance.mois)} ${echeance.annee}`,
+      large: true,
+      surFermeture: () => resoudre(),
+      corps: h('div', {}, [
+        h('p', { class: 'legende', texte: `E-mail à ${courriel.destinataires.join(', ')} : reste à régler ${montant(courriel.montantDu)}, échéance du ${date(echeance.dateEcheance)}. `
+          + 'Texte et coordonnées de paiement : Paramètres → Appel de loyer du logement.' }),
+        apercu,
+      ]),
+      pied: [
+        bouton('Annuler', () => { fermer(); resoudre(); }),
+        bouton(relance ? 'Envoyer la relance' : 'Envoyer l’appel', async () => {
+          fermer({ valide: true });
+          try {
+            await envoyerAppelEcheance({ echeance, relance });
+            notifier(`${relance ? 'Relance' : 'Appel de loyer'} envoyé à ${courriel.nom} (${nomMois(echeance.mois)} ${echeance.annee}).`, 'succes');
+            chargerJournalAppels(contexte);
+          } catch (erreur) { signalerErreur(erreur); }
+          resoudre();
+        }, { type: 'primaire' }),
+      ],
+    });
+  });
+}
+
+/** Le bouton « Appeler le loyer de {mois} (n) » : tous les colocataires pas encore appelés, logement choisi ou tous. */
+function boutonAppelDuMois(contexte, donnees) {
+  if (api.MODE !== 'nuage') return null;
+  const logements = (contexte.bienId ? donnees.biens.filter((b) => b.id === contexte.bienId) : donnees.biens).filter((b) => !sansAppel(b));
+  if (!logements.length) return null;
+  const journal = journalAppels || { envois: {}, personnes: {} };
+  const plans = logements.map((bien) => {
+    const vise = moisVise(aujourdhui(), reglageAppel(bien).cible);
+    return { bien, vise, ...apercuAppels({ bienId: bien.id, ...vise, journal }) };
+  });
+  const total = plans.reduce((s, p) => s + p.courriels.length, 0);
+  const mois = plans[0].vise;
+  return bouton(`Appeler le loyer de ${nomMois(mois.mois)} (${total})`, async () => {
+    if (!journalAppels) await new Promise((r) => { lireJournalAppels().then((j) => { journalAppels = j || { envois: {}, personnes: {} }; r(); }).catch(r); });
+    if (!total) { notifier(`Personne à appeler pour ${nomMois(mois.mois)} ${mois.annee} : chacun a déjà reçu son appel, a réglé, ou n’a pas d’adresse.`); return; }
+    const lignes = plans.flatMap((p) => p.courriels.map((c) => `${c.nom} — ${montant(c.montantDu)}${logements.length > 1 ? ` (${p.bien.nom})` : ''}`));
+    const ecartes = plans.flatMap((p) => p.ecartes.map((e) => `${e.nom} (${e.raison})`));
+    const ok = await confirmer({
+      titre: `Appeler le loyer de ${nomMois(mois.mois)} ${mois.annee}`,
+      message: `${total} e-mail(s) : ${lignes.join(' ; ')}.${ecartes.length ? ` Non concernés : ${ecartes.join(', ')}.` : ''}`,
+      libelleValider: 'Envoyer les appels',
+    });
+    if (!ok) return;
+    let envoyes = 0;
+    for (const p of plans) {
+      if (!p.courriels.length) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const resultat = await executer(envoyerAppels({ bienId: p.bien.id, ...p.vise, origine: 'manuel (page Loyers)', force: true }), null);
+      if (resultat) envoyes += resultat.envoyes;
+    }
+    notifier(`${envoyes} appel(s) de loyer envoyé(s) pour ${nomMois(mois.mois)} ${mois.annee}.`, envoyes ? 'succes' : 'erreur');
+    chargerJournalAppels(contexte);
+  }, { type: total ? 'primaire' : undefined, titre: 'Un e-mail d’appel de loyer à chaque colocataire du logement pas encore appelé pour ce mois' });
+}
 
 const locataireDe = (donnees, echeance, bail) =>
   donnees.locataires.find((l) => l.id === (echeance?.locataireId || bail?.locataireId)) || null;
@@ -423,8 +524,11 @@ export default {
     // Échéances (et dépôts de garantie) enregistrés qui ne correspondent plus aux baux (v43).
     const bandeau = bandeauMiseAJour(donnees);
     if (bandeau) conteneur.append(bandeau);
+    // v49 : appels de loyer depuis cette page — journal lu à l'affichage.
+    if (!journalAppels) chargerJournalAppels(contexte);
     conteneur.append(barreOutils([
       bouton('Mettre à jour les échéances', () => ouvrirMiseAJour(donnees).catch(signalerErreur), { titre: 'Compare les échéances et dépôts enregistrés aux baux : orphelins, montants modifiés' }),
+      boutonAppelDuMois(contexte, donnees),
     ]));
 
     // Vue « Tous les logements » : un bandeau par logement, ses cartes, puis
@@ -469,6 +573,7 @@ export default {
         { titre: 'Mois', valeur: (e) => h('div', {}, [
           h('div', { texte: nomMois(e.mois) }),
           h('div', { class: 'legende', texte: `échéance ${date(e.dateEcheance)}${e.partiel ? ' · mois partiel' : ''}${e.horsBail ? ' · hors bail' : ''}` }),
+          traceAppels(e),
         ]) },
         { titre: 'Loyer + charges', nombre: true, valeur: (e) => `${montant(e.loyerHc)} + ${montant(e.charges)}` },
         { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
@@ -490,6 +595,11 @@ export default {
               : 'Quittance possible seulement quand l’échéance est intégralement payée',
             desactive: calcul.statut(e) !== 'paye',
           }),
+          api.MODE === 'nuage' && !e.horsBail && centimes(e.total - calcul.totalEncaisse(e)) > 0.005 && locataireCourant?.email
+            ? (resumeAppels(journalAppels, e.id)
+              ? bouton('Relancer ✉', () => appelerEcheance(contexte, e, { relance: true }).catch(signalerErreur), { petit: true, titre: 'Relance de l’appel de loyer de ce mois (objet « Relance — … »)' })
+              : bouton('Appel ✉', () => appelerEcheance(contexte, e).catch(signalerErreur), { petit: true, titre: 'Appel de loyer de ce mois à ce colocataire' }))
+            : null,
           bouton('⋯', () => menuEcheance(donnees, bail, e), { petit: true, titre: 'Imprimer, ajuster, encaissements…' }),
         ]) },
       ];

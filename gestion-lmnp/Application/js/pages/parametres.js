@@ -170,9 +170,10 @@ async function testerAppelLoyer(bien) {
 
 async function envoyerAppelMaintenant(bien, rafraichir = () => {}) {
   const vise = moisVise(aujourdhui(), reglageAppel(bien).cible);
-  const { courriels, ecartes } = apercuAppels({ bienId: bien.id, ...vise });
   const journal = await lireJournalAppels();
   const deja = dejaEnvoye(journal, bien.id, vise.annee, vise.mois);
+  // v49 : sans renvoi forcé, un colocataire déjà appelé pour ce mois (page Loyers) est écarté.
+  const { courriels, ecartes } = apercuAppels({ bienId: bien.id, ...vise, journal, inclureAppeles: Boolean(deja) });
   const ok = await confirmer({
     titre: `${deja ? 'Renvoyer' : 'Envoyer'} l’appel de loyer de ${nomMois(vise.mois)} ${vise.annee} — ${bien.nom}`,
     message: (deja ? `Cet appel a déjà été envoyé le ${date(deja.le?.slice(0, 10))} (${deja.origine || '?'}). Le renvoyer quand même ? ` : '')
