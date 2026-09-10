@@ -23,7 +23,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
-import { composerEnveloppe } from './lib/courriel-enveloppe.js';
+import { composerEnveloppe, securiserEnveloppe } from './lib/courriel-enveloppe.js';
 
 export const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD');
 const GMAIL_COMPTE = defineString('GMAIL_COMPTE', {
@@ -107,7 +107,11 @@ export async function expedier(base, ref, { transport = null, force = false } = 
   const destinataires = [].concat(reclame.to || []).map((a) => String(a || '').trim()).filter(Boolean);
   // Expéditeur, adresse de réponse et copies : Paramètres → « Adresses e-mail » (v44), lus à chaque envoi.
   const expediteurParDefaut = String(COURRIEL_EXPEDITEUR.value() || '').trim() || String(GMAIL_COMPTE.value() || '').trim();
-  const enveloppe = composerEnveloppe({ reglage: await reglageCourriel(base), type: String(reclame.type || ''), destinataires, expediteurParDefaut });
+  // Le « from » est toujours le compte Gmail qui expédie (v48) : une autre
+  // adresse (sfr.fr…) est rejetée par les destinataires (DMARC) ; elle passe
+  // en adresse de réponse.
+  const compte = String(GMAIL_COMPTE.value() || '').trim();
+  const enveloppe = securiserEnveloppe(composerEnveloppe({ reglage: await reglageCourriel(base), type: String(reclame.type || ''), destinataires, expediteurParDefaut }), compte);
   try {
     if (!destinataires.length) throw new Error('Aucun destinataire.');
     const info = await (transport || transporteur()).sendMail({
@@ -124,6 +128,7 @@ export async function expedier(base, ref, { transport = null, force = false } = 
       'delivery.state': 'SUCCESS', 'delivery.endTime': FieldValue.serverTimestamp(),
       'delivery.messageId': String(info?.messageId || ''), 'delivery.error': FieldValue.delete(),
       'delivery.par': 'expedierCourriel', 'delivery.expediteur': enveloppe.from, 'delivery.cc': enveloppe.cc, 'delivery.replyTo': enveloppe.replyTo,
+      'delivery.expediteurRemplace': enveloppe.remplace || '',
     });
     return { ok: true, destinataires, enveloppe };
   } catch (erreur) {

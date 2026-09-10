@@ -40,6 +40,17 @@ function composerEnveloppe({ reglage = {}, type = "", destinataires = [], expedi
   const copies = TYPES_COPIE.some((t) => t.cle === type) ? normaliserAdresses(reglage?.copies?.[type] || []) : [];
   return { from, replyTo, cc: copies.filter((a) => !exclus.has(a)) };
 }
+function securiserEnveloppe(enveloppe = {}, compte = "") {
+  const compteNet = String(compte || "").trim().toLowerCase();
+  const { nom, adresse } = decomposerExpediteur(enveloppe.from || "");
+  if (!compteNet || !adresse || adresse.toLowerCase() === compteNet) return { ...enveloppe, remplace: "" };
+  return {
+    ...enveloppe,
+    from: formaterExpediteur(nom, compteNet),
+    replyTo: enveloppe.replyTo || adresse.toLowerCase(),
+    remplace: adresse.toLowerCase()
+  };
+}
 function expediteurCoherent(reglage = {}, compte = "") {
   const adresse = String(reglage?.expediteurAdresse || "").trim().toLowerCase();
   if (!adresse) return null;
@@ -52,5 +63,6 @@ export {
   decomposerExpediteur,
   expediteurCoherent,
   formaterExpediteur,
-  normaliserAdresses
+  normaliserAdresses,
+  securiserEnveloppe
 };

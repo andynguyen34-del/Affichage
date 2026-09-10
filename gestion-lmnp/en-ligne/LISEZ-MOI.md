@@ -34,6 +34,17 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v48 — expéditeur toujours égal au compte d'envoi.** Les
+messages partaient au nom de l'adresse réglée dans « Adresses e-mail »
+(a-nguyen@sfr.fr) : Gmail, Hotmail et Orange les rejetaient (« Unauthenticated
+email from sfr.fr is not accepted due to domain's DMARC policy », 550
+5.7.26), et le rejet n'arrivait que dans la boîte du compte Gmail. La
+fonction d'envoi force désormais le « from » sur le compte Gmail qui expédie
+(nom affiché conservé) ; une autre adresse réglée devient l'adresse de
+réponse, et la file « Envoi des e-mails » note l'adresse remplacée. Après
+déploiement, renvoyez ce qui a été rejeté : appels de loyer (« Renvoyer »),
+appels de dépôt (« Relancer »), bienvenue (« Renvoyer la bienvenue »).
+
 **Nouveau en v47 — e-mail « Bienvenue sur votre espace ».** Page
 Locataires : « Bienvenue ✉ » (par personne) ou « Bienvenue aux nouveaux »
 crée le compte de connexion du colocataire (opération `compte-creer` de la

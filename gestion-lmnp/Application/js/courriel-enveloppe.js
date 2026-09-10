@@ -66,6 +66,26 @@ export function composerEnveloppe({ reglage = {}, type = '', destinataires = [],
   return { from, replyTo, cc: copies.filter((a) => !exclus.has(a)) };
 }
 
+/**
+ * Sécurise l'enveloppe avant l'envoi par Gmail (v48) : le « from » DOIT être
+ * le compte qui expédie, sinon le message part au nom d'un autre domaine
+ * (sfr.fr…) et les destinataires le rejettent (« Unauthenticated email from
+ * sfr.fr… DMARC policy », Gmail 550 5.7.26 ; Hotmail 550 5.7.509). L'adresse
+ * réglée devient alors l'adresse de réponse (si aucune n'est réglée), et le
+ * nom affiché est conservé. Renvoie { from, replyTo, cc, remplace }.
+ */
+export function securiserEnveloppe(enveloppe = {}, compte = '') {
+  const compteNet = String(compte || '').trim().toLowerCase();
+  const { nom, adresse } = decomposerExpediteur(enveloppe.from || '');
+  if (!compteNet || !adresse || adresse.toLowerCase() === compteNet) return { ...enveloppe, remplace: '' };
+  return {
+    ...enveloppe,
+    from: formaterExpediteur(nom, compteNet),
+    replyTo: enveloppe.replyTo || adresse.toLowerCase(),
+    remplace: adresse.toLowerCase(),
+  };
+}
+
 /** L'expéditeur réglé correspond-il au compte d'envoi ? (null si rien n'est réglé) */
 export function expediteurCoherent(reglage = {}, compte = '') {
   const adresse = String(reglage?.expediteurAdresse || '').trim().toLowerCase();

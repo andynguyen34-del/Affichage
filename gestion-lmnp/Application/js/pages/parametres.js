@@ -650,7 +650,7 @@ async function modifierAdresses(parametres) {
     const a = champAdresse.value.trim().toLowerCase();
     if (!a || !infos.compte) { avert.hidden = true; return; }
     avert.hidden = a === infos.compte;
-    avert.textContent = `« ${a} » n’est pas le compte qui expédie (${infos.compte}). Gmail remplacera l’expéditeur, ou le destinataire refusera le message, sauf si cette adresse est déclarée dans Gmail sous « Envoyer en tant que ». Vérifiez avec un e-mail de test.`;
+    avert.textContent = `« ${a} » n’est pas le compte qui expédie (${infos.compte}). Les messages partiront quand même au nom de ${infos.compte} (un autre expéditeur est rejeté par Gmail, Hotmail, Orange : règle DMARC de sfr.fr…) ; « ${a} » servira seulement d’adresse de réponse.`;
   };
   champAdresse.addEventListener('input', verifierAdresse);
   verifierAdresse();
@@ -718,7 +718,7 @@ function carteAdresses(parametres) {
       h('table', {}, h('tbody', {}, [
         h('tr', {}, [h('td', { texte: 'Expéditeur affiché' }), h('td', {}, [
           h('strong', { texte: formaterExpediteur(nom, adresse) }), ' ',
-          coherent === true ? badge('= compte d’envoi', 'succes') : (coherent === false ? badge('différent du compte d’envoi', 'attention') : (infos?.compte ? badge('expéditeur du déploiement', 'attente') : null)),
+          coherent === true ? badge('= compte d’envoi', 'succes') : (coherent === false ? badge('différent du compte d’envoi : remplacé, sert d’adresse de réponse', 'attention') : (infos?.compte ? badge('expéditeur du déploiement', 'attente') : null)),
         ])]),
         h('tr', {}, [h('td', { texte: 'Adresse de réponse' }), h('td', { texte: reglage.reponseA || 'l’adresse d’expéditeur' })]),
         h('tr', {}, [h('td', { texte: 'Compte qui expédie' }), h('td', { class: 'legende', texte: infos?.compte ? `${infos.compte} — réglé au déploiement (mot de passe d’application dans le projet)` : (infos?.local ? 'Sans objet en mode dossier.' : 'inconnu (relais injoignable)') })]),
