@@ -115,7 +115,7 @@ function contexteDessin(page, polices) {
 }
 
 /** En-tête commun : marque à gauche, nature du document et période à droite. */
-function entete(page, polices, c, nature, periode) {
+function entete(page, polices, c, nature, periode, lignesDroite = []) {
   const yMarque = c.y - 27;
   texteEspace(page, polices.italiana, 'ANIKA', 27, MARGE.cote, yMarque, 4, ENCRE);
   texteEspace(page, polices.medium, 'LOUEUR MEUBLÉ NON PROFESSIONNEL', 7.2, MARGE.cote, yMarque - 16, 1.8, DISCRET);
@@ -124,6 +124,8 @@ function entete(page, polices, c, nature, periode) {
   const largeurNature = largeurEspacee(polices.medium, nature, 7.3, 2.2);
   texteEspace(page, polices.medium, nature, 7.3, PAGE.l - MARGE.cote - largeurNature, c.y - 12, 2.2, ENCRE);
   c.droite(periode, 9.3, polices.light, SECONDAIRE, c.y - 28);
+  // Références (numéro, date d'édition…) sous la période, en petit.
+  lignesDroite.filter(Boolean).forEach((ligne, index) => c.droite(ligne, 7.4, polices.light, TRES_DISCRET, c.y - 40 - index * 10));
 
   c.y -= 58;
   c.trait(ENCRE, 1);
@@ -139,19 +141,21 @@ function titre(page, polices, c, texte, sousTexte) {
 }
 
 /** Blocs BAILLEUR / LOCATAIRE sur deux colonnes. */
-function parties(page, polices, c, bailleur, locataireNom, logement) {
+function parties(page, polices, c, bailleur, locataireNom, logement, complementLocataire = []) {
   const x2 = MARGE.cote + LARGEUR * 0.5;
   const yDepart = c.y;
   const lignesBailleur = [
     bailleur.nom,
     ...String(bailleur.adresse || '').split('\n').map((l) => l.trim()).filter(Boolean),
     bailleur.email || null,
+    bailleur.telephone || null,
     bailleur.siren ? `SIREN ${bailleur.siren}` : null,
   ].filter(Boolean);
   const lignesLocataire = [
     locataireNom,
     logement.adresse,
     `${logement.codePostal || ''} ${logement.ville || ''}`.trim(),
+    ...complementLocataire.filter(Boolean),
   ].filter(Boolean);
 
   const colonne = (x, etiquette, lignes, etiquetteFinale) => {
@@ -212,12 +216,19 @@ function noteLegale(page, polices, c, texte) {
   c.texte(texte, { taille: 7.5, police: polices.light, couleur: TRES_DISCRET, interligne: 1.5 });
 }
 
-function signature(page, polices, c, cachet, lieu, dateSignature, nomBailleur) {
+function signature(page, polices, c, cachet, lieu, dateSignature, nomBailleur, imageSignature = null) {
   c.y -= 34;
   const yHautBloc = c.y;
   page.drawText(propre(`${lieu ? `${lieu}, le ` : 'Le '}${dateSignature}`), {
     x: MARGE.cote, y: c.y, size: 9.4, font: polices.light, color: ENCRE,
   });
+  // Signature manuscrite (image PNG téléversée dans Paramètres), posée sur la ligne.
+  if (imageSignature) {
+    const hauteur = mm(16);
+    const largeur = Math.min(mm(60), hauteur * (imageSignature.width / imageSignature.height));
+    page.drawImage(imageSignature, { x: MARGE.cote + 4, y: c.y - 22 - hauteur + 6, width: largeur, height: hauteur });
+    c.y -= hauteur - 8;
+  }
   c.y -= 22;
   page.drawLine({
     start: { x: MARGE.cote, y: c.y }, end: { x: MARGE.cote + mm(60), y: c.y },
@@ -245,31 +256,62 @@ const prenomMoisMajuscule = (libelle) => libelle.charAt(0).toUpperCase() + libel
 
 // -------------------------------------------------------------- documents
 
-/** Quittance de loyer ANIKA. */
+/**
+ * Quittance de loyer ANIKA.
+ * Options (v51) : numero, editeeLe, bailDebut, colocation, reglement { date, mode, reference },
+ * autres (autres sommes), libelleAutres, soldeAnterieur, prochaineEcheance { libelle, montant, date },
+ * signatureImage (octets PNG), telephone du bailleur.
+ */
 export async function pdfQuittanceAnika({ bailleur, locataireNom, logement, periodeLibelle,
-  periodeDebut, periodeFin, loyerHc, charges, lieu, dateSignature }) {
+  periodeDebut, periodeFin, loyerHc, charges, lieu, dateSignature,
+  numero = '', editeeLe = '', bailDebut = '', colocation = false, reglement = null,
+  autres = 0, libelleAutres = 'Autres sommes', soldeAnterieur = 0, prochaineEcheance = null, signatureImage = null, enrichie = false }) {
   const { doc, page, polices, cachet } = await preparer();
   const c = contexteDessin(page, polices);
+  const image = signatureImage ? await doc.embedPng(signatureImage) : null;
 
-  entete(page, polices, c, 'QUITTANCE DE LOYER', prenomMoisMajuscule(periodeLibelle));
+  entete(page, polices, c, 'QUITTANCE DE LOYER', prenomMoisMajuscule(periodeLibelle),
+    [numero ? `N° ${numero}` : '', editeeLe ? `Éditée le ${editeeLe}` : '']);
   titre(page, polices, c, 'Quittance de loyer', `Période du ${periodeDebut} au ${periodeFin}`);
-  parties(page, polices, c, bailleur, locataireNom, logement);
+  parties(page, polices, c, bailleur, locataireNom, logement,
+    [bailDebut ? `${colocation ? 'Bail de colocation' : 'Bail'} du ${bailDebut}` : '']);
 
-  const total = Math.round(((Number(loyerHc) || 0) + (Number(charges) || 0)) * 100) / 100;
+  // `enrichie` (v51, sur validation) : périodes sur chaque ligne, « Net payé », solde antérieur.
+  const periode = enrichie ? ` — du ${periodeDebut} au ${periodeFin}` : '';
+  const total = Math.round(((Number(loyerHc) || 0) + (Number(charges) || 0) + (Number(autres) || 0)) * 100) / 100;
+  const solde = enrichie ? Math.round((Number(soldeAnterieur) || 0) * 100) / 100 : 0;
   tableauMontants(page, polices, c, [
-    { type: 'ligne', libelle: 'Loyer hors charges', montant: loyerHc },
-    { type: 'ligne', libelle: 'Provision pour charges', montant: charges },
-    { type: 'total', libelle: 'Total', montant: total },
+    ...(solde > 0.004 ? [{ type: 'ligne', libelle: 'Solde antérieur restant dû (termes précédents)', montant: solde }] : []),
+    { type: 'ligne', libelle: `Loyer hors charges${periode}`, montant: loyerHc },
+    { type: 'ligne', libelle: `Provision pour charges${periode}`, montant: charges },
+    ...(Number(autres) ? [{ type: 'ligne', libelle: libelleAutres, montant: autres }] : []),
+    { type: 'total', libelle: enrichie ? (solde > 0.004 ? 'Net payé (période)' : 'Net payé') : 'Total', montant: total },
   ]);
 
+  const modeReglement = reglement?.mode ? `, par ${reglement.mode}` : '';
+  const dateReglement = reglement?.date ? ` le ${reglement.date}` : '';
+  const refReglement = reglement?.reference ? ` (référence ${reglement.reference})` : '';
   attestation(page, polices, c,
-    `Je soussigné ${bailleur.nom}, bailleur du logement désigné ci-dessus, déclare avoir reçu de ${locataireNom} `
-    + `la somme de ${eur(total)} au titre du loyer et des charges pour la période du ${periodeDebut} au `
-    + `${periodeFin}, et lui en donne quittance, sous réserve de tous mes droits.`);
-  noteLegale(page, polices, c,
-    'Cette quittance annule tous les reçus qui auraient pu être établis précédemment pour la même période. '
-    + 'Elle est délivrée sous réserve d\'encaissement définitif des sommes versées.');
-  signature(page, polices, c, cachet, lieu, dateSignature, bailleur.nom);
+    `Je soussigné ${bailleur.nom}, bailleur du logement désigné ci-dessus, déclare avoir reçu de ${locataireNom}`
+    + `${colocation ? ', colocataire,' : ''} la somme de ${eur(total)}${dateReglement}${modeReglement}${refReglement}, `
+    + `au titre du loyer et des charges pour la période du ${periodeDebut} au ${periodeFin}, et lui en donne quittance, `
+    + 'sous réserve de tous mes droits.'
+    + (solde > 0.004 ? ` Le solde antérieur de ${eur(solde)} reste dû.` : ''));
+  noteLegale(page, polices, c, enrichie
+    ? 'Cette quittance annule tous les reçus qui auraient pu être établis précédemment pour la même période. '
+      + 'Le paiement de la présente quittance n\'emporte pas présomption de paiement des termes antérieurs. '
+      + 'Elle est délivrée sous réserve d\'encaissement définitif des sommes versées (article 21 de la loi n°89-462 du 6 juillet 1989).'
+    : 'Cette quittance annule tous les reçus qui auraient pu être établis précédemment pour la même période. '
+      + 'Elle est délivrée sous réserve d\'encaissement définitif des sommes versées.');
+  if (prochaineEcheance) {
+    c.y -= 14;
+    texteEspace(page, polices.medium, 'PROCHAINE ÉCHÉANCE', 7.1, MARGE.cote, c.y, 1.6, TRES_DISCRET);
+    c.y -= 14;
+    page.drawText(propre(`${prochaineEcheance.libelle} : ${eur(prochaineEcheance.montant)}${prochaineEcheance.date ? `, à régler au plus tard le ${prochaineEcheance.date}` : ''}`), {
+      x: MARGE.cote, y: c.y, size: 9.2, font: polices.light, color: SECONDAIRE,
+    });
+  }
+  signature(page, polices, c, cachet, lieu, dateSignature, bailleur.nom, image);
   piedDePage(page, polices);
   return doc.save();
 }
