@@ -9,7 +9,7 @@ import { h, carte, tableau, tuile, bouton, badge, formulaire, executer,
 } from '../ui.js';
 import { montant, date, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { fluxDuBail } from '../calculs/loyers.js';
-import { pdfRestitutionAnika, pdfRecuDepotAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
+import { pdfRestitutionAnika, pdfRecuDepotAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { bienDuBail } from '../logements.js';
@@ -195,7 +195,7 @@ async function publierRecuDepot(donnees, ligne, { telecharger = true, notifierLo
   if (montantRecu <= 0.005 || !ligne.recuLe) { notifier('Enregistrez d’abord la réception (date et montant).', 'erreur'); return null; }
   const colocation = (bail?.colocataires || []).some((c) => c && c.locataireId);
   const octets = await pdfRecuDepotAnika({
-    bailleur: { nom: bailleur.nom, adresse: bailleur.adresse || '', email: bailleur.email || '', siren: sirenDepuisSiret(donnees.parametres.siret) },
+    bailleur: { nom: bailleur.nom, adresse: bailleur.adresse || '', email: bailleur.email || '', siren: sirenDepuisSiret(donnees.parametres.siret), siret: formaterSiret(donnees.parametres.siret) },
     locataireNom: nomDe(locataire),
     logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },
     montantRecu, montantConvenu: Number(ligne.attendu) || montantRecu, montantEnLettres: montantEnLettres(montantRecu),
@@ -336,7 +336,7 @@ async function restituerCaution(donnees, ligne) {
         nom: bailleur.nom,
         adresse: bailleur.adresse || '',
         email: bailleur.email || '',
-        siren: sirenDepuisSiret(donnees.parametres.siret),
+        siren: sirenDepuisSiret(donnees.parametres.siret), siret: formaterSiret(donnees.parametres.siret),
       },
       locataireNom: nomDe(locataire),
       logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },

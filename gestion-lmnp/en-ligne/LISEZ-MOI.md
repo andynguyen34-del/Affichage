@@ -34,6 +34,12 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v52 — SIRET complet sur les documents.** Quittance, reçu et
+restitution de dépôt, régularisation : le bloc bailleur imprime « SIRET
+753 660 695 00036 » (les 14 chiffres saisis dans Paramètres → Identité) au
+lieu du seul SIREN. Le courriel et le téléphone du bailleur viennent de
+Paramètres → Bailleurs (premier bailleur de la liste).
+
 **Nouveau en v51 — quittance enrichie et quittance en un geste.**
 - La quittance ANIKA porte un numéro (« 2026-10-SML-NNG » : année, mois,
   logement, initiales), sa date d'édition, le bail concerné, la période sur

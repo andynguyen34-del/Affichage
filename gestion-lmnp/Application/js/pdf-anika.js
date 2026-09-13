@@ -40,6 +40,12 @@ export function sirenDepuisSiret(siret) {
   return chiffres.length === 9 ? chiffres.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : '';
 }
 
+/** SIRET complet (14 chiffres, groupes 3 3 3 5) depuis les parametres ; '' si incomplet. */
+export function formaterSiret(siret) {
+  const chiffres = String(siret || '').replace(/\D/g, '');
+  return chiffres.length === 14 ? chiffres.replace(/(\d{3})(\d{3})(\d{3})(\d{5})/, '$1 $2 $3 $4') : '';
+}
+
 /** Nombre de mois civils couverts (bornes incluses), pour la mention (12 mois). */
 export function nbMoisEntre(debut, fin) {
   const d = new Date(`${String(debut).slice(0, 10)}T12:00:00`);
@@ -149,7 +155,8 @@ function parties(page, polices, c, bailleur, locataireNom, logement, complementL
     ...String(bailleur.adresse || '').split('\n').map((l) => l.trim()).filter(Boolean),
     bailleur.email || null,
     bailleur.telephone || null,
-    bailleur.siren ? `SIREN ${bailleur.siren}` : null,
+    // SIRET complet (v52) quand il est connu, sinon le SIREN.
+    bailleur.siret ? `SIRET ${bailleur.siret}` : (bailleur.siren ? `SIREN ${bailleur.siren}` : null),
   ].filter(Boolean);
   const lignesLocataire = [
     locataireNom,

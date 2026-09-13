@@ -7,7 +7,7 @@ import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, e
   barreOutils, notifier, ouvrirModale } from '../ui.js';
 import { montant, date, dateLongue, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js';
-import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, nbMoisEntre } from '../pdf-anika.js';
+import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, formaterSiret, nbMoisEntre } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { bienDuBail } from '../logements.js';
@@ -111,7 +111,7 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
       nom: bailleur.nom,
       adresse: bailleur.adresse || '',
       email: bailleur.email || '',
-      siren: sirenDepuisSiret(donnees.parametres.siret),
+      siren: sirenDepuisSiret(donnees.parametres.siret), siret: formaterSiret(donnees.parametres.siret),
     },
     locataireNom: nomDe(locataire),
     logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },

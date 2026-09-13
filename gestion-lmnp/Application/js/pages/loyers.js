@@ -7,7 +7,7 @@ import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, no
 import * as calcul from '../calculs/loyers.js';
 import { ouvrirMiseAJour, bandeauMiseAJour } from './maj-ui.js';
 import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
-import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret } from '../pdf-anika.js';
+import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
 import { estCourteDuree, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
@@ -97,10 +97,15 @@ function boutonRegenererQuittances(contexte, donnees, toutes) {
     });
     if (!ok) return;
     let faites = 0;
+    let rang = 0;
     for (const echeance of emises) {
+      rang += 1;
       const bail = donnees.baux.find((b) => b.id === echeance.bailId);
+      notifier(`Quittance ${rang}/${emises.length} : ${nomMois(echeance.mois)} ${echeance.annee}…`);
+      // Un dépôt qui ne répond plus (stockage) ne doit pas bloquer la suite : 90 s au plus par quittance.
+      const garde = new Promise((_, rejeter) => { setTimeout(() => rejeter(new Error(`Quittance de ${nomMois(echeance.mois)} ${echeance.annee} : le dépôt sur l’espace ne répond pas (90 s). Réessayez plus tard.`)), 90000); });
       // eslint-disable-next-line no-await-in-loop
-      const resultat = await genererQuittance(donnees, bail, echeance).catch((erreur) => { signalerErreur(erreur); return null; });
+      const resultat = await Promise.race([genererQuittance(donnees, bail, echeance), garde]).catch((erreur) => { signalerErreur(erreur); return null; });
       if (resultat?.publie) faites += 1;
     }
     notifier(`${faites} quittance(s) régénérée(s) et redéposée(s) sur les espaces.`, faites ? 'succes' : 'erreur');
@@ -207,7 +212,7 @@ async function genererQuittance(donnees, bail, echeance) {
       adresse: bailleur.adresse || '',
       email: bailleur.email || '',
       telephone: bailleur.telephone || '',
-      siren: sirenDepuisSiret(donnees.parametres.siret),
+      siren: sirenDepuisSiret(donnees.parametres.siret), siret: formaterSiret(donnees.parametres.siret),
     },
     locataireNom: nomDe(locataire),
     logement: { adresse: bien?.adresse || '', codePostal: bien?.codePostal || '', ville: bien?.ville || '' },
