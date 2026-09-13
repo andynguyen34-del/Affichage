@@ -13,6 +13,7 @@ import * as api from '../api.js';
 import { estCourteDuree, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
 import { apercuAppels, apercuAppelEcheance, envoyerAppelEcheance, envoyerAppels, lireJournalAppels, reglageAppel, logementsAvecAppel } from '../appel-loyer-client.js';
 import { resumeAppels, moisVise, sansAppel } from '../appel-loyer.js';
+import { numeroQuittance, soldeAnterieur, dernierReglement } from '../quittance.js';
 
 // ------------------------------------------------ appels de loyer (v49)
 // Le journal des appels (systeme/appels-loyer) est lu à l'affichage de la
@@ -76,6 +77,34 @@ async function appelerEcheance(contexte, echeance, { relance = false } = {}) {
       ],
     });
   });
+}
+
+/**
+ * Régénère les quittances déjà émises de l'année affichée (v51) au format
+ * enrichi : PDF refait et redéposé sur l'espace du colocataire, même nom de
+ * fichier (le précédent est remplacé), sans nouvel e-mail.
+ */
+function boutonRegenererQuittances(contexte, donnees, toutes) {
+  if (api.MODE !== 'nuage') return null;
+  const emises = toutes.filter((e) => e.quittanceEmiseLe && !e.horsBail);
+  if (!emises.length) return null;
+  return bouton(`Régénérer les quittances émises (${emises.length})`, async () => {
+    const ok = await confirmer({
+      titre: `Régénérer ${emises.length} quittance(s)`,
+      message: `Les quittances déjà émises en ${contexte.annee} sont refaites au format actuel (numéro, bail, périodes, règlement) et redéposées sur l’espace de chaque colocataire, sans nouvel e-mail. `
+        + `Concernées : ${emises.map((e) => `${nomDe(locataireDe(donnees, e, donnees.baux.find((b) => b.id === e.bailId)))} — ${nomMois(e.mois)} ${e.annee}`).join(' ; ')}.`,
+      libelleValider: 'Régénérer',
+    });
+    if (!ok) return;
+    let faites = 0;
+    for (const echeance of emises) {
+      const bail = donnees.baux.find((b) => b.id === echeance.bailId);
+      // eslint-disable-next-line no-await-in-loop
+      const resultat = await genererQuittance(donnees, bail, echeance).catch((erreur) => { signalerErreur(erreur); return null; });
+      if (resultat?.publie) faites += 1;
+    }
+    notifier(`${faites} quittance(s) régénérée(s) et redéposée(s) sur les espaces.`, faites ? 'succes' : 'erreur');
+  }, { titre: 'Refait les PDF des quittances déjà émises au format actuel et les redépose sur les espaces, sans e-mail' });
 }
 
 /** Le bouton « Appeler le loyer de {mois} (n) » : tous les colocataires pas encore appelés, logement choisi ou tous. */
@@ -155,20 +184,29 @@ const periodeTexte = (echeance, bail) => {
  * l'espace du colocataire, téléchargement, et e-mail de mise à disposition
  * (le colocataire retire le PDF sur son espace).
  */
-async function quittancePdfEtEnvoi(donnees, bail, echeance) {
+/**
+ * Génère la quittance ANIKA d'une échéance (v51 : enrichie — numéro, bail,
+ * périodes, règlement, solde antérieur), la dépose sur l'espace du
+ * colocataire et note l'émission. Renvoie { octets, nomFichier, publie,
+ * erreurPublication, locataire, bailleur } ou null (message affiché).
+ */
+async function genererQuittance(donnees, bail, echeance) {
   const bailleur = donnees.parametres.bailleurs?.[0];
-  if (!bailleur?.nom) { notifier('Renseignez d’abord un bailleur dans les Paramètres.', 'erreur'); return; }
+  if (!bailleur?.nom) { notifier('Renseignez d’abord un bailleur dans les Paramètres.', 'erreur'); return null; }
   const locataire = locataireDe(donnees, echeance, bail);
-  if (!locataire) { notifier('Locataire introuvable pour cette échéance.', 'erreur'); return; }
+  if (!locataire) { notifier('Locataire introuvable pour cette échéance.', 'erreur'); return null; }
   const bien = donnees.biens.find((b) => b.id === bail?.bienId);
   const bornes = periodeBornes(echeance, bail);
-  const dernier = (echeance.encaissements || []).slice(-1)[0];
+  const reglement = dernierReglement(echeance);
+  const toutes = calcul.echeancesGlobales(donnees.baux, echeance.annee, donnees.loyers);
+  const anneePrecedente = calcul.echeancesGlobales(donnees.baux, Number(echeance.annee) - 1, donnees.loyers);
 
   const octets = await pdfQuittanceAnika({
     bailleur: {
       nom: bailleur.nom,
       adresse: bailleur.adresse || '',
       email: bailleur.email || '',
+      telephone: bailleur.telephone || '',
       siren: sirenDepuisSiret(donnees.parametres.siret),
     },
     locataireNom: nomDe(locataire),
@@ -178,8 +216,16 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
     periodeFin: dateLongueFr(bornes.fin),
     loyerHc: echeance.loyerHc || 0,
     charges: echeance.charges || 0,
+    autres: echeance.autres || 0,
     lieu: donnees.parametres.lieuSignature || '',
-    dateSignature: dateLongueFr(dernier?.date || aujourdhui()),
+    dateSignature: dateLongueFr(reglement?.date || aujourdhui()),
+    enrichie: true,
+    numero: numeroQuittance({ annee: echeance.annee, mois: echeance.mois, bien, locataire }),
+    editeeLe: dateLongueFr(aujourdhui()),
+    bailDebut: bail?.dateDebut ? dateLongueFr(bail.dateDebut) : '',
+    colocation: (bail?.colocataires || []).some((c) => c && c.locataireId),
+    reglement: reglement ? { date: reglement.date ? dateLongueFr(reglement.date) : '', mode: reglement.mode, reference: reglement.reference } : null,
+    soldeAnterieur: soldeAnterieur([...anneePrecedente, ...toutes], echeance),
   });
   const nomFichier = `ANIKA_quittance_loyer_${nomMois(echeance.mois)}_${echeance.annee}_${(locataire.prenom || locataire.nom || '').toLowerCase()}.pdf`;
 
@@ -195,31 +241,40 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
   if (!echeance.quittanceEmiseLe) {
     etat.enregistrer('loyers', { ...gabaritEcheance(echeance), quittanceEmiseLe: aujourdhui() }).catch(() => {});
   }
+  return { octets, nomFichier, publie, erreurPublication, locataire, bailleur };
+}
 
-  const telecharger = () => {
-    const lien = document.createElement('a');
-    lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
-    lien.download = nomFichierTelechargement(nomFichier);
-    document.body.append(lien);
-    lien.click();
-    setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
-  };
+const telechargerOctets = (octets, nomFichier) => {
+  const lien = document.createElement('a');
+  lien.href = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
+  lien.download = nomFichierTelechargement(nomFichier);
+  document.body.append(lien);
+  lien.click();
+  setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+};
 
-  const notifierParEmail = async () => {
-    if (!locataire.email) { notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Logements & baux »).', 'erreur'); return; }
-    if (!publie) { notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return; }
-    await executer(api.envoyerCourriel({ type: 'documents',
-      destinataires: destinatairesDe(locataire),
-      sujet: `Votre quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
-      html: `<p>Bonjour ${locataire.prenom || ''},</p>`
-        + `<p>Votre quittance de loyer pour <strong>${nomMois(echeance.mois)} ${echeance.annee}</strong> `
-        + `(${montant(echeance.total || 0)}) est disponible sur votre espace :</p>`
-        + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
-        + '<p>Connectez-vous avec votre adresse e-mail pour la consulter et la télécharger.</p>'
-        + `<p>Bien cordialement,<br>${bailleur.nom}</p>`,
-    }), `Notification de mise à disposition envoyée à ${locataire.email}.`);
-  };
+/** L'e-mail de mise à disposition d'une quittance publiée. */
+async function notifierQuittance(echeance, { locataire, bailleur, publie }, { silencieux = false } = {}) {
+  if (!locataire.email) { if (!silencieux) notifier('Ce colocataire n’a pas d’adresse e-mail (à renseigner dans « Locataires »).', 'erreur'); return false; }
+  if (!publie) { if (!silencieux) notifier('La quittance n’a pas pu être déposée sur son espace — corrigez d’abord ce point.', 'erreur'); return false; }
+  const resultat = await executer(api.envoyerCourriel({ type: 'documents',
+    destinataires: destinatairesDe(locataire),
+    sujet: `Votre quittance de loyer — ${nomMois(echeance.mois)} ${echeance.annee}`,
+    html: `<p>Bonjour ${locataire.prenom || ''},</p>`
+      + `<p>Votre quittance de loyer pour <strong>${nomMois(echeance.mois)} ${echeance.annee}</strong> `
+      + `(${montant(echeance.total || 0)}) est disponible sur votre espace :</p>`
+      + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
+      + '<p>Connectez-vous avec votre adresse e-mail pour la consulter et la télécharger.</p>'
+      + `<p>Bien cordialement,<br>${bailleur.nom}</p>`,
+  }), silencieux ? null : `Notification de mise à disposition envoyée à ${locataire.email}.`);
+  return resultat !== null;
+}
 
+/** Bouton « Quittance » : génération, fenêtre avec téléchargement et envoi de l'e-mail. */
+async function quittancePdfEtEnvoi(donnees, bail, echeance) {
+  const resultat = await genererQuittance(donnees, bail, echeance);
+  if (!resultat) return;
+  const { octets, nomFichier, publie, erreurPublication, locataire } = resultat;
   ouvrirModale({
     titre: 'Quittance générée',
     corps: h('div', {}, [
@@ -230,9 +285,61 @@ async function quittancePdfEtEnvoi(donnees, bail, echeance) {
           `Non déposée sur son espace : ${erreurPublication?.message || 'erreur inconnue'}` }),
     ]),
     pied: [
-      h('button', { class: 'bouton', type: 'button', onclick: telecharger }, 'Télécharger le PDF'),
-      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: notifierParEmail }, 'Notifier par e-mail'),
+      h('button', { class: 'bouton', type: 'button', onclick: () => telechargerOctets(octets, nomFichier) }, 'Télécharger le PDF'),
+      h('button', { class: 'bouton bouton-primaire', type: 'button', onclick: () => notifierQuittance(echeance, resultat) }, 'Notifier par e-mail'),
     ],
+  });
+}
+
+/**
+ * Quittance en un geste (v51, E1) : générée, déposée sur l'espace et
+ * annoncée par e-mail, sans fenêtre. Renvoie true si tout est parti.
+ */
+async function quittanceEnUnGeste(donnees, bail, echeance) {
+  const resultat = await genererQuittance(donnees, bail, echeance);
+  if (!resultat) return false;
+  const envoye = await notifierQuittance(echeance, resultat, { silencieux: true });
+  if (envoye) notifier(`Quittance de ${nomMois(echeance.mois)} ${echeance.annee} générée, déposée sur l’espace de ${nomDe(resultat.locataire)} et envoyée par e-mail.`, 'succes');
+  else notifier(`Quittance de ${nomMois(echeance.mois)} ${echeance.annee} générée${resultat.publie ? ' et déposée sur son espace' : ''}, mais l’e-mail n’a pas pu partir (${resultat.locataire.email ? 'dépôt sur l’espace impossible' : 'pas d’adresse e-mail'}).`, 'erreur');
+  return envoye;
+}
+
+/**
+ * Dès qu'un virement solde le mois (v51, E1) : fenêtre « Générer et envoyer »
+ * / « Plus tard », avec la case « toujours faire ainsi » (parametres.quittanceAuto).
+ * Si le réglage est déjà activé, tout part sans fenêtre.
+ */
+async function proposerQuittance(donnees, bail, echeance, montantVerse) {
+  if (api.MODE !== 'nuage') return;
+  const locataire = locataireDe(donnees, echeance, bail);
+  if (!locataire) return;
+  // L'échéance telle qu'elle vient d'être enregistrée (avec le nouvel encaissement).
+  const majEcheance = etat.liste('loyers').find((l) => l.id === echeance.id);
+  const aJour = majEcheance ? { ...echeance, ...majEcheance } : echeance;
+  const fraiches = { ...donnees, parametres: etat.parametres(), loyers: etat.liste('loyers') };
+  if (fraiches.parametres.quittanceAuto) { await quittanceEnUnGeste(fraiches, bail, aJour); return; }
+  const caseToujours = h('input', { type: 'checkbox', id: 'quittance-toujours' });
+  await new Promise((resoudre) => {
+    const fermer = ouvrirModale({
+      titre: `Quittance de ${nomMois(echeance.mois)} ${echeance.annee} — ${nomDe(locataire)}`,
+      surFermeture: () => resoudre(),
+      corps: h('div', { class: 'proposition-quittance' }, [
+        h('p', { texte: `Le virement de ${montant(montantVerse)} solde le mois. La quittance PDF ANIKA va être générée, déposée sur son espace`
+          + `${locataire.email ? ` et annoncée par e-mail à ${destinatairesDe(locataire).join(', ')}` : ' (pas d’adresse e-mail : pas d’envoi)'}.` }),
+        h('label', { class: 'legende', style: 'display:flex;gap:.4rem;align-items:center' }, [caseToujours, 'Toujours faire ainsi, sans me demander (réglable dans Paramètres → Quittances)']),
+      ]),
+      pied: [
+        bouton('Plus tard', () => { fermer(); resoudre(); }, { titre: 'Le bouton « Quittance » de la ligne reste disponible' }),
+        bouton('Générer et envoyer', async () => {
+          fermer({ valide: true });
+          try {
+            if (caseToujours.checked) await etat.enregistrerParametres({ quittanceAuto: true });
+            await quittanceEnUnGeste(fraiches, bail, aJour);
+          } catch (erreur) { signalerErreur(erreur); }
+          resoudre();
+        }, { type: 'primaire' }),
+      ],
+    });
   });
 }
 
@@ -241,7 +348,7 @@ async function enregistrerEcheance(echeance, modifications) {
   return etat.enregistrer('loyers', { ...gabaritEcheance(echeance), ...modifications });
 }
 
-async function saisirEncaissement(echeance) {
+async function saisirEncaissement(donnees, bail, echeance) {
   const reste = centimes((echeance.total || 0) - calcul.totalEncaisse(echeance));
   const saisie = await formulaire({
     titre: `Encaissement — ${nomMois(echeance.mois)} ${echeance.annee}`,
@@ -263,12 +370,16 @@ async function saisirEncaissement(echeance) {
   };
   // Ajout additif sur la version fraîche : un encaissement saisi en même temps
   // depuis l'autre poste n'est jamais écrasé.
-  await executer(
+  const enregistre = await executer(
     etat.modifierElement('loyers', echeance.id, (e) => {
       e.encaissements = [...(e.encaissements || []), nouvel];
     }, gabaritEcheance(echeance)),
     'Encaissement enregistré.',
   );
+  // v51 : le virement solde le mois → quittance en un geste (fenêtre, ou directement si réglé).
+  if (enregistre !== null && !echeance.horsBail && centimes(reste - nouvel.montant) <= 0.005 && !echeance.quittanceEmiseLe) {
+    await proposerQuittance(donnees, bail, echeance, nouvel.montant);
+  }
 }
 
 async function ajusterEcheance(echeance) {
@@ -529,6 +640,7 @@ export default {
     conteneur.append(barreOutils([
       bouton('Mettre à jour les échéances', () => ouvrirMiseAJour(donnees).catch(signalerErreur), { titre: 'Compare les échéances et dépôts enregistrés aux baux : orphelins, montants modifiés' }),
       boutonAppelDuMois(contexte, donnees),
+      boutonRegenererQuittances(contexte, donnees, toutes),
     ]));
 
     // Vue « Tous les logements » : un bandeau par logement, ses cartes, puis
@@ -593,7 +705,7 @@ export default {
         } },
         { titre: 'État', valeur: ligneStatut },
         { titre: '', actions: true, valeur: (e) => h('div', { class: 'groupe-boutons' }, [
-          bouton('Virement reçu', () => saisirEncaissement(e), { petit: true, type: 'primaire' }),
+          bouton('Virement reçu', () => saisirEncaissement(donnees, bail, e).catch(signalerErreur), { petit: true, type: 'primaire' }),
           bouton('Quittance', () => quittancePdfEtEnvoi(donnees, bail, e), {
             petit: true,
             titre: calcul.statut(e) === 'paye'
@@ -628,6 +740,7 @@ export default {
             if (!confirme) return;
             let faits = 0;
             let echoues = 0;
+            const soldees = [];
             for (const echeance of aRegler) {
               const reste = centimes(echeance.total - calcul.totalEncaisse(echeance));
               if (reste <= 0) continue;
@@ -639,10 +752,27 @@ export default {
                   }];
                 }, gabaritEcheance(echeance));
                 faits += 1;
+                if (!echeance.quittanceEmiseLe && !echeance.horsBail) soldees.push(echeance);
               } catch (erreur) { echoues += 1; console.error(erreur); }
             }
             if (faits) notifier(`${faits} impayé(s) encaissé(s).`, 'succes');
             if (echoues) notifier(`${echoues} échéance(s) n’ont pas pu être enregistrées.`, 'erreur');
+            // v51 : les quittances des mois soldés, en un geste (réglage) ou après confirmation.
+            if (soldees.length && api.MODE === 'nuage') {
+              const tout = { ...donnees, parametres: etat.parametres(), loyers: etat.liste('loyers') };
+              const ok = tout.parametres.quittanceAuto || await confirmer({
+                titre: `${soldees.length} quittance(s) à générer`,
+                message: `Générer, déposer sur son espace et envoyer par e-mail les quittances de ${soldees.map((e) => `${nomMois(e.mois)} ${e.annee}`).join(', ')} ?`,
+                libelleValider: 'Générer et envoyer',
+              });
+              if (ok) {
+                for (const echeance of soldees) {
+                  const aJour = { ...echeance, ...(tout.loyers.find((l) => l.id === echeance.id) || {}) };
+                  // eslint-disable-next-line no-await-in-loop
+                  await quittanceEnUnGeste(tout, bail, aJour).catch(signalerErreur);
+                }
+              }
+            }
           }, { petit: true }),
           bouton('Relevé annuel', () => imprimerReleve({
             bailleur: donnees.parametres.bailleurs?.[0],

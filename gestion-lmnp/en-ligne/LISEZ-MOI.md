@@ -34,6 +34,21 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v51 — quittance enrichie et quittance en un geste.**
+- La quittance ANIKA porte un numéro (« 2026-10-SML-NNG » : année, mois,
+  logement, initiales), sa date d'édition, le bail concerné, la période sur
+  chaque ligne, la date, le mode et la référence du règlement dans
+  l'attestation, « Net payé » comme total, la mention « le paiement de la
+  présente quittance n'emporte pas présomption de paiement des termes
+  antérieurs » (art. 21 loi 1989), un solde antérieur si un mois précédent
+  reste impayé, et le téléphone du bailleur. Cachet ANIKA inchangé.
+- Dès qu'un virement solde le mois (« Virement reçu », « Pointer les
+  impayés »), une fenêtre « Générer et envoyer » / « Plus tard » propose la
+  quittance en un geste : générée, déposée sur l'espace du colocataire,
+  annoncée par e-mail. La case « toujours faire ainsi » (Paramètres →
+  « Quittances ») supprime la fenêtre. Le bouton « Quittance » de la ligne
+  reste disponible.
+
 **Nouveau en v50 — cadres repliables.** Chaque cadre (« carte ») se replie
 d'un clic sur son titre ou son chevron ▸ / ▾ ; replié, il garde son titre, ses
 boutons d'action et une ligne de résumé (expéditeur réglé, montants reçus…).

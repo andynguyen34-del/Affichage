@@ -43,9 +43,9 @@ export default {
             ' sur une échéance non soldée envoie l’appel à ce colocataire (aperçu avant envoi), puis « Relancer ✉ » renvoie un rappel « Relance — … » ; '
             + 'la ligne note « appelé le … · relancé le … ». « Appeler le loyer de {mois} » en haut appelle tous les colocataires du logement pas encore appelés. '
             + 'L’envoi automatique n’insiste pas auprès de quelqu’un déjà appelé pour le mois.'],
-          ['Quand le mois est soldé : bouton ', h('strong', { texte: 'Quittance' }),
-            ' — le PDF est déposé sur l’espace du colocataire, téléchargeable, et un clic envoie '
-            + 'l’e-mail de mise à disposition. « Imprimer » édite la version papier.'],
+          ['Dès qu’un virement solde le mois (v51) : une fenêtre propose ', h('strong', { texte: 'Générer et envoyer' }),
+            ' la quittance en un geste (PDF ANIKA numéroté, déposé sur l’espace du colocataire, annoncé par e-mail) ; « Plus tard » laisse le bouton « Quittance » de la ligne. '
+            + 'La case « toujours faire ainsi » (Paramètres → Quittances) supprime la fenêtre. « Imprimer » édite la version papier.'],
         ]),
       ]),
     }));

@@ -359,6 +359,25 @@ function carteBienvenue(donnees) {
   });
 }
 
+/** Quittances (v51) : génération et envoi en un geste dès qu'un virement solde le mois. */
+function carteQuittances(parametres) {
+  const auto = Boolean(parametres.quittanceAuto);
+  const caseAuto = h('input', { type: 'checkbox', id: 'quittance-auto', checked: auto, onchange: async (e) => {
+    await executer(etat.enregistrerParametres({ quittanceAuto: e.target.checked }), e.target.checked
+      ? 'Quittances en un geste : dès qu’un virement solde le mois, la quittance est générée, déposée et envoyée sans demander.'
+      : 'Une fenêtre demandera confirmation à chaque mois soldé.');
+  } });
+  return carte({
+    titre: 'Quittances',
+    resume: auto ? 'générées et envoyées dès que le virement solde le mois, sans demander' : 'fenêtre de confirmation à chaque mois soldé',
+    aide: 'Numérotées (année-mois-logement-initiales), avec le bail, la période de chaque ligne, la date et le mode du règlement, le solde antérieur éventuel. Déposées sur l’espace du colocataire et annoncées par e-mail.',
+    corps: h('div', {}, [
+      h('label', { style: 'display:flex;gap:.5rem;align-items:center' }, [caseAuto, 'Dès qu’un virement solde le mois : générer, déposer et envoyer la quittance sans me demander']),
+      h('p', { class: 'legende', style: 'margin-top:.4rem', texte: 'Décoché : une fenêtre « Générer et envoyer » / « Plus tard » s’ouvre après le virement. Le bouton « Quittance » de chaque ligne reste disponible pour rouvrir ou régénérer.' }),
+    ]),
+  });
+}
+
 /** Affichage : plein écran au lancement (réglage par appareil) et installation sur l'écran d'accueil. */
 function carteAffichage() {
   const zone = h('div');
@@ -886,6 +905,7 @@ export default {
     if (api.MODE === 'nuage') conteneur.append(carteAppelLoyer(donnees));
     if (api.MODE === 'nuage') conteneur.append(carteDepotGarantie(parametres));
     if (api.MODE === 'nuage') conteneur.append(carteBienvenue(donnees));
+    if (api.MODE === 'nuage') conteneur.append(carteQuittances(parametres));
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
 
     conteneur.append(carte({
