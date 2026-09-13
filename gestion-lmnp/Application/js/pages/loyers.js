@@ -1,7 +1,7 @@
 // Virements des colocataires, échéances mensuelles et quittances.
 
 import * as etat from '../etat.js';
-import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
+import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer, groupeRepliable,
   barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur } from '../ui.js';
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
@@ -537,15 +537,21 @@ export default {
     // Un bail dont le logement a été supprimé reste visible, en fin de page.
     const logements = [...donnees.biens, ...(donnees.baux.some((b) => !donnees.biens.some((x) => x.id === b.bienId)) ? [null] : [])];
     for (const bien of logements) {
-    if (grouper) conteneur.append(bien ? enteteLogement(bien, contexte) : h('div', { class: 'section-logement' }, [h('h2', { texte: 'Baux sans logement' })]));
+    // v50 : en vue « Tous les logements », le bandeau d'un logement replie ses cartes.
+    let cible = conteneur;
+    if (grouper) {
+      const groupe = groupeRepliable({ entete: bien ? enteteLogement(bien, contexte) : h('div', { class: 'section-logement' }, [h('h2', { texte: 'Baux sans logement' })]), cle: bien?.id || 'sans-logement' });
+      conteneur.append(groupe.element);
+      cible = groupe.corps;
+    }
     let attenduLogement = 0;
     let encaisseLogement = 0;
     if (bien && estCourteDuree(bien)) {
       const sejours = sejoursDe(donnees.loyers, bien.id, annee);
       attenduLogement = sejours.reduce((s, x) => s + (x.total || 0), 0);
       encaisseLogement = sejours.reduce((s, x) => s + calcul.totalEncaisse(x), 0);
-      conteneur.append(carteSejours(donnees, bien, annee));
-      if (grouper) conteneur.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
+      cible.append(carteSejours(donnees, bien, annee));
+      if (grouper) cible.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
       continue;
     }
     const bauxDuLogement = donnees.baux.filter((b) => (bien ? b.bienId === bien.id : !donnees.biens.some((x) => x.id === b.bienId)));
@@ -605,7 +611,7 @@ export default {
       ];
 
       cartes += 1;
-      conteneur.append(carte({
+      cible.append(carte({
         titre: `${nomDe(locataireCourant)} — ${bien?.nom || 'logement inconnu'}`,
         aide: `${montant(recuBail)} reçus sur ${montant(totalBail)} attendus en ${annee}`
           + (locataireCourant?.email ? '' : ' · pas d’adresse e-mail renseignée'),
@@ -650,7 +656,7 @@ export default {
       }
     }
     if (!cartes) {
-      conteneur.append(carte({
+      cible.append(carte({
         titre: bien ? bien.nom : 'Baux sans logement',
         corps: vide(`Aucune échéance en ${annee}`, bauxDuLogement.length
           ? 'Aucun bail de ce logement ne couvre cette année.'
@@ -658,7 +664,7 @@ export default {
         serre: true,
       }));
     }
-    if (grouper) conteneur.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
+    if (grouper) cible.append(sousTotalLogement(centimes(attenduLogement), centimes(encaisseLogement)));
     }
 
     return conteneur;

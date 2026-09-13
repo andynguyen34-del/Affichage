@@ -34,6 +34,15 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v50 — cadres repliables.** Chaque cadre (« carte ») se replie
+d'un clic sur son titre ou son chevron ▸ / ▾ ; replié, il garde son titre, ses
+boutons d'action et une ligne de résumé (expéditeur réglé, montants reçus…).
+L'état est mémorisé sur l'appareil, page par page (`lmnp-replis`). Par
+défaut, Paramètres est replié sauf « Identité » ; les autres pages sont
+dépliées. Une barre « Tout replier / Tout déplier » apparaît en haut des
+pages d'au moins trois cadres. En vue « Tous les logements », le bandeau
+d'un logement replie toutes ses cartes (Loyers) ou ses lignes (Locataires).
+
 **Nouveau en v49 — appel de loyer depuis « Virements et quittances ».**
 Sur chaque échéance non soldée : « Appel ✉ » (aperçu de l'e-mail, envoi au
 colocataire), puis « Relancer ✉ » (objet « Relance — … », rappel de la date

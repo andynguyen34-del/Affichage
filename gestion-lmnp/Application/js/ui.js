@@ -27,14 +27,118 @@ export function vider(element) {
   return element;
 }
 
-export function carte({ titre, aide, actions = [], corps, serre = false }) {
+// ------------------------------------------------ cadres repliables (v50)
+// Chaque carte se replie d'un clic sur son titre ; l'état est mémorisé sur
+// l'appareil, page par page (clé « page|titre »). Par défaut, la page
+// Paramètres est repliée sauf « Identité » ; ailleurs tout est déplié.
+
+const CLE_REPLIS = 'lmnp-replis';
+let pageRepli = '';
+
+const lireReplis = () => { try { return JSON.parse(localStorage.getItem(CLE_REPLIS) || '{}') || {}; } catch { return {}; } };
+const ecrireRepli = (cle, replie) => {
+  try {
+    const replis = lireReplis();
+    replis[cle] = Boolean(replie);
+    localStorage.setItem(CLE_REPLIS, JSON.stringify(replis));
+  } catch { /* stockage indisponible : l'état ne survit pas au redessin */ }
+};
+
+/** La page en cours de rendu (app.js), pour distinguer les cartes de même titre. */
+export function definirPageRepli(cle) { pageRepli = String(cle || ''); }
+export const pageRepliCourante = () => pageRepli;
+
+/** Replié par défaut ? Paramètres : tout sauf « Identité » ; ailleurs : rien. */
+const repliParDefaut = (page, titre) => page === 'parametres' && titre !== 'Identité';
+
+export function estReplie(cle, titre = '') {
+  const replis = lireReplis();
+  if (Object.prototype.hasOwnProperty.call(replis, cle)) return Boolean(replis[cle]);
+  return repliParDefaut(pageRepli, titre);
+}
+
+/** Applique l'état replié à une carte déjà construite. */
+function appliquerRepli(section, replie, { memoriser = true } = {}) {
+  section.classList.toggle('repliee', replie);
+  const chevron = section.querySelector(':scope > .carte-entete .carte-chevron');
+  if (chevron) { chevron.textContent = replie ? '▸' : '▾'; chevron.setAttribute('aria-expanded', replie ? 'false' : 'true'); chevron.title = replie ? 'Déplier' : 'Replier'; }
+  if (memoriser && section.dataset.repli) ecrireRepli(section.dataset.repli, replie);
+}
+
+/**
+ * Une carte : titre, aide, boutons d'action, corps.
+ *   resume    : texte affiché sur la ligne du titre quand la carte est repliée (à défaut, l'aide)
+ *   repliable : false pour une carte toujours ouverte (sans titre : jamais repliable)
+ *   cle       : identifiant de mémoire (à défaut le titre)
+ */
+export function carte({ titre, aide, actions = [], corps, serre = false, resume = '', repliable = true, cle = '' }) {
+  const peutReplier = Boolean(repliable && titre);
+  const cleRepli = peutReplier ? `${pageRepli}|${cle || titre}` : '';
+  const chevron = peutReplier ? h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾') : null;
+  const bloc = h('div', { class: 'carte-titre' }, [
+    chevron,
+    h('div', { class: 'carte-titre-textes' }, [
+      titre ? h('h2', { texte: titre }) : null,
+      aide ? h('div', { class: 'aide', texte: aide }) : null,
+      peutReplier ? h('div', { class: 'carte-resume', texte: resume || aide || '' }) : null,
+    ]),
+  ]);
   const entete = (titre || actions.length)
-    ? h('div', { class: 'carte-entete' }, [
-      h('div', {}, [titre ? h('h2', { texte: titre }) : null, aide ? h('div', { class: 'aide', texte: aide }) : null]),
-      actions.length ? h('div', { class: 'groupe-boutons' }, actions) : null,
-    ])
+    ? h('div', { class: 'carte-entete' }, [bloc, actions.length ? h('div', { class: 'groupe-boutons' }, actions) : null])
     : null;
-  return h('section', { class: 'carte' }, [entete, h('div', { class: `carte-corps${serre ? ' serre' : ''}` }, corps)]);
+  const section = h('section', { class: 'carte' }, [entete, h('div', { class: `carte-corps${serre ? ' serre' : ''}` }, corps)]);
+  if (peutReplier) {
+    section.dataset.repli = cleRepli;
+    const basculer = () => appliquerRepli(section, !section.classList.contains('repliee'));
+    bloc.classList.add('cliquable');
+    bloc.addEventListener('click', (evenement) => {
+      if (evenement.target.closest('a, input, select, textarea, .bouton, .groupe-boutons')) return;
+      basculer();
+    });
+    appliquerRepli(section, estReplie(cleRepli, titre), { memoriser: false });
+  }
+  return section;
+}
+
+/** Replie ou déplie toutes les cartes repliables d'un conteneur (barre « Tout replier / Tout déplier »). */
+export function replierToutes(conteneur, replie) {
+  for (const section of conteneur.querySelectorAll('section.carte[data-repli]')) appliquerRepli(section, replie);
+  for (const groupe of conteneur.querySelectorAll('.groupe-repliable[data-repli]')) appliquerGroupe(groupe, replie);
+}
+
+/** Barre « Tout replier / Tout déplier » (pages d'au moins trois cartes). */
+export function barreReplis(conteneur) {
+  return h('div', { class: 'barre-replis' }, [
+    bouton('Tout replier', () => replierToutes(conteneur, true), { petit: true, type: 'discret', titre: 'Replie tous les cadres de la page' }),
+    bouton('Tout déplier', () => replierToutes(conteneur, false), { petit: true, type: 'discret', titre: 'Déplie tous les cadres de la page' }),
+  ]);
+}
+
+function appliquerGroupe(groupe, replie, { memoriser = true } = {}) {
+  groupe.classList.toggle('repliee', replie);
+  const chevron = groupe.querySelector(':scope > .groupe-entete .carte-chevron');
+  if (chevron) { chevron.textContent = replie ? '▸' : '▾'; chevron.setAttribute('aria-expanded', replie ? 'false' : 'true'); }
+  if (memoriser && groupe.dataset.repli) ecrireRepli(groupe.dataset.repli, replie);
+}
+
+/**
+ * Un groupe repliable (bandeau d'un logement et ses cartes) : `entete` est le
+ * bandeau (un chevron y est ajouté), `cle` l'identifiant de mémoire.
+ * Renvoie { element, corps } : ajoutez les cartes dans `corps`.
+ */
+export function groupeRepliable({ entete, cle }) {
+  const cleRepli = `${pageRepli}|groupe:${cle}`;
+  const chevron = h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾');
+  entete.prepend(chevron);
+  entete.classList.add('groupe-entete', 'cliquable');
+  const corps = h('div', { class: 'groupe-corps' });
+  const element = h('div', { class: 'groupe-repliable', 'data-repli': cleRepli }, [entete, corps]);
+  entete.addEventListener('click', (evenement) => {
+    if (evenement.target.closest('a, input, select, textarea, .bouton, .groupe-boutons')) return;
+    appliquerGroupe(element, !element.classList.contains('repliee'));
+  });
+  appliquerGroupe(element, estReplie(cleRepli, ''), { memoriser: false });
+  return { element, corps };
 }
 
 export function tuile({ libelle, valeur, detail, ton = 'neutre' }) {

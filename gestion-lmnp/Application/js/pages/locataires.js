@@ -17,7 +17,7 @@
 
 import * as etat from '../etat.js';
 import * as api from '../api.js';
-import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur, ouvrirModale } from '../ui.js';
+import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur, ouvrirModale, groupeRepliable } from '../ui.js';
 import { date, montant, aujourdhui } from '../format.js';
 import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeCommun, libelleCategorie, estCommune } from '../justificatifs.js';
 import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publication.js';
@@ -519,12 +519,14 @@ export default {
     } else {
       for (const logement of logements) {
         const siens = tout.locataires.filter((l) => surLogement(l, logement.id));
-        corps.append(h('div', { class: 'section-logement section-logement-serree' }, [
+        // v50 : le bandeau du logement replie ses lignes.
+        const groupe = groupeRepliable({ cle: logement.id, entete: h('div', { class: 'section-logement section-logement-serree' }, [
           h('span', { class: 'section-logement-nom', texte: `🏠 ${logement.nom}` }),
           h('span', { class: 'legende', texte: `${logement.ville ? `${logement.ville} · ` : ''}${libelleTypeLocation(logement)} · ${siens.length} ${siens.length > 1 ? 'personnes' : 'personne'}` }),
-        ]));
-        corps.append(lignePiecesCommunes(tout, logement, bailleur));
-        corps.append(tableLocataires(tout, siens, bailleur, contexte, lancerReleve));
+        ]) });
+        groupe.corps.append(lignePiecesCommunes(tout, logement, bailleur));
+        groupe.corps.append(tableLocataires(tout, siens, bailleur, contexte, lancerReleve));
+        corps.append(groupe.element);
       }
       if (sansLogement.length) {
         corps.append(h('div', { class: 'section-logement section-logement-serree' }, [h('span', { class: 'section-logement-nom', texte: 'Bail sans logement connu' })]));

@@ -15,6 +15,16 @@ export default {
     const conteneur = h('div');
 
     conteneur.append(carte({
+      titre: 'Les cadres se replient',
+      corps: h('div', { class: 'aide-bloc' }, [
+        liste([
+          'Un clic sur le titre d’un cadre (ou sur son chevron ▸ / ▾) le replie ou le déplie ; replié, il garde ses boutons et une ligne de résumé. L’état est mémorisé sur cet appareil, page par page.',
+          'Paramètres s’ouvre replié sauf « Identité » ; les autres pages sont dépliées. « Tout replier / Tout déplier » en haut des pages qui ont plusieurs cadres. En vue « Tous les logements », le bandeau d’un logement replie tout ce qui le concerne.',
+        ]),
+      ]),
+    }));
+
+    conteneur.append(carte({
       titre: 'Le mois type',
       corps: h('div', { class: 'aide-bloc' }, [
         liste([

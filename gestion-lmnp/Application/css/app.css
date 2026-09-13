@@ -178,6 +178,26 @@ tr.ligne-cible td { background: var(--attention-clair); }
 .carte-corps { padding: 1rem; }
 .carte-corps.serre { padding: 0; }
 
+/* Cadres repliables (v50) */
+.carte-titre { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; flex: 1; }
+.carte-titre.cliquable { cursor: pointer; user-select: none; }
+.carte-titre-textes { min-width: 0; flex: 1; }
+.carte-chevron {
+  flex: none; width: 1.35rem; height: 1.35rem; margin-top: .05rem; border-radius: 50%;
+  border: 1px solid var(--bordure); background: var(--fond-carte); color: var(--encre-douce);
+  font-size: .7rem; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0;
+}
+.carte-chevron:hover { background: #eef1f4; color: var(--encre); }
+.carte-resume { display: none; font-size: .78rem; color: var(--encre-douce); margin-top: .1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carte.repliee > .carte-entete { border-bottom: none; }
+.carte.repliee > .carte-entete .aide { display: none; }
+.carte.repliee > .carte-entete .carte-resume { display: block; }
+.carte.repliee > .carte-corps { display: none; }
+.barre-replis { display: flex; gap: .3rem; justify-content: flex-end; margin: -.4rem 0 .5rem; }
+.groupe-repliable.repliee > .groupe-corps { display: none; }
+.groupe-entete.cliquable { cursor: pointer; user-select: none; }
+.groupe-repliable.repliee > .groupe-entete { margin-bottom: .6rem; }
+
 .tuile {
   background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: var(--rayon);
   padding: .85rem 1rem; box-shadow: var(--ombre);

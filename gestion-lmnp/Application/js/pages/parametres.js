@@ -240,6 +240,7 @@ function carteAppelLoyer(donnees) {
   chargerJournal();
   return carte({
     titre: 'Appel de loyer automatique',
+    resume: logementsAvecAppel().map((b) => `${b.nom} : ${reglageAppel(b).actif ? `activé, le ${reglageAppel(b).jour} du mois` : 'désactivé'}`).join(' · ') || 'aucun logement',
     aide: 'Un e-mail à chaque colocataire avec sa part du mois, la date limite et vos coordonnées de paiement — réglages propres à chaque logement (jour, IBAN, textes). '
       + 'L’envoi part le jour réglé, par la fonction planifiée du serveur ou à la première ouverture de l’application ce jour-là.',
     corps: zone,
@@ -280,6 +281,7 @@ function carteDepotGarantie(parametres) {
   const reglage = reglageDepotDe(parametres);
   return carte({
     titre: 'Dépôt de garantie',
+    resume: `objet « ${reglage.objet} » · ${String(reglage.paiement || '').trim() ? 'paiement propre' : 'paiement repris de l’appel de loyer'}`,
     aide: 'L’appel de dépôt (e-mail) et le reçu de dépôt (PDF ANIKA publié sur l’espace du colocataire) se pilotent depuis la page Cautions, séparément de l’appel de loyer et de la quittance.',
     actions: [bouton('Modifier le texte de l’appel', () => modifierDepotGarantie(parametres).catch(signalerErreur), { petit: true })],
     corps: h('div', { class: 'reglage-depot' }, [
@@ -341,6 +343,7 @@ function carteBienvenue(donnees) {
   const reglage = reglageBienvenueDe(donnees.parametres);
   return carte({
     titre: 'Bienvenue sur l’espace',
+    resume: String(reglage.message || '').trim() ? 'message d’accueil personnalisé' : 'texte standard',
     aide: 'Le premier e-mail d’un colocataire : adresse de son espace, première connexion (le mot de passe se choisit via le lien Firebase, jamais par e-mail), icône « Résidence ANIKA », justificatifs à déposer, raccourci .url joint. Envoi depuis la page Locataires, qui crée aussi son compte de connexion.',
     actions: [
       bouton('Modifier le texte', () => modifierBienvenue(donnees.parametres).catch(signalerErreur), { petit: true }),
@@ -437,6 +440,7 @@ function carteIcones() {
   document.addEventListener('lmnp-installee', dessiner);
   return carte({
     titre: 'Icônes de lancement',
+    resume: 'LMNP (propriétaires) et Résidence ANIKA (colocataires) : installation, adresse, raccourci .url',
     aide: 'Une application par entrée, avec son icône et son nom : maison verte « LMNP » pour les propriétaires, silhouettes bleues « Résidence ANIKA » pour les colocataires.',
     corps: zone,
   });
@@ -449,6 +453,7 @@ function carteStockage() {
     + `l’application passe d’elle-même par son relais. Mode actuel : ${api.modeFichiers() === 'relais' ? 'relais' : 'direct'}.` }));
   return carte({
     titre: 'Stockage des photos et documents',
+    resume: 'test du stockage, mode d’accès aux fichiers, dernières erreurs',
     actions: [bouton('Tester le stockage', () => testerStockage(zone).catch(signalerErreur), { petit: true, type: 'primaire' })],
     corps: zone,
   });
@@ -618,6 +623,7 @@ function carteAcces(donnees) {
 
   return carte({
     titre: 'Accès à l’application',
+    resume: 'gérants et colocataires autorisés',
     aide: 'Les gérants voient tout ; chaque colocataire ne voit que son espace documents.',
     corps: zone,
   });
@@ -737,6 +743,7 @@ function carteAdresses(parametres) {
   lireInfosEnvoi().then(dessiner);
   return carte({
     titre: 'Adresses e-mail',
+    resume: `${formaterExpediteur(reglage.expediteurNom, reglage.expediteurAdresse) || 'expéditeur du déploiement'}${reglage.reponseA ? ` · réponse ${reglage.reponseA}` : ''} · copies sur ${TYPES_COPIE.filter((t) => normaliserAdresses(reglage.copies?.[t.cle] || []).length).length} type(s)`,
     aide: 'Qui apparaît comme expéditeur, où arrivent les réponses, qui reçoit une copie de chaque type d’envoi. Appliqué au prochain envoi, sans redéploiement.',
     actions: [bouton('Modifier', () => modifierAdresses(parametres).catch(signalerErreur), { petit: true })],
     corps: zone,
@@ -781,6 +788,7 @@ function carteCourriels(parametres) {
   const adresseTest = () => String(parametres.bailleurs?.[0]?.email || api.utilisateurEmail() || '').trim();
   return carte({
     titre: 'Envoi des e-mails',
+    resume: 'file des courriels, état de chaque envoi, relance, e-mail de test',
     aide: 'Chaque e-mail de l’application (quittances, rappels, appels de loyer, codes de signature) est déposé dans la file « mail » puis expédié par la fonction du projet, par Gmail. L’état de chaque envoi est inscrit ici.',
     actions: [
       bouton('Rafraîchir', () => charger(), { petit: true }),
@@ -798,8 +806,18 @@ function carteCourriels(parametres) {
         });
         if (!reponse?.to) return;
         const resultat = await api.testerCourriel(reponse.to);
-        notifier(resultat.ok ? `E-mail de test expédié à ${resultat.to}.` : `Échec de l’envoi : ${resultat.delivery?.error || 'voir la file'}.`, resultat.ok ? 'succes' : 'erreur');
+        const final = ['SUCCESS', 'ERROR'].includes(resultat.delivery?.state);
+        notifier(resultat.ok ? `E-mail de test expédié à ${resultat.to}.` : (final ? `Échec de l’envoi : ${resultat.delivery?.error || 'voir la file'}.` : 'E-mail de test déposé : envoi en cours, la file se met à jour…'), resultat.ok ? 'succes' : (final ? 'erreur' : ''));
         charger();
+        // Envoi encore en cours (fonction lente) : la file est relue jusqu'à l'état final.
+        for (let i = 0; i < 15 && !final; i += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => { setTimeout(r, 2000); });
+          // eslint-disable-next-line no-await-in-loop
+          const suivi = await api.etatCourriels().catch(() => null);
+          const ligne = suivi?.courriels?.find((c) => c.id === resultat.id);
+          if (ligne && ['SUCCESS', 'ERROR'].includes(ligne.etat)) { charger(); break; }
+        }
       }, { petit: true, type: 'primaire' }),
     ],
     corps: zone,
@@ -822,6 +840,7 @@ export default {
 
     conteneur.append(carte({
       titre: 'Identité',
+      resume: `${parametres.nomActivite || 'activité sans nom'}${parametres.siret ? ` · SIRET ${parametres.siret}` : ''}${parametres.lieuSignature ? ` · signature à ${parametres.lieuSignature}` : ''}`,
       actions: [bouton('Modifier', () => modifierIdentite(parametres), { petit: true })],
       corps: h('table', {}, h('tbody', {}, [
         ['Nom de l’activité', parametres.nomActivite || '—'],
@@ -834,6 +853,7 @@ export default {
 
     conteneur.append(carte({
       titre: 'Bailleurs',
+      resume: (parametres.bailleurs || []).map((b) => b.nom).filter(Boolean).join(', ') || 'aucun bailleur',
       aide: 'Le premier bailleur signe les quittances.',
       actions: [bouton('+ Bailleur', () => modifierBailleur(parametres, null), { petit: true })],
       serre: true,
@@ -870,6 +890,7 @@ export default {
 
     conteneur.append(carte({
       titre: 'Sauvegarde',
+      resume: 'copie automatique quotidienne · téléchargement et import d’une sauvegarde complète',
       corps: h('div', {}, [
         h('p', { class: 'legende', texte:
           'Une copie de chaque collection est conservée automatiquement à la première modification de chaque journée. '

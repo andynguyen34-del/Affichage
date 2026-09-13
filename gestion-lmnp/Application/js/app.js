@@ -2,7 +2,7 @@
 
 import * as etat from './etat.js';
 import * as api from './api.js';
-import { h, vider, notifier, signalerErreur, bouton, confirmer, formulaire } from './ui.js';
+import { h, vider, notifier, signalerErreur, bouton, confirmer, formulaire, definirPageRepli, barreReplis } from './ui.js';
 
 import pageLoyers from './pages/loyers.js';
 import cautions from './pages/cautions.js';
@@ -193,7 +193,11 @@ function dessiner({ conserverPosition = false } = {}) {
   const curseur = cleFocus && typeof actif.selectionStart === 'number' ? actif.selectionStart : null;
   vider(conteneur);
   try {
-    conteneur.append(page.rendre(contexte));
+    definirPageRepli(page.cle);
+    const rendu = page.rendre(contexte);
+    conteneur.append(rendu);
+    // v50 : « Tout replier / Tout déplier » dès qu'une page compte au moins trois cadres repliables.
+    if (conteneur.querySelectorAll('section.carte[data-repli], .groupe-repliable[data-repli]').length >= 3) conteneur.prepend(barreReplis(conteneur));
   } catch (erreur) {
     signalerErreur(erreur);
     conteneur.append(h('div', { class: 'alerte alerte-erreur', texte: `Affichage impossible : ${erreur.message}` }));
