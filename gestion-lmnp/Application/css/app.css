@@ -103,7 +103,8 @@ a { color: var(--accent); }
 .entete-droite { display: flex; align-items: center; gap: .7rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .selecteur-exercice { display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--encre-douce); flex-shrink: 0; }
 .selecteur-exercice select { padding: .28rem .4rem; }
-.selecteur-logement select { max-width: 13rem; font-weight: 600; color: var(--accent-fonce); text-overflow: ellipsis; }
+.selecteur-logement select { max-width: min(30rem, 45vw); font-weight: 600; color: var(--accent-fonce); text-overflow: ellipsis; }
+@media (max-width: 900px) { .selecteur-logement select { max-width: 13rem; } }
 @media (max-width: 900px) { .entete { flex-wrap: wrap; } .entete-droite { width: 100%; justify-content: flex-start; } }
 
 /* Vue « Tous les logements » : un bandeau par logement, puis son sous-total. */
