@@ -3,14 +3,14 @@
 // solde de chaque colocataire — décompte PDF déposé sur son espace.
 
 import * as etat from '../etat.js';
-import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer,
+import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer, groupeRepliable,
   barreOutils, notifier, ouvrirModale } from '../ui.js';
 import { montant, date, dateLongue, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js';
 import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, formaterSiret, nbMoisEntre } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
-import { bienDuBail } from '../logements.js';
+import { bienDuBail, filtrerDonnees, teinteLogement, libelleTypeLocation, sansBail } from '../logements.js';
 
 const nomDe = (locataire) => (locataire ? `${locataire.prenom || ''} ${locataire.nom}`.trim() : 'Sans locataire');
 
@@ -29,18 +29,21 @@ function badgeSolde(solde) {
   return badge('Équilibré', 'succes');
 }
 
-async function saisirRegularisation(donnees, contexte, existante = null) {
+async function saisirRegularisation(donnees, contexte, existante = null, bien = null) {
+  // Limitée aux baux du logement quand elle est lancée depuis son cadre.
+  const baux = bien ? donnees.baux.filter((b) => b.bienId === bien.id) : donnees.baux;
+  if (!baux.length) { notifier(`Aucun bail sur ${bien?.nom || 'ce logement'} : rien à régulariser.`, 'erreur'); return; }
   // Par défaut : le bail de colocation en cours (les provisions à régulariser
   // viennent de là), à défaut le bail en cours, à défaut le premier.
-  const bailParDefaut = donnees.baux.find((b) => (b.colocataires || []).length && (!b.dateFin || b.dateFin >= aujourdhui()))
-    || donnees.baux.find((b) => !b.dateFin || b.dateFin >= aujourdhui())
-    || donnees.baux[0];
+  const bailParDefaut = baux.find((b) => (b.colocataires || []).length && (!b.dateFin || b.dateFin >= aujourdhui()))
+    || baux.find((b) => !b.dateFin || b.dateFin >= aujourdhui())
+    || baux[0];
   const saisie = await formulaire({
-    titre: existante ? 'Régularisation' : 'Nouvelle régularisation',
+    titre: `${existante ? 'Régularisation' : 'Nouvelle régularisation'}${bien ? ` — ${bien.nom}` : ''}`,
     aide: 'Les dépenses réelles de la période sont réparties entre colocataires au prorata de leurs '
       + 'provisions, puis comparées à ce que chacun a réellement versé.',
     champs: [
-      { cle: 'bailId', libelle: 'Bail', type: 'liste', options: donnees.baux.map((b) => ({
+      { cle: 'bailId', libelle: 'Bail', type: 'liste', options: baux.map((b) => ({
         valeur: b.id,
         libelle: `${bienDuBail(donnees, b)?.nom || 'Logement ?'} — bail du ${date(b.dateDebut)}${b.dateFin ? ` au ${date(b.dateFin)}` : ' (en cours)'}`,
       })) },
@@ -182,11 +185,12 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
   });
 }
 
-function carteRegularisation(donnees, regularisation) {
+function carteRegularisation(donnees, regularisation, teinte = '') {
   const bail = donnees.baux.find((b) => b.id === regularisation.bailId);
   if (!bail) {
     return carte({
       titre: `Régularisation du ${date(regularisation.debut)} au ${date(regularisation.fin)}`,
+      teinte,
       corps: vide('Bail introuvable', 'Le bail de cette régularisation a été supprimé.'),
       actions: [bouton('Supprimer', () => supprimerRegularisation(regularisation), { petit: true, type: 'danger' })],
     });
@@ -214,6 +218,7 @@ function carteRegularisation(donnees, regularisation) {
   const detailDepenses = depensesDe(regularisation).map((d) => `${d.libelle} : ${montant(d.montant)}`).join(' · ');
 
   return carte({
+    teinte,
     titre: `${bienDuBail(donnees, bail)?.nom ? `${bienDuBail(donnees, bail).nom} — ` : ''}du ${date(regularisation.debut)} au ${date(regularisation.fin)}`,
     aide: detailDepenses
       ? `Dépenses réelles : ${detailDepenses} — total ${montant(decompte.totalReel)}`
@@ -296,13 +301,42 @@ export default {
         detail: 'décomptes établis, toutes périodes' }),
     ]));
 
+    // Vue « Tous les logements » : un cadre par logement (bandeau coloré),
+    // avec son bouton « + Régularisation » et ses décomptes. Logement choisi :
+    // les données sont déjà les siennes.
+    const tout = contexte.tout || donnees;
+    const logements = donnees.biens.filter((b) => !sansBail(b));
+    const grouper = !contexte.bienId && logements.length > 1;
+    if (grouper) {
+      for (const bien of logements) {
+        const siennes = filtrerDonnees(donnees, bien.id);
+        const regs = regularisations.filter((r) => siennes.baux.some((b) => b.id === r.bailId));
+        const teinte = teinteLogement(bien, tout.biens);
+        const groupe = groupeRepliable({ cle: `regul:${bien.id}`, teinte, entete: h('div', { class: 'section-logement' }, [
+          h('h2', { texte: bien.nom }),
+          badge(libelleTypeLocation(bien), 'succes'),
+          h('span', { class: 'legende', texte: `${[bien.adresse, bien.ville].filter(Boolean).join(', ')} · ${regs.length ? `${regs.length} régularisation${regs.length > 1 ? 's' : ''}` : 'aucune régularisation'}` }),
+          bouton('+ Régularisation', () => saisirRegularisation(siennes, contexte, null, bien), { petit: true, type: 'primaire', titre: `Nouvelle régularisation pour ${bien.nom}` }),
+        ]) });
+        if (!regs.length) groupe.corps.append(h('p', { class: 'legende', style: 'margin:0 0 .8rem .4rem', texte: siennes.baux.length ? 'Aucune régularisation pour ce logement : « + Régularisation » pour établir le décompte d’une période.' : 'Aucun bail sur ce logement : rien à régulariser.' }));
+        for (const regularisation of regs) groupe.corps.append(carteRegularisation(siennes, regularisation, teinte));
+        conteneur.append(groupe.element);
+      }
+      const orphelines = regularisations.filter((r) => !donnees.baux.some((b) => b.id === r.bailId));
+      for (const regularisation of orphelines) conteneur.append(carteRegularisation(donnees, regularisation));
+      return conteneur;
+    }
+    const bienSeul = contexte.bienId ? donnees.biens.find((b) => b.id === contexte.bienId) || null : (logements[0] || null);
+    const teinteSeule = bienSeul ? teinteLogement(bienSeul, tout.biens) : '';
+
     conteneur.append(barreOutils([
-      bouton('+ Régularisation', () => saisirRegularisation(donnees, contexte), { type: 'primaire' }),
+      bouton('+ Régularisation', () => saisirRegularisation(donnees, contexte, null, bienSeul), { type: 'primaire' }),
     ]));
 
     if (!regularisations.length) {
       conteneur.append(carte({
         titre: 'Comment ça marche',
+        teinte: teinteSeule,
         corps: h('div', { class: 'aide-bloc' }, [
           h('p', { texte: 'Une fois par an (ou en fin de bail), créez une régularisation : '
             + 'saisissez la période et les dépenses réellement payées — la consommation d’eau d’après '
@@ -317,7 +351,7 @@ export default {
     }
 
     for (const regularisation of regularisations) {
-      conteneur.append(carteRegularisation(donnees, regularisation));
+      conteneur.append(carteRegularisation(donnees, regularisation, teinteSeule));
     }
 
     return conteneur;

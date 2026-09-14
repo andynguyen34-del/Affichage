@@ -54,6 +54,9 @@ disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 - Une couleur par logement (fiche du logement, « Couleur du logement »,
   automatique selon l'ordre sinon) : bord gauche et en-tête de ses cadres
   sur Logements & baux, Loyers, Locataires et États des lieux.
+- « Charges » (régularisation) : en vue « Tous les logements », un cadre
+  coloré par logement avec son « + Régularisation » (baux du logement
+  seulement) et ses décomptes.
 
 **Nouveau en v56 — plus de virement saisi en double.** « Virement reçu »
 sur une échéance déjà soldée avertit (« déjà intégralement encaissée »),

@@ -398,7 +398,7 @@ function lignePiecesCommunes(tout, bien, bailleur) {
 
 // ---------------------------------------------------------------- page
 
-function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => {}) {
+function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => {}, messageVide = '') {
   const bilans = new Map(tout.biens.map((b) => [b.id, bilanLogement(tout, b)]));
   const bilanDe = (l) => bilans.get(bailCourant(tout.baux, l.id)?.bienId) || null;
   return tableau({
@@ -427,7 +427,7 @@ function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => 
       ]) },
     ],
     lignes,
-    messageVide: contexte.bienId ? 'Aucun locataire sur ce logement.' : 'Aucun locataire enregistré : commencez par « + Locataire ».',
+    messageVide: messageVide || (contexte.bienId ? 'Aucun locataire sur ce logement.' : 'Aucun locataire enregistré : commencez par « + Locataire ».'),
     cle: (l) => l.id,
   });
 }
@@ -572,7 +572,8 @@ export default {
     const corps = h('div');
     if (contexte.bienId) {
       const bien = logements[0];
-      if (bien) corps.append(lignePiecesCommunes(tout, bien, bailleur));
+      const pieces = bien ? lignePiecesCommunes(tout, bien, bailleur) : null;
+      if (pieces) corps.append(pieces);
       corps.append(tableLocataires(tout, tout.locataires.filter((l) => surLogement(l, contexte.bienId)), bailleur, contexte, lancerReleve));
     } else {
       for (const logement of logements) {
@@ -582,8 +583,9 @@ export default {
           h('span', { class: 'section-logement-nom', texte: `🏠 ${logement.nom}` }),
           h('span', { class: 'legende', texte: `${logement.ville ? `${logement.ville} · ` : ''}${libelleTypeLocation(logement)} · ${siens.length} ${siens.length > 1 ? 'personnes' : 'personne'}` }),
         ]) });
-        groupe.corps.append(lignePiecesCommunes(tout, logement, bailleur));
-        groupe.corps.append(tableLocataires(tout, siens, bailleur, contexte, lancerReleve));
+        const pieces = lignePiecesCommunes(tout, logement, bailleur);
+        if (pieces) groupe.corps.append(pieces);
+        groupe.corps.append(tableLocataires(tout, siens, bailleur, contexte, lancerReleve, `Aucun locataire sur ${logement.nom} : « + Locataire », puis « Rattacher à un logement ».`));
         corps.append(groupe.element);
       }
       if (sansLogement.length) {
