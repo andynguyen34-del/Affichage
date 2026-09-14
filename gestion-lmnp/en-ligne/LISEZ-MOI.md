@@ -34,6 +34,16 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v56 — plus de virement saisi en double.** « Virement reçu »
+sur une échéance déjà soldée avertit (« déjà intégralement encaissée »),
+propose 0 € et demande confirmation avant d'enregistrer un trop-perçu. Un
+trop-perçu s'affiche en orange dans la colonne « Reste » et sur le total du
+mois ; la fenêtre « Encaissements » (montant souligné) signale les
+encaissements identiques (« doublon ? ») à supprimer avec ✕, repère la ligne
+reprise sur la quittance émise, et les fenêtres de la page Loyers
+(Encaissement, Encaissements, Ajuster, autres actions) portent le nom du
+colocataire. À déployer : hébergement seulement.
+
 **Nouveau en v55 — loyers par mois.** La page « Loyers » a un sélecteur
 « Présentation : Par mois / Par locataire » (à droite de la barre d'outils,
 mémorisé sur l'appareil, « Par mois » par défaut). Par mois : une carte

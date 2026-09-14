@@ -354,18 +354,33 @@ async function enregistrerEcheance(echeance, modifications) {
 }
 
 async function saisirEncaissement(donnees, bail, echeance) {
-  const reste = centimes((echeance.total || 0) - calcul.totalEncaisse(echeance));
+  const recu = calcul.totalEncaisse(echeance);
+  const reste = centimes((echeance.total || 0) - recu);
+  const dejaSoldee = reste <= 0.005 && recu > 0;
   const saisie = await formulaire({
-    titre: `Encaissement — ${nomMois(echeance.mois)} ${echeance.annee}`,
+    titre: `Encaissement — ${nomDe(locataireDe(donnees, echeance, bail))} — ${nomMois(echeance.mois)} ${echeance.annee}`,
+    // v56 : une échéance déjà soldée ne propose plus son montant total (source de doublons).
+    aide: dejaSoldee
+      ? `Cette échéance est déjà intégralement encaissée (${montant(recu)} reçus sur ${montant(echeance.total || 0)}). Un versement supplémentaire créerait un trop-perçu : vérifiez d’abord ses encaissements (montant souligné dans la colonne « Encaissé »).`
+      : undefined,
     champs: [
       { cle: 'date', libelle: 'Date de l’encaissement', type: 'date', requis: true },
       { cle: 'montant', libelle: 'Montant reçu (€)', type: 'montant', requis: true },
       { cle: 'mode', libelle: 'Mode de règlement', type: 'liste', options: etat.MODES_REGLEMENT.map((m) => ({ valeur: m, libelle: m })) },
       { cle: 'reference', libelle: 'Référence (facultatif)', type: 'texte', largeur: 'pleine' },
     ],
-    valeurs: { date: aujourdhui(), montant: reste > 0 ? reste : echeance.total, mode: 'Virement' },
+    valeurs: { date: aujourdhui(), montant: reste > 0 ? reste : 0, mode: 'Virement' },
   });
   if (!saisie) return;
+  if (!(Number(saisie.montant) > 0)) { notifier('Aucun montant saisi : rien n’a été enregistré.'); return; }
+  if (dejaSoldee) {
+    const ok = await confirmer({
+      titre: 'Échéance déjà soldée',
+      message: `${nomMois(echeance.mois)} ${echeance.annee} est déjà encaissé en totalité (${montant(recu)}). Enregistrer quand même ce versement de ${montant(Number(saisie.montant))} ? Il apparaîtra en trop-perçu.`,
+      libelleValider: 'Enregistrer le trop-perçu', danger: true,
+    });
+    if (!ok) return;
+  }
   const nouvel = {
     id: crypto.randomUUID(),
     date: saisie.date,
@@ -387,9 +402,9 @@ async function saisirEncaissement(donnees, bail, echeance) {
   }
 }
 
-async function ajusterEcheance(echeance) {
+async function ajusterEcheance(echeance, nom = '') {
   const saisie = await formulaire({
-    titre: `Échéance de ${nomMois(echeance.mois)} ${echeance.annee}`,
+    titre: `Échéance de ${nomMois(echeance.mois)} ${echeance.annee}${nom ? ` — ${nom}` : ''}`,
     aide: 'Les montants proposés viennent du bail. Modifiez-les en cas de prorata, de régularisation ou de franchise.',
     champs: [
       { cle: 'loyerHc', libelle: 'Loyer hors charges (€)', type: 'montant', requis: true },
@@ -416,13 +431,26 @@ async function ajusterEcheance(echeance) {
   }), 'Échéance mise à jour.');
 }
 
-function voirEncaissements(echeance) {
+function voirEncaissements(echeance, nom = '') {
   const encaissements = echeance.encaissements || [];
   if (!encaissements.length) { notifier('Aucun encaissement sur cette échéance.'); return; }
+  // v56 : même date, même montant, même mode → probablement saisi deux fois.
+  const cleDoublon = (e) => `${e.date}|${centimes(Number(e.montant) || 0)}|${e.mode || ''}|${e.reference || ''}`;
+  const occurrences = new Map();
+  for (const e of encaissements) occurrences.set(cleDoublon(e), (occurrences.get(cleDoublon(e)) || 0) + 1);
+  const doublons = encaissements.filter((e) => occurrences.get(cleDoublon(e)) > 1).length;
+  const recu = calcul.totalEncaisse(echeance);
+  const tropPercu = centimes(recu - (echeance.total || 0));
+  const avertissement = doublons || tropPercu > 0.005
+    ? h('p', { class: 'alerte alerte-attention', style: 'margin:0 0 .6rem', texte: `${tropPercu > 0.005 ? `Trop-perçu de ${montant(tropPercu)} : ${montant(recu)} reçus pour ${montant(echeance.total || 0)} dus. ` : ''}${doublons ? `${doublons} encaissements identiques (même date, même montant) : s’il s’agit d’une double saisie, supprimez les lignes en trop avec ✕.` : ''}` })
+    : null;
   const corps = tableau({
     colonnes: [
       { titre: 'Date', valeur: (e) => date(e.date) },
-      { titre: 'Montant', nombre: true, valeur: (e) => montant(e.montant) },
+      { titre: 'Montant', nombre: true, valeur: (e) => h('span', {}, [montant(e.montant), occurrences.get(cleDoublon(e)) > 1 ? [' ', badge('doublon ?', 'attention')] : null].flat()) },
+      // La quittance imprime le dernier encaissement de la liste (date, mode, référence) : on le repère.
+      { titre: 'Quittance', valeur: (e) => (echeance.quittanceEmiseLe && e.id === encaissements[encaissements.length - 1]?.id
+        ? badge(`retenu sur la quittance du ${date(echeance.quittanceEmiseLe)}`, 'info') : '') },
       { titre: 'Mode', valeur: (e) => e.mode || '—' },
       { titre: 'Référence', valeur: (e) => e.reference || '—' },
       { titre: '', actions: true, valeur: (e) => bouton('✕', async () => {
@@ -443,7 +471,10 @@ function voirEncaissements(echeance) {
     lignes: encaissements,
     messageVide: '',
   });
-  ouvrirModale({ titre: `Encaissements — ${nomMois(echeance.mois)} ${echeance.annee}`, corps });
+  const note = echeance.quittanceEmiseLe
+    ? h('p', { class: 'legende', style: 'margin:.6rem 0 0', texte: 'La quittance n’est pas liée à une ligne : elle reprend la date, le mode et la référence du dernier encaissement. Supprimer une ligne en trop ne l’invalide pas ; « Régénérer les quittances émises » la refait avec les lignes restantes.' })
+    : null;
+  ouvrirModale({ titre: `Encaissements — ${nom ? `${nom} — ` : ''}${nomMois(echeance.mois)} ${echeance.annee}`, corps: [avertissement, corps, note] });
 }
 
 function documentsQuittance(donnees, bail, echeance, quittance) {
@@ -470,12 +501,12 @@ function menuEcheance(donnees, bail, echeance) {
     onclick: () => { fermerModale(); fonction(); },
   }, libelle);
   ouvrirModale({
-    titre: `${nomMois(echeance.mois)} ${echeance.annee} — autres actions`,
+    titre: `${nomDe(locataireDe(donnees, echeance, bail))} — ${nomMois(echeance.mois)} ${echeance.annee} — autres actions`,
     corps: h('div', {}, [
       action('🖨 Imprimer', () => documentsQuittance(donnees, bail, echeance, calcul.statut(echeance) === 'paye'),
         'Quittance si payée, sinon avis d’échéance'),
-      action('✎ Ajuster les montants', () => ajusterEcheance(echeance)),
-      action('📄 Voir les encaissements', () => voirEncaissements(echeance)),
+      action('✎ Ajuster les montants', () => ajusterEcheance(echeance, nomDe(locataireDe(donnees, echeance, bail)))),
+      action('📄 Voir les encaissements', () => voirEncaissements(echeance, nomDe(locataireDe(donnees, echeance, bail)))),
     ]),
   });
 }
@@ -526,11 +557,14 @@ function colonnesEcheances({ contexte, donnees, bailDe, parMois }) {
     { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
     { titre: 'Encaissé', nombre: true, valeur: (e) => {
       const recu = calcul.totalEncaisse(e);
-      return recu ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(e) }, montant(recu)) : '—';
+      return recu ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(e, nomDe(locataireDe(donnees, e, bailDe(e)))) }, montant(recu)) : '—';
     } },
     { titre: 'Reste', nombre: true, valeur: (e) => {
       const reste = centimes(e.total - calcul.totalEncaisse(e));
-      return reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—';
+      if (reste > 0.005) return h('span', { style: 'color:var(--alerte)', texte: montant(reste) });
+      // v56 : un encaissement en double se voit tout de suite.
+      if (reste < -0.005) return badge(`trop-perçu ${montant(-reste)}`, 'attention');
+      return '—';
     } },
     { titre: 'État', valeur: ligneStatut },
     { titre: '', actions: true, valeur: (e) => {
@@ -732,7 +766,7 @@ function cartesParMois({ contexte, donnees, bien, annee, lignes, cible }) {
           `${montant(centimes(echeances.reduce((s, e) => s + (e.loyerHc || 0), 0)))} + ${montant(centimes(echeances.reduce((s, e) => s + (e.charges || 0), 0)))}`,
           h('strong', { texte: montant(total) }),
           montant(recu),
-          reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—',
+          reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : (reste < -0.005 ? badge(`trop-perçu ${montant(-reste)}`, 'attention') : '—'),
           badge(`${nbPayes} / ${echeances.length} encaissé${nbPayes > 1 ? 's' : ''}`, nbPayes === echeances.length ? 'succes' : (nbRetard || nbPartiel ? 'alerte' : 'attente')),
           '',
         ]),
