@@ -17,12 +17,13 @@
 
 import * as etat from '../etat.js';
 import * as api from '../api.js';
-import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur, ouvrirModale, groupeRepliable } from '../ui.js';
+import { h, carte, tableau, bouton, badge, confirmer, executer, barreOutils, notifier, signalerErreur, ouvrirModale, groupeRepliable, formulaire } from '../ui.js';
 import { date, montant, aujourdhui } from '../format.js';
 import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeCommun, libelleCategorie, estCommune } from '../justificatifs.js';
 import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publication.js';
 import { preparerBienvenue } from '../bienvenue.js';
-import { bailEstActif, ouvrirLocataire } from './bien.js';
+import { bailEstActif, ouvrirLocataire, ouvrirBail, repartirColocataires } from './bien.js';
+import { estCourteDuree, estGracieux } from '../logements.js';
 import { libelleTypeLocation } from '../logements.js';
 import { ouvrirDocumentsColocataire } from './documents-colocataire.js';
 
@@ -91,6 +92,52 @@ export function releverTous({ locataires = [], biens = [] } = {}, apres = () => 
 
 export const releveDe = (locataire) => releves.get(emailDe(locataire)) || null;
 export const releveFait = () => releves.size > 0 || relevesLogement.size > 0;
+
+// ------------------------------------------------------ rattachement (nouveau)
+// Un locataire est rattaché à un logement par un bail : titulaire, co-titulaire
+// ou colocataire (avec sa part). « Rattacher à un logement » ajoute la personne
+// au bail ouvert d'une colocation (puis ouvre « Répartir »), ou prépare un
+// nouveau bail sur le logement choisi.
+
+const bailOuvert = (bail) => !bail.dateFin || String(bail.dateFin).slice(0, 10) >= aujourdhui();
+
+/** Rattache un locataire à un logement ; renvoie true si quelque chose a été fait. */
+export async function rattacherLocataire(locataire) {
+  const biens = etat.liste('biens').filter((b) => !estCourteDuree(b) && !estGracieux(b));
+  if (!biens.length) { notifier('Aucun logement à bail : déclarez-en un dans « Logements & baux ».', 'erreur'); return false; }
+  const baux = etat.liste('baux');
+  const descriptif = (b) => {
+    const ouverts = baux.filter((x) => x.bienId === b.id && bailOuvert(x));
+    if (!ouverts.length) return `${b.nom} — aucun bail en cours : un nouveau bail sera préparé`;
+    const bail = ouverts[0];
+    return b.typeLocation === 'colocation' || (bail.colocataires || []).length
+      ? `${b.nom} — ajouté au bail du ${date(bail.dateDebut)} (${(bail.colocataires || []).length || 1} colocataire(s))`
+      : `${b.nom} — bail en cours : un nouveau bail sera préparé`;
+  };
+  const saisie = await formulaire({
+    titre: `Rattacher ${nomDe(locataire)} à un logement`,
+    aide: 'Un locataire est rattaché à un logement par un bail. Colocation avec un bail en cours : la personne y est ajoutée et vous réglez sa part. Sinon, un nouveau bail est préparé.',
+    champs: [{ cle: 'bienId', libelle: 'Logement', type: 'liste', requis: true, largeur: 'pleine', options: biens.map((b) => ({ valeur: b.id, libelle: descriptif(b) })) }],
+    valeurs: { bienId: biens[0].id },
+    libelleValider: 'Rattacher',
+  });
+  if (!saisie?.bienId) return false;
+  const bien = biens.find((b) => b.id === saisie.bienId);
+  const ouverts = baux.filter((x) => x.bienId === bien.id && bailOuvert(x)).sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)));
+  const bail = ouverts[0];
+  const tout = { biens: etat.liste('biens'), locataires: etat.liste('locataires'), baux };
+  if (bail && (bien.typeLocation === 'colocation' || (bail.colocataires || []).length)) {
+    if (bauxDe([bail], locataire.id).length) { notifier(`${nomDe(locataire)} est déjà sur ce bail.`); return false; }
+    const majBail = await executer(etat.modifierElement('baux', bail.id, (b) => {
+      const lignes = (b.colocataires && b.colocataires.length) ? b.colocataires : [b.locataireId, b.coTitulaireId].filter(Boolean).map((id) => ({ locataireId: id, partLoyer: 0, partCharges: 0 }));
+      b.colocataires = [...lignes, { locataireId: locataire.id, partLoyer: 0, partCharges: 0 }];
+    }), `${nomDe(locataire)} ajouté au bail de ${bien.nom} : réglez maintenant sa part de loyer.`);
+    if (majBail) await repartirColocataires({ ...tout, baux: etat.liste('baux') }, majBail);
+    return true;
+  }
+  await ouvrirBail(tout, null, { bienId: bien.id, locataireId: locataire.id });
+  return true;
+}
 
 // ------------------------------------------------------------ baux, parts
 
@@ -368,6 +415,7 @@ function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => 
         emailDe(l) && api.MODE === 'nuage' && releveDe(l)?.portail?.documents?.length
           ? bouton(`Documents (${releveDe(l).portail.documents.length})`, () => ouvrirDocumentsColocataire(l, releveDe(l).portail, { surChangement: (portail) => { releveDe(l).portail = portail; lancerReleve(); } }).catch(signalerErreur), { petit: true, titre: 'Consulter, télécharger ou supprimer (vers la Corbeille) les documents publiés sur son espace' })
           : null,
+        !bailCourant(tout.baux, l.id) ? bouton('Rattacher à un logement', () => rattacherLocataire(l).catch(signalerErreur), { petit: true, type: 'primaire', titre: 'Ajoute la personne au bail d’une colocation, ou prépare son bail' }) : null,
         bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
         bouton('✕', async () => {
           const confirme = await confirmer({
@@ -469,16 +517,22 @@ export default {
     const courants = new Map(tout.locataires.map((l) => [l.id, bailCourant(tout.baux, l.id)]));
     const surLogement = (l, bienId) => courants.get(l.id)?.bienId === bienId;
     const logements = contexte.bienId ? tout.biens.filter((b) => b.id === contexte.bienId) : tout.biens;
-    const anciens = tout.locataires.filter((l) => !courants.get(l.id)
+    const sansBailCourant = tout.locataires.filter((l) => !courants.get(l.id)
       && (!contexte.bienId || bauxDe(tout.baux, l.id).some((b) => b.bienId === contexte.bienId)));
+    // Jamais eu de bail : à rattacher ; ont eu un bail, terminé : anciens.
+    const aRattacher = contexte.bienId ? [] : sansBailCourant.filter((l) => !bauxDe(tout.baux, l.id).length);
+    const anciens = sansBailCourant.filter((l) => !aRattacher.includes(l));
     const sansLogement = contexte.bienId ? [] : tout.locataires.filter((l) => courants.get(l.id) && !tout.biens.some((b) => surLogement(l, b.id)));
-    const visibles = [...logements.flatMap((b) => tout.locataires.filter((l) => surLogement(l, b.id))), ...sansLogement, ...anciens];
+    const visibles = [...logements.flatMap((b) => tout.locataires.filter((l) => surLogement(l, b.id))), ...sansLogement, ...aRattacher, ...anciens];
 
     const lancerReleve = () => releverTous({ locataires: visibles, biens: logements }, () => { contexte.redessinerNavigation?.(); contexte.redessiner?.({ conserverPosition: true }); });
 
     const nouveaux = () => visibles.filter((l) => emailDe(l) && releveDe(l) && !releveDe(l).portail?.bienvenueLe && !releveDe(l).portail?.dernierAcces);
     conteneur.append(barreOutils([
-      bouton('+ Locataire', () => ouvrirLocataire(null), { type: 'primaire' }),
+      bouton('+ Locataire', async () => {
+        const nouveau = await ouvrirLocataire(null);
+        if (nouveau) await rattacherLocataire(nouveau).catch(signalerErreur);
+      }, { type: 'primaire', titre: 'Crée la personne, puis propose de la rattacher à un logement (bail)' }),
       api.MODE === 'nuage' ? bouton('Bienvenue aux nouveaux', async () => {
         const liste = nouveaux();
         if (!liste.length) { notifier('Personne à accueillir : chacun a reçu sa bienvenue ou s’est déjà connecté (ou relevé pas encore fait).'); return; }
@@ -539,6 +593,15 @@ export default {
       if (!tout.biens.length) corps.append(tableLocataires(tout, tout.locataires.filter((l) => !anciens.includes(l)), bailleur, contexte, lancerReleve));
     }
     conteneur.append(carte({ titre: 'Locataires', serre: true, corps }));
+
+    if (aRattacher.length) {
+      conteneur.append(carte({
+        titre: `À rattacher à un logement (${aRattacher.length})`,
+        aide: 'Ces personnes n’ont encore aucun bail : « Rattacher » les ajoute au bail d’une colocation ou prépare leur bail.',
+        serre: true,
+        corps: tableLocataires(tout, aRattacher, bailleur, contexte, lancerReleve),
+      }));
+    }
 
     if (anciens.length) {
       const details = h('details', { class: 'anciens-locataires' }, [

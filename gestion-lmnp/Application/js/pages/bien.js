@@ -83,20 +83,28 @@ async function ouvrirBien(donnees, bienExistant) {
   if (saisie) await executer(etat.enregistrer('biens', saisie), 'Logement enregistré.');
 }
 
+/** Le formulaire Locataire ; renvoie le locataire enregistré, ou null. */
 export async function ouvrirLocataire(locataireExistant) {
   const saisie = await formulaire({
     titre: locataireExistant ? 'Modifier le locataire' : 'Nouveau locataire',
     champs: champsLocataire(),
     valeurs: locataireExistant || {},
   });
-  if (saisie) await executer(etat.enregistrer('locataires', saisie), 'Locataire enregistré.');
+  if (!saisie) return null;
+  return executer(etat.enregistrer('locataires', saisie), 'Locataire enregistré.');
 }
 
-async function ouvrirBail(donnees, bailExistant, bienIdParDefaut = '') {
+/**
+ * Le formulaire Bail. `parDefaut` : { bienId, locataireId } pour un nouveau
+ * bail préparé depuis une carte de logement ou depuis « Rattacher » (Locataires).
+ */
+export async function ouvrirBail(donnees, bailExistant, parDefaut = '') {
   if (!donnees.biens.length) { await ouvrirBien(donnees, null); return; }
   if (!donnees.locataires.length) { await ouvrirLocataire(null); return; }
+  const defauts = typeof parDefaut === 'string' ? { bienId: parDefaut } : (parDefaut || {});
   const valeurs = bailExistant || {
-    bienId: donnees.biens.find((b) => b.id === bienIdParDefaut)?.id || donnees.biens[0].id,
+    bienId: donnees.biens.find((b) => b.id === defauts.bienId)?.id || donnees.biens[0].id,
+    locataireId: donnees.locataires.find((l) => l.id === defauts.locataireId)?.id || '',
     type: 'meuble',
     jourEcheance: 1,
     moisRevision: 1,
@@ -280,7 +288,7 @@ function carteBien(donnees, bien, contexte) {
  * Répartition du loyer entre colocataires : chacun a sa part de loyer et de
  * charges — elle détermine ses échéances mensuelles et ses quittances.
  */
-async function repartirColocataires(donnees, bail) {
+export async function repartirColocataires(donnees, bail) {
   const lignes = (bail.colocataires && bail.colocataires.length)
     ? bail.colocataires.map((c) => ({ ...c }))
     : [bail.locataireId, bail.coTitulaireId].filter(Boolean)
