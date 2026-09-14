@@ -10,7 +10,7 @@ import { imprimerQuittance, imprimerAvis, imprimerReleve, imprimerReleveMois } f
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
-import { estCourteDuree, estGracieux, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
+import { estCourteDuree, estGracieux, teinteLogement, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
 import { apercuAppels, apercuAppelEcheance, envoyerAppelEcheance, envoyerAppels, lireJournalAppels, reglageAppel, logementsAvecAppel } from '../appel-loyer-client.js';
 import { resumeAppels, moisVise, sansAppel } from '../appel-loyer.js';
 import { numeroQuittance, soldeAnterieur, dernierReglement } from '../quittance.js';
@@ -656,6 +656,7 @@ function cartesParLocataire({ contexte, donnees, bien, annee, lignes, cible }) {
     cartes += 1;
     cible.append(carte({
       titre: `${nomDe(locataireCourant)} — ${bien?.nom || 'logement inconnu'}`,
+      teinte: bien ? teinteLogement(bien, (contexte.tout || donnees).biens) : '',
       aide: `${montant(recuBail)} reçus sur ${montant(totalBail)} attendus en ${annee}`
         + (locataireCourant?.email ? '' : ' · pas d’adresse e-mail renseignée'),
       actions: [
@@ -745,6 +746,7 @@ function cartesParMois({ contexte, donnees, bien, annee, lignes, cible }) {
     cartes += 1;
     cible.append(carte({
       titre: `${nomMois(mois)[0].toUpperCase()}${nomMois(mois).slice(1)} ${annee}`,
+      teinte: bien ? teinteLogement(bien, (contexte.tout || donnees).biens) : '',
       cle: `mois:${bien?.id || 'sans-logement'}:${annee}-${String(mois).padStart(2, '0')}`,
       aide: resume,
       resume,
@@ -956,14 +958,14 @@ export default {
     // v50 : en vue « Tous les logements », le bandeau d'un logement replie ses cartes.
     let cible = conteneur;
     if (grouper) {
-      const groupe = groupeRepliable({ entete: bien ? enteteLogement(bien, contexte) : h('div', { class: 'section-logement' }, [h('h2', { texte: 'Baux sans logement' })]), cle: bien?.id || 'sans-logement' });
+      const groupe = groupeRepliable({ entete: bien ? enteteLogement(bien, contexte) : h('div', { class: 'section-logement' }, [h('h2', { texte: 'Baux sans logement' })]), cle: bien?.id || 'sans-logement', teinte: bien ? teinteLogement(bien, (contexte.tout || donnees).biens) : '' });
       conteneur.append(groupe.element);
       cible = groupe.corps;
     }
     let attenduLogement = 0;
     let encaisseLogement = 0;
     if (bien && estGracieux(bien)) {
-      cible.append(carte({ titre: bien.nom, serre: true, corps: vide('Occupation à titre gracieux', 'Ce logement est occupé par un bailleur ou un proche : aucun loyer n’est attendu, aucun appel n’est envoyé.') }));
+      cible.append(carte({ titre: bien.nom, teinte: teinteLogement(bien, (contexte.tout || donnees).biens), serre: true, corps: vide('Occupation à titre gracieux', 'Ce logement est occupé par un bailleur ou un proche : aucun loyer n’est attendu, aucun appel n’est envoyé.') }));
       continue;
     }
     if (bien && estCourteDuree(bien)) {

@@ -7,7 +7,7 @@ import * as api from '../api.js';
 import { h, carte, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
 import { date, aujourdhui, taille, nomFichierTelechargement } from '../format.js';
-import { estCourteDuree, sansBail, bienDeEdl } from '../logements.js';
+import { estCourteDuree, sansBail, teinteLogement, bienDeEdl } from '../logements.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
 import { publierDocument, ouvrirFenetreContradictoire, destinatairesDe } from '../portail-publication.js';
@@ -1232,6 +1232,7 @@ export default {
       const logement = bienDeEdl(contexte.tout || donnees, edl);
       conteneur.append(carte({
         titre: `${edl.type === 'sortie' ? 'Sortie' : 'Entrée'} — ${date(edl.date)}${logement ? ` — ${logement.nom}` : ''}`,
+        teinte: logement ? teinteLogement(logement, (contexte.tout || donnees).biens) : '',
         aide: `${(edl.pieces || []).length} pièce(s), ${nbPhotos} photo(s), ${nbSignatures} signature(s)`,
         actions: [
           edl.statut === 'finalise' ? badge('Rapport généré', 'succes') : badge('Brouillon', 'attention'),

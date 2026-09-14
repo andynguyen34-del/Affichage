@@ -34,6 +34,20 @@ export const motOccupant = (bien, pluriel = false) => {
   return pluriel ? `${mot}s` : mot;
 };
 
+// ------------------------------------------------------------ teintes
+// Chaque logement a une couleur (bord et en-tête de ses cadres, sur toutes
+// les pages) : celle choisie dans sa fiche, à défaut la n-ième de la palette
+// selon son rang dans la liste des logements.
+export const TEINTES = [
+  { cle: 'vert', libelle: 'Vert' }, { cle: 'bleu', libelle: 'Bleu' }, { cle: 'ambre', libelle: 'Ambre' }, { cle: 'rose', libelle: 'Rose' },
+  { cle: 'violet', libelle: 'Violet' }, { cle: 'turquoise', libelle: 'Turquoise' }, { cle: 'brique', libelle: 'Brique' }, { cle: 'gris', libelle: 'Gris' },
+];
+export function teinteLogement(bien, biens = []) {
+  if (bien?.teinte && TEINTES.some((t) => t.cle === bien.teinte)) return bien.teinte;
+  const index = Math.max(0, (biens || []).findIndex((b) => b?.id === bien?.id));
+  return TEINTES[index % TEINTES.length].cle;
+}
+
 export const nomLogement = (biens, bienId) => (biens || []).find((b) => b.id === bienId)?.nom || 'logement inconnu';
 
 // --------------------------------------------------------- sélection mémorisée

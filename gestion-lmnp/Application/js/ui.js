@@ -75,7 +75,7 @@ function appliquerRepli(section, replie, { memoriser = true } = {}) {
  *   repliParDefaut : true/false pour imposer l'état initial de cette carte
  *                    (tant que l'utilisateur ne l'a pas repliée ou dépliée lui-même)
  */
-export function carte({ titre, aide, actions = [], corps, serre = false, resume = '', repliable = true, cle = '', repliParDefaut: defaut = null }) {
+export function carte({ titre, aide, actions = [], corps, serre = false, resume = '', repliable = true, cle = '', repliParDefaut: defaut = null, teinte = '' }) {
   const peutReplier = Boolean(repliable && titre);
   const cleRepli = peutReplier ? `${pageRepli}|${cle || titre}` : '';
   const chevron = peutReplier ? h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾') : null;
@@ -90,7 +90,7 @@ export function carte({ titre, aide, actions = [], corps, serre = false, resume 
   const entete = (titre || actions.length)
     ? h('div', { class: 'carte-entete' }, [bloc, actions.length ? h('div', { class: 'groupe-boutons' }, actions) : null])
     : null;
-  const section = h('section', { class: 'carte' }, [entete, h('div', { class: `carte-corps${serre ? ' serre' : ''}` }, corps)]);
+  const section = h('section', { class: `carte${teinte ? ` teinte teinte-${teinte}` : ''}` }, [entete, h('div', { class: `carte-corps${serre ? ' serre' : ''}` }, corps)]);
   if (peutReplier) {
     section.dataset.repli = cleRepli;
     const basculer = () => appliquerRepli(section, !section.classList.contains('repliee'));
@@ -130,13 +130,13 @@ function appliquerGroupe(groupe, replie, { memoriser = true } = {}) {
  * bandeau (un chevron y est ajouté), `cle` l'identifiant de mémoire.
  * Renvoie { element, corps } : ajoutez les cartes dans `corps`.
  */
-export function groupeRepliable({ entete, cle, repliParDefaut: defaut = null }) {
+export function groupeRepliable({ entete, cle, repliParDefaut: defaut = null, teinte = '' }) {
   const cleRepli = `${pageRepli}|groupe:${cle}`;
   const chevron = h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾');
   entete.prepend(chevron);
   entete.classList.add('groupe-entete', 'cliquable');
   const corps = h('div', { class: 'groupe-corps' });
-  const element = h('div', { class: 'groupe-repliable', 'data-repli': cleRepli }, [entete, corps]);
+  const element = h('div', { class: `groupe-repliable${teinte ? ` teinte teinte-${teinte}` : ''}`, 'data-repli': cleRepli }, [entete, corps]);
   entete.addEventListener('click', (evenement) => {
     if (evenement.target.closest('a, input, select, textarea, .bouton, .groupe-boutons')) return;
     appliquerGroupe(element, !element.classList.contains('repliee'));

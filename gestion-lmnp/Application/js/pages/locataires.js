@@ -23,7 +23,7 @@ import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeC
 import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publication.js';
 import { preparerBienvenue } from '../bienvenue.js';
 import { bailEstActif, ouvrirLocataire, ouvrirBail, repartirColocataires } from './bien.js';
-import { estCourteDuree, estGracieux } from '../logements.js';
+import { estCourteDuree, estGracieux, teinteLogement } from '../logements.js';
 import { libelleTypeLocation } from '../logements.js';
 import { ouvrirDocumentsColocataire } from './documents-colocataire.js';
 
@@ -578,7 +578,7 @@ export default {
       for (const logement of logements) {
         const siens = tout.locataires.filter((l) => surLogement(l, logement.id));
         // v50 : le bandeau du logement replie ses lignes.
-        const groupe = groupeRepliable({ cle: logement.id, entete: h('div', { class: 'section-logement section-logement-serree' }, [
+        const groupe = groupeRepliable({ cle: logement.id, teinte: teinteLogement(logement, tout.biens), entete: h('div', { class: 'section-logement section-logement-serree' }, [
           h('span', { class: 'section-logement-nom', texte: `🏠 ${logement.nom}` }),
           h('span', { class: 'legende', texte: `${logement.ville ? `${logement.ville} · ` : ''}${libelleTypeLocation(logement)} · ${siens.length} ${siens.length > 1 ? 'personnes' : 'personne'}` }),
         ]) });

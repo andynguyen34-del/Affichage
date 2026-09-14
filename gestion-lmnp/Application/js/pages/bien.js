@@ -7,7 +7,7 @@ import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
-import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, estGracieux, motOccupant, sejoursDe } from '../logements.js';
+import { TYPES_LOCATION, TEINTES, teinteLogement, typeLocation, libelleTypeLocation, estCourteDuree, estGracieux, motOccupant, sejoursDe } from '../logements.js';
 import { cadreDocumentsLogement } from './documents-logement.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Garage', 'Parking / box', 'Cave', 'Local', 'Terrain'].map((v) => ({ valeur: v, libelle: v }));
@@ -25,6 +25,8 @@ const champsBien = () => [
     aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer. À titre gracieux : occupé par un bailleur ou un proche, rien n’est attendu.' },
   { cle: 'type', libelle: 'Type', type: 'liste', options: TYPES_BIEN },
   { cle: 'surface', libelle: 'Surface (m²)', type: 'nombre' },
+  { cle: 'teinte', libelle: 'Couleur du logement', type: 'liste', options: [{ valeur: '', libelle: 'Automatique (selon l’ordre)' }, ...TEINTES.map((t) => ({ valeur: t.cle, libelle: t.libelle }))],
+    aide: 'Colore le bord et l’en-tête de ses cadres sur toutes les pages, pour le distinguer des autres logements.' },
   { cle: 'adresse', libelle: 'Adresse', type: 'texte', requis: true, largeur: 'pleine' },
   { cle: 'codePostal', libelle: 'Code postal', type: 'texte' },
   { cle: 'ville', libelle: 'Ville', type: 'texte' },
@@ -244,6 +246,7 @@ function carteBien(donnees, bien, contexte) {
 
   return carte({
     titre: bien.nom,
+    teinte: teinteLogement(bien, (contexte?.tout || donnees).biens),
     aide: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(' — '),
     actions: [
       badge(libelleTypeLocation(bien), courte ? 'info' : (gracieux ? 'attente' : 'succes')),

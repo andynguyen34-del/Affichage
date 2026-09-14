@@ -46,6 +46,14 @@ disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
   lieux reste possible, rattaché au logement.
 - Types de bien : Garage, Parking / box, Cave, Terrain s'ajoutent à
   Appartement, Maison, Studio, Chambre, Local.
+- « Locataires » : « + Locataire » propose aussitôt de rattacher la
+  personne à un logement ; « Rattacher à un logement » l'ajoute au bail
+  d'une colocation (puis ouvre « Répartir » pour sa part) ou prépare son
+  bail. Les personnes sans aucun bail sont dans « À rattacher à un
+  logement », distinctes des anciens locataires.
+- Une couleur par logement (fiche du logement, « Couleur du logement »,
+  automatique selon l'ordre sinon) : bord gauche et en-tête de ses cadres
+  sur Logements & baux, Loyers, Locataires et États des lieux.
 
 **Nouveau en v56 — plus de virement saisi en double.** « Virement reçu »
 sur une échéance déjà soldée avertit (« déjà intégralement encaissée »),

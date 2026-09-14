@@ -592,3 +592,18 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .baux-logement { margin-top: 1rem; padding-top: .6rem; border-top: 1px dashed var(--bordure-forte); }
 .baux-logement .tableau-defilant { margin: .3rem 0 0; }
 .baux-logement .groupe-repliable > .groupe-corps { margin-top: .2rem; }
+
+/* Teintes par logement : bord gauche et en-tête des cadres et bandeaux */
+.teinte-vert { --teinte-bord: #1f6b4f; --teinte-fond: #e3f0e9; }
+.teinte-bleu { --teinte-bord: #2f5fa8; --teinte-fond: #e3ecf7; }
+.teinte-ambre { --teinte-bord: #a3620d; --teinte-fond: #fbefd9; }
+.teinte-rose { --teinte-bord: #a3325c; --teinte-fond: #f8e4ea; }
+.teinte-violet { --teinte-bord: #5e3ea3; --teinte-fond: #ece4f7; }
+.teinte-turquoise { --teinte-bord: #177a75; --teinte-fond: #dff3f2; }
+.teinte-brique { --teinte-bord: #a0432a; --teinte-fond: #f6e5df; }
+.teinte-gris { --teinte-bord: #5b6660; --teinte-fond: #eeede8; }
+.carte.teinte { border-left: 5px solid var(--teinte-bord); }
+.carte.teinte > .carte-entete { background: var(--teinte-fond); }
+.carte.teinte.repliee > .carte-entete { border-bottom: 0; }
+.groupe-repliable.teinte > .groupe-entete { background: var(--teinte-fond); border-left: 5px solid var(--teinte-bord); border-radius: 6px; padding: .5rem .8rem; margin: .8rem 0 .6rem; border-bottom: 0; }
+.groupe-repliable.teinte > .groupe-entete h2, .groupe-repliable.teinte > .groupe-entete .section-logement-nom { color: var(--teinte-bord); }
