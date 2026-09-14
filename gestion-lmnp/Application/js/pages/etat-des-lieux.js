@@ -7,7 +7,7 @@ import * as api from '../api.js';
 import { h, carte, bouton, badge, vide, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier } from '../ui.js';
 import { date, aujourdhui, taille, nomFichierTelechargement } from '../format.js';
-import { estCourteDuree, bienDeEdl } from '../logements.js';
+import { estCourteDuree, sansBail, bienDeEdl } from '../logements.js';
 import { demanderSignature } from '../signature.js';
 import { pdfEtatDesLieux } from '../pdf.js';
 import { publierDocument, ouvrirFenetreContradictoire, destinatairesDe } from '../portail-publication.js';
@@ -99,8 +99,8 @@ function focaliser(cle, { selectionner = false } = {}) {
 
 
 async function creerEtatDesLieux(donnees, contexte) {
-  if (!donnees.baux.length && !donnees.biens.some(estCourteDuree)) {
-    notifier('Enregistrez d’abord un bail dans « Logements & baux » (ou déclarez un logement de courte durée).', 'erreur');
+  if (!donnees.baux.length && !donnees.biens.some(sansBail)) {
+    notifier('Enregistrez d’abord un bail dans « Logements & baux » (ou déclarez un logement de courte durée ou à titre gracieux).', 'erreur');
     return;
   }
   const bailActif = [...donnees.baux].sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut)))[0];
@@ -115,11 +115,11 @@ async function creerEtatDesLieux(donnees, contexte) {
       { cle: 'bailId', libelle: 'Bail concerné', type: 'liste', requis: true,
         options: [
           ...donnees.baux.map((b) => ({ valeur: b.id, libelle: `${donnees.biens.find((x) => x.id === b.bienId)?.nom || 'Logement ?'} — bail du ${date(b.dateDebut)}` })),
-          // Un logement de courte durée n'a pas de bail : l'état des lieux se rattache au logement lui-même.
-          ...donnees.biens.filter(estCourteDuree).map((b) => ({ valeur: `bien:${b.id}`, libelle: `${b.nom} — sans bail (courte durée)` })),
+          // Un logement sans bail (courte durée, à titre gracieux) : l'état des lieux se rattache au logement lui-même.
+          ...donnees.biens.filter(sansBail).map((b) => ({ valeur: `bien:${b.id}`, libelle: `${b.nom} — sans bail (${estCourteDuree(b) ? 'courte durée' : 'à titre gracieux'})` })),
         ] },
     ],
-    valeurs: { type: 'entree', date: aujourdhui(), bailId: bailActif?.id || (donnees.biens.find(estCourteDuree) ? `bien:${donnees.biens.find(estCourteDuree).id}` : '') },
+    valeurs: { type: 'entree', date: aujourdhui(), bailId: bailActif?.id || (donnees.biens.find(sansBail) ? `bien:${donnees.biens.find(sansBail).id}` : '') },
   });
   if (!saisie) return;
   const sansBail = String(saisie.bailId || '').startsWith('bien:');

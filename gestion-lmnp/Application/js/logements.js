@@ -7,12 +7,14 @@ export const TYPES_LOCATION = [
   { valeur: 'colocation', libelle: 'Colocation — un bail, plusieurs colocataires avec leur part' },
   { valeur: 'entiere', libelle: 'Location entière — un bail, un locataire (ou un couple)' },
   { valeur: 'courte', libelle: 'Courte durée — Airbnb, Booking… (séjours, pas de loyer mensuel)' },
+  { valeur: 'gracieux', libelle: 'Occupation à titre gracieux — par le bailleur ou un proche, sans bail ni loyer' },
 ];
 
 export const LIBELLES_TYPE_LOCATION = {
   colocation: 'Colocation',
   entiere: 'Location entière',
   courte: 'Courte durée',
+  gracieux: 'À titre gracieux',
 };
 
 export const PLATEFORMES = ['Airbnb', 'Booking', 'Abritel', 'En direct', 'Autre'];
@@ -21,10 +23,14 @@ export const PLATEFORMES = ['Airbnb', 'Booking', 'Abritel', 'En direct', 'Autre'
 export const typeLocation = (bien) => (bien?.typeLocation && LIBELLES_TYPE_LOCATION[bien.typeLocation] ? bien.typeLocation : 'colocation');
 export const libelleTypeLocation = (bien) => LIBELLES_TYPE_LOCATION[typeLocation(bien)];
 export const estCourteDuree = (bien) => typeLocation(bien) === 'courte';
+/** Occupé par le bailleur ou un proche, à titre gracieux : ni bail, ni loyer, ni appel. */
+export const estGracieux = (bien) => typeLocation(bien) === 'gracieux';
+/** Un logement sans bail (courte durée ou à titre gracieux) : l'état des lieux se rattache au logement lui-même. */
+export const sansBail = (bien) => estCourteDuree(bien) || estGracieux(bien);
 
 /** Le mot pour désigner l'occupant, selon le type de location. */
 export const motOccupant = (bien, pluriel = false) => {
-  const mot = { colocation: 'colocataire', entiere: 'locataire', courte: 'voyageur' }[typeLocation(bien)];
+  const mot = { colocation: 'colocataire', entiere: 'locataire', courte: 'voyageur', gracieux: 'occupant' }[typeLocation(bien)];
   return pluriel ? `${mot}s` : mot;
 };
 

@@ -3,14 +3,14 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer, barreOutils,
-  ouvrirModale, fermerModale } from '../ui.js';
+  ouvrirModale, fermerModale, groupeRepliable } from '../ui.js';
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
-import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, motOccupant, sejoursDe } from '../logements.js';
+import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, estGracieux, motOccupant, sejoursDe } from '../logements.js';
 import { cadreDocumentsLogement } from './documents-logement.js';
 
-const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Local'].map((v) => ({ valeur: v, libelle: v }));
+const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Garage', 'Parking / box', 'Cave', 'Local', 'Terrain'].map((v) => ({ valeur: v, libelle: v }));
 const TYPES_BAIL = [
   { valeur: 'meuble', libelle: 'Meublé — 1 an renouvelable' },
   { valeur: 'etudiant', libelle: 'Meublé étudiant — 9 mois' },
@@ -22,7 +22,7 @@ const TYPES_BAIL = [
 const champsBien = () => [
   { cle: 'nom', libelle: 'Nom du logement', type: 'texte', requis: true, exemple: 'Maison SML — Anika', largeur: 'pleine' },
   { cle: 'typeLocation', libelle: 'Type de location', type: 'liste', options: TYPES_LOCATION, largeur: 'pleine',
-    aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer.' },
+    aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer. À titre gracieux : occupé par un bailleur ou un proche, rien n’est attendu.' },
   { cle: 'type', libelle: 'Type', type: 'liste', options: TYPES_BIEN },
   { cle: 'surface', libelle: 'Surface (m²)', type: 'nombre' },
   { cle: 'adresse', libelle: 'Adresse', type: 'texte', requis: true, largeur: 'pleine' },
@@ -144,10 +144,93 @@ async function reviserLoyer(bail) {
   );
 }
 
+/** Les baux du plus récent au plus ancien (date de début). */
+const trierBaux = (baux) => [...baux].sort((a, b) => String(b.dateDebut || '').localeCompare(String(a.dateDebut || '')));
+
+/** Un bail dépassé : sa date de fin est passée. */
+const bailTermine = (bail) => Boolean(bail.dateFin && String(bail.dateFin).slice(0, 10) < aujourdhui());
+
+/** Les colonnes du tableau des baux (partagées entre la carte du logement et « Baux sans logement »). */
+function colonnesBaux(donnees, tout, contexte, { avecLogement = false } = {}) {
+  return [
+    { titre: 'Locataires', valeur: (b) => {
+      // Le nom ouvre la page « Locataires » sur la ligne de la personne.
+      const lien = (id) => h('button', { type: 'button', class: 'lien-locataire', title: 'Voir dans « Locataires »',
+        onclick: () => contexte.allerA('locataires', { locataireId: id }) }, nomLocataire(donnees, id));
+      const colocataires = (b.colocataires || []).filter((c) => c.locataireId);
+      if (colocataires.length) {
+        return h('div', {}, colocataires.map((c) => h('div', { class: colocataires.indexOf(c) ? 'legende' : '' }, [
+          lien(c.locataireId), ` — ${montant((Number(c.partLoyer) || 0) + (Number(c.partCharges) || 0))}`])));
+      }
+      return h('div', {}, [
+        h('div', {}, [lien(b.locataireId)]),
+        b.coTitulaireId ? h('div', { class: 'legende' }, ['et ', lien(b.coTitulaireId)]) : null,
+      ]);
+    } },
+    avecLogement ? { titre: 'Logement', valeur: (b) => tout.biens.find((x) => x.id === b.bienId)?.nom || '—' } : null,
+    { titre: 'Période', valeur: (b) => `${date(b.dateDebut)} → ${b.dateFin ? date(b.dateFin) : 'en cours'}` },
+    { titre: 'Loyer HC', nombre: true, valeur: (b) => montant(b.loyerHc) },
+    { titre: 'Charges', nombre: true, valeur: (b) => montant(b.provisionCharges || 0) },
+    { titre: 'Dépôt', nombre: true, valeur: (b) => montant(b.depotGarantie || 0) },
+    { titre: 'État', valeur: (b) => (bailEstActif(b) ? badge('En cours', 'succes')
+      : (b.dateDebut && b.dateDebut > aujourdhui() ? badge('À venir', 'attention') : badge('Terminé', 'attente'))) },
+    { titre: '', actions: true, valeur: (b) => h('div', { class: 'groupe-boutons' }, [
+      bouton('Répartir', () => repartirColocataires(donnees, b), {
+        petit: true, titre: 'Répartir le loyer entre les colocataires (parts individuelles)',
+      }),
+      bouton('Réviser', () => reviserLoyer(b), { petit: true, titre: 'Réviser le loyer selon l’indice IRL' }),
+      bouton('Bail signé', () => ouvrirBailSignatures(donnees, b), {
+        petit: true, titre: 'Joindre le PDF du bail, recueillir les signatures à l’écran et le déposer sur les espaces colocataires',
+      }),
+      bouton('Modifier', () => ouvrirBail(tout, b), { petit: true }),
+      bouton('✕', async () => {
+        const confirme = await confirmer({
+          titre: 'Supprimer le bail',
+          message: 'Les loyers déjà enregistrés pour ce bail resteront dans le dossier mais ne seront plus rattachés.',
+          libelleValider: 'Supprimer', danger: true,
+        });
+        if (confirme) await executer(etat.supprimer('baux', b.id), 'Bail supprimé.');
+      }, { petit: true, type: 'danger' }),
+    ]) },
+  ].filter(Boolean);
+}
+
+/**
+ * Les baux d'un logement, dans sa carte : les baux en cours et à venir en
+ * tableau, du plus récent au plus ancien ; les baux dépassés dans un groupe
+ * « Baux terminés (n) » replié d'office.
+ */
+function sectionBaux(donnees, tout, bien, contexte) {
+  const baux = trierBaux(donnees.baux.filter((b) => b.bienId === bien.id));
+  const ouverts = baux.filter((b) => !bailTermine(b));
+  const termines = baux.filter(bailTermine);
+  const colonnes = colonnesBaux(donnees, tout, contexte);
+  const section = h('div', { class: 'baux-logement' }, [
+    h('div', { class: 'doc-logement-entete' }, [
+      h('span', { class: 'doc-logement-entete-titre', texte: `Baux (${baux.length})` }),
+      h('span', { class: 'legende', texte: ouverts.length ? `${ouverts.length} en cours ou à venir` : (baux.length ? 'aucun bail en cours' : 'aucun bail : « + Bail » pour en enregistrer un') }),
+    ]),
+  ]);
+  if (ouverts.length) section.append(tableau({ colonnes, lignes: ouverts, messageVide: '', cle: (b) => b.id }));
+  if (termines.length) {
+    const groupe = groupeRepliable({
+      cle: `baux-termines:${bien.id}`, repliParDefaut: true,
+      entete: h('div', { class: 'doc-logement-entete', style: 'margin-top:.4rem' }, [
+        h('span', { class: 'doc-logement-entete-titre', texte: `Baux terminés (${termines.length})` }),
+        h('span', { class: 'legende', texte: `du ${date(termines[termines.length - 1].dateDebut)} au ${date(termines[0].dateFin)}` }),
+      ]),
+    });
+    groupe.corps.append(tableau({ colonnes, lignes: termines, messageVide: '', cle: (b) => b.id }));
+    section.append(groupe.element);
+  }
+  return section;
+}
+
 function carteBien(donnees, bien, contexte) {
   const bauxDuBien = donnees.baux.filter((b) => b.bienId === bien.id);
   const actif = bauxDuBien.find((b) => bailEstActif(b));
   const courte = estCourteDuree(bien);
+  const gracieux = estGracieux(bien);
   const annee = contexte?.annee || new Date().getFullYear();
   const sejours = courte ? sejoursDe(donnees.loyers, bien.id, annee) : [];
 
@@ -155,8 +238,9 @@ function carteBien(donnees, bien, contexte) {
     titre: bien.nom,
     aide: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(' — '),
     actions: [
-      badge(libelleTypeLocation(bien), courte ? 'info' : 'succes'),
-      contexte ? bouton('Voir ses loyers', () => contexte.allerA('loyers', { bienId: bien.id }), { petit: true, titre: 'Ouvrir la page Loyers sur ce logement' }) : null,
+      badge(libelleTypeLocation(bien), courte ? 'info' : (gracieux ? 'attente' : 'succes')),
+      contexte && !gracieux ? bouton('Voir ses loyers', () => contexte.allerA('loyers', { bienId: bien.id }), { petit: true, titre: 'Ouvrir la page Loyers sur ce logement' }) : null,
+      !courte && !gracieux ? bouton('+ Bail', () => ouvrirBail(contexte?.tout || donnees, null, bien.id), { petit: true, titre: 'Nouveau bail sur ce logement' }) : null,
       bouton('Modifier', () => ouvrirBien(donnees, bien), { petit: true }),
       bouton('Supprimer', async () => {
         const confirme = await confirmer({
@@ -167,7 +251,12 @@ function carteBien(donnees, bien, contexte) {
         if (confirme) await executer(etat.supprimer('biens', bien.id), 'Logement supprimé.');
       }, { petit: true, type: 'danger' }),
     ],
-    corps: [h('div', { class: 'grille grille-4' }, courte ? [
+    corps: [h('div', { class: 'grille grille-4' }, gracieux ? [
+      infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
+      infoBloc('Occupation', 'à titre gracieux'),
+      infoBloc('Loyer', 'aucun'),
+      infoBloc('Occupant', bien.notes ? String(bien.notes).split('\n')[0] : '—'),
+    ] : courte ? [
       infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
       infoBloc(`Séjours ${annee}`, String(sejours.length)),
       infoBloc(`Recettes ${annee}`, montant(sejours.reduce((s, x) => s + (Number(x.montant) || 0), 0))),
@@ -178,6 +267,10 @@ function carteBien(donnees, bien, contexte) {
       infoBloc('Baux enregistrés', String(bauxDuBien.length)),
       infoBloc(`${motOccupant(bien, true)[0].toUpperCase()}${motOccupant(bien, true).slice(1)} du bail actif`, actif ? String((actif.colocataires || []).length || 1) : '—'),
     ]),
+    // Les baux du logement, sous ses chiffres (les terminés repliés).
+    courte ? h('p', { class: 'legende', style: 'margin:.8rem 0 0', texte: 'Location de courte durée : pas de bail, les séjours se suivent dans « Loyers ».' })
+      : (gracieux ? h('p', { class: 'legende', style: 'margin:.8rem 0 0', texte: 'Occupation à titre gracieux : ni bail, ni loyer, ni appel. L’état des lieux reste possible (rattaché au logement). L’occupant peut être noté dans « Notes ».' })
+        : sectionBaux(donnees, contexte?.tout || donnees, bien, contexte)),
     // v53 : DPE, diagnostics et autres documents partagés avec les colocataires.
     cadreDocumentsLogement(contexte?.tout || donnees, bien)],
   });
@@ -303,61 +396,22 @@ export default {
     donnees.biens.forEach((bien) => conteneur.append(carteBien(donnees, bien, contexte)));
 
     // ------------------------------------------------------------- baux
-    const colonnesBaux = [
-      { titre: 'Locataires', valeur: (b) => {
-        // Le nom ouvre la page « Locataires » sur la ligne de la personne.
-        const lien = (id) => h('button', { type: 'button', class: 'lien-locataire', title: 'Voir dans « Locataires »',
-          onclick: () => contexte.allerA('locataires', { locataireId: id }) }, nomLocataire(donnees, id));
-        const colocataires = (b.colocataires || []).filter((c) => c.locataireId);
-        if (colocataires.length) {
-          return h('div', {}, colocataires.map((c) => h('div', { class: colocataires.indexOf(c) ? 'legende' : '' }, [
-            lien(c.locataireId), ` — ${montant((Number(c.partLoyer) || 0) + (Number(c.partCharges) || 0))}`])));
-        }
-        return h('div', {}, [
-          h('div', {}, [lien(b.locataireId)]),
-          b.coTitulaireId ? h('div', { class: 'legende' }, ['et ', lien(b.coTitulaireId)]) : null,
-        ]);
-      } },
-      { titre: 'Logement', valeur: (b) => tout.biens.find((x) => x.id === b.bienId)?.nom || '—' },
-      { titre: 'Période', valeur: (b) => `${date(b.dateDebut)} → ${b.dateFin ? date(b.dateFin) : 'en cours'}` },
-      { titre: 'Loyer HC', nombre: true, valeur: (b) => montant(b.loyerHc) },
-      { titre: 'Charges', nombre: true, valeur: (b) => montant(b.provisionCharges || 0) },
-      { titre: 'Dépôt', nombre: true, valeur: (b) => montant(b.depotGarantie || 0) },
-      { titre: 'État', valeur: (b) => (bailEstActif(b) ? badge('En cours', 'succes')
-        : (b.dateDebut && b.dateDebut > aujourdhui() ? badge('À venir', 'attention') : badge('Terminé', 'attente'))) },
-      { titre: '', actions: true, valeur: (b) => h('div', { class: 'groupe-boutons' }, [
-        bouton('Répartir', () => repartirColocataires(donnees, b), {
-          petit: true, titre: 'Répartir le loyer entre les colocataires (parts individuelles)',
+    // Les baux sont sous leur logement (carte du logement) ; ici ne restent
+    // que ceux dont le logement n'existe plus.
+    const orphelins = donnees.baux.filter((b) => !tout.biens.some((x) => x.id === b.bienId));
+    if (orphelins.length) {
+      conteneur.append(carte({
+        titre: 'Baux sans logement',
+        aide: 'Le logement de ces baux a été supprimé : rattachez-les (Modifier) ou supprimez-les.',
+        serre: true,
+        corps: tableau({
+          colonnes: colonnesBaux(donnees, tout, contexte, { avecLogement: true }),
+          lignes: trierBaux(orphelins),
+          messageVide: '',
+          cle: (b) => b.id,
         }),
-        bouton('Réviser', () => reviserLoyer(b), { petit: true, titre: 'Réviser le loyer selon l’indice IRL' }),
-        bouton('Bail signé', () => ouvrirBailSignatures(donnees, b), {
-          petit: true, titre: 'Joindre le PDF du bail, recueillir les signatures à l’écran et le déposer sur les espaces colocataires',
-        }),
-        bouton('Modifier', () => ouvrirBail(tout, b), { petit: true }),
-        bouton('✕', async () => {
-          const confirme = await confirmer({
-            titre: 'Supprimer le bail',
-            message: 'Les loyers déjà enregistrés pour ce bail resteront dans le dossier mais ne seront plus rattachés.',
-            libelleValider: 'Supprimer', danger: true,
-          });
-          if (confirme) await executer(etat.supprimer('baux', b.id), 'Bail supprimé.');
-        }, { petit: true, type: 'danger' }),
-      ]) },
-    ];
-
-    conteneur.append(carte({
-      titre: 'Baux',
-      aide: donnees.biens.some(estCourteDuree) && donnees.biens.every(estCourteDuree)
-        ? 'Un logement de courte durée n’a pas de bail : ses séjours se suivent dans « Loyers ».'
-        : 'Le bail détermine les échéances de loyer attendues chaque mois.',
-      serre: true,
-      corps: tableau({
-        colonnes: colonnesBaux,
-        lignes: [...donnees.baux].sort((a, b) => String(b.dateDebut).localeCompare(String(a.dateDebut))),
-        messageVide: 'Aucun bail enregistré.',
-        cle: (b) => b.id,
-      }),
-    }));
+      }));
+    }
 
 
     const revisions = donnees.baux.flatMap((b) => (b.revisions || []).map((r) => ({ ...r, bail: b })));

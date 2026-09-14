@@ -34,6 +34,19 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**En préparation pour la prochaine version (livrée au « go »).**
+- En-tête : le nom du logement s'affiche en entier dans le sélecteur.
+- « Logements & baux » : les baux sont sous leur logement, dans sa carte, du
+  plus récent au plus ancien ; les baux dépassés sont regroupés dans
+  « Baux terminés (n) », replié d'office. Bouton « + Bail » sur chaque
+  carte (logement prérempli). Ne restent en bas que les baux dont le
+  logement a été supprimé (« Baux sans logement »).
+- Type de location « Occupation à titre gracieux » : un logement occupé par
+  un bailleur ou un proche, sans bail, sans loyer, sans appel ; l'état des
+  lieux reste possible, rattaché au logement.
+- Types de bien : Garage, Parking / box, Cave, Terrain s'ajoutent à
+  Appartement, Maison, Studio, Chambre, Local.
+
 **Nouveau en v56 — plus de virement saisi en double.** « Virement reçu »
 sur une échéance déjà soldée avertit (« déjà intégralement encaissée »),
 propose 0 € et demande confirmation avant d'enregistrer un trop-perçu. Un

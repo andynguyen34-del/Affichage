@@ -130,7 +130,7 @@ function appliquerGroupe(groupe, replie, { memoriser = true } = {}) {
  * bandeau (un chevron y est ajouté), `cle` l'identifiant de mémoire.
  * Renvoie { element, corps } : ajoutez les cartes dans `corps`.
  */
-export function groupeRepliable({ entete, cle }) {
+export function groupeRepliable({ entete, cle, repliParDefaut: defaut = null }) {
   const cleRepli = `${pageRepli}|groupe:${cle}`;
   const chevron = h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾');
   entete.prepend(chevron);
@@ -141,7 +141,7 @@ export function groupeRepliable({ entete, cle }) {
     if (evenement.target.closest('a, input, select, textarea, .bouton, .groupe-boutons')) return;
     appliquerGroupe(element, !element.classList.contains('repliee'));
   });
-  appliquerGroupe(element, estReplie(cleRepli, ''), { memoriser: false });
+  appliquerGroupe(element, estReplie(cleRepli, '', defaut), { memoriser: false });
   return { element, corps };
 }
 

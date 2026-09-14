@@ -587,3 +587,8 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .segment-choix:hover { background: #eef1f4; color: var(--encre); }
 .segment-choix.actif { background: var(--accent); color: #fff; font-weight: 600; }
 .segment-choix:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Baux sous leur logement (carte Logements & baux) */
+.baux-logement { margin-top: 1rem; padding-top: .6rem; border-top: 1px dashed var(--bordure-forte); }
+.baux-logement .tableau-defilant { margin: .3rem 0 0; }
+.baux-logement .groupe-repliable > .groupe-corps { margin-top: .2rem; }

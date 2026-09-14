@@ -10,7 +10,7 @@ import { imprimerQuittance, imprimerAvis, imprimerReleve, imprimerReleveMois } f
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
-import { estCourteDuree, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
+import { estCourteDuree, estGracieux, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
 import { apercuAppels, apercuAppelEcheance, envoyerAppelEcheance, envoyerAppels, lireJournalAppels, reglageAppel, logementsAvecAppel } from '../appel-loyer-client.js';
 import { resumeAppels, moisVise, sansAppel } from '../appel-loyer.js';
 import { numeroQuittance, soldeAnterieur, dernierReglement } from '../quittance.js';
@@ -875,7 +875,7 @@ function carteSejours(donnees, bien, annee) {
 /** Bandeau d'un logement dans la vue « Tous les logements ». */
 const enteteLogement = (bien, contexte) => h('div', { class: 'section-logement' }, [
   h('h2', { texte: bien.nom }),
-  badge(libelleTypeLocation(bien), estCourteDuree(bien) ? 'info' : 'succes'),
+  badge(libelleTypeLocation(bien), estCourteDuree(bien) ? 'info' : (estGracieux(bien) ? 'attente' : 'succes')),
   h('span', { class: 'legende', texte: [bien.adresse, bien.ville].filter(Boolean).join(', ') }),
   bouton('Ce logement seul', () => contexte.definirLogement(bien.id), { petit: true, type: 'discret', titre: 'Afficher uniquement ce logement dans toutes les pages' }),
 ]);
@@ -962,6 +962,10 @@ export default {
     }
     let attenduLogement = 0;
     let encaisseLogement = 0;
+    if (bien && estGracieux(bien)) {
+      cible.append(carte({ titre: bien.nom, serre: true, corps: vide('Occupation à titre gracieux', 'Ce logement est occupé par un bailleur ou un proche : aucun loyer n’est attendu, aucun appel n’est envoyé.') }));
+      continue;
+    }
     if (bien && estCourteDuree(bien)) {
       const sejours = sejoursDe(donnees.loyers, bien.id, annee);
       attenduLogement = sejours.reduce((s, x) => s + (x.total || 0), 0);
