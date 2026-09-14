@@ -162,6 +162,7 @@ export function collecte() {
     cautions: etat.liste('cautions'),
     etatsDesLieux: etat.liste('etatsDesLieux'),
     regularisations: etat.liste('regularisations'),
+    documentsLogement: etat.liste('documentsLogement'),
   };
 }
 

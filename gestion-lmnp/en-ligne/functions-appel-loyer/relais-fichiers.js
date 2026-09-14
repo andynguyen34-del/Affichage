@@ -210,8 +210,9 @@ export async function traiter(req, res) {
     if (!qui.gerant) throw refus(403, 'Suppression réservée aux gérants.');
     const chemin = nettoyerChemin(req.query.chemin);
     const fichier = bucket.file(`${espace}/${chemin}`);
-    // Copie vers la Corbeille avant suppression, comme l'application.
-    try {
+    // Copie vers la Corbeille avant suppression, comme l'application
+    // (sauf depuis la Corbeille elle-même : suppression définitive).
+    if (espace !== 'corbeille') try {
       const horodatage = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15);
       const nom = chemin.slice(chemin.lastIndexOf('/') + 1);
       await fichier.copy(bucket.file(`corbeille/${horodatage}-${nom}`));

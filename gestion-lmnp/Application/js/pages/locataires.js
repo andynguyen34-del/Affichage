@@ -24,6 +24,7 @@ import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publicatio
 import { preparerBienvenue } from '../bienvenue.js';
 import { bailEstActif, ouvrirLocataire } from './bien.js';
 import { libelleTypeLocation } from '../logements.js';
+import { ouvrirDocumentsColocataire } from './documents-colocataire.js';
 
 // ------------------------------------------------------------- relevé nuage
 
@@ -364,6 +365,9 @@ function tableLocataires(tout, lignes, bailleur, contexte, lancerReleve = () => 
         emailDe(l) && api.MODE === 'nuage' && releveDe(l) ? (releveDe(l).portail?.bienvenueLe
           ? bouton('Renvoyer la bienvenue', () => envoyerBienvenue(tout, l, { renvoi: true }).then((fait) => { if (fait) lancerReleve(); }).catch(signalerErreur), { petit: true, titre: 'Nouvel e-mail « Rappel — Bienvenue… » avec la procédure de connexion' })
           : bouton('Bienvenue ✉', () => envoyerBienvenue(tout, l).then((fait) => { if (fait) lancerReleve(); }).catch(signalerErreur), { petit: true, type: 'primaire', titre: 'Ouvre son espace, crée son compte de connexion et lui envoie la procédure' })) : null,
+        emailDe(l) && api.MODE === 'nuage' && releveDe(l)?.portail?.documents?.length
+          ? bouton(`Documents (${releveDe(l).portail.documents.length})`, () => ouvrirDocumentsColocataire(l, releveDe(l).portail, { surChangement: (portail) => { releveDe(l).portail = portail; lancerReleve(); } }).catch(signalerErreur), { petit: true, titre: 'Consulter, télécharger ou supprimer (vers la Corbeille) les documents publiés sur son espace' })
+          : null,
         bouton('Modifier', () => ouvrirLocataire(l), { petit: true }),
         bouton('✕', async () => {
           const confirme = await confirmer({

@@ -368,8 +368,9 @@ export async function deplacerFichier(espace, chemin, espaceCible, cible) {
 export async function supprimerFichier(espace, chemin) {
   await avecRepli(async () => {
     const source = refFichier(espace, chemin);
-    // Copie vers la Corbeille avant suppression, comme la version dossier.
-    try {
+    // Copie vers la Corbeille avant suppression, comme la version dossier
+    // (sauf depuis la Corbeille elle-même : suppression définitive).
+    if (espace !== 'corbeille') try {
       const contenu = await getBlob(source);
       const horodatage = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15);
       const nom = chemin.includes('/') ? chemin.slice(chemin.lastIndexOf('/') + 1) : chemin;
@@ -547,6 +548,23 @@ export const confirmerSignature = (edlId, code, image) => appelSignature('signat
 /** Le gérant complète un espace colocataire (échéance du mois, fenêtre…) sans toucher au reste. */
 export async function completerPortail(email, complement) {
   await setDoc(doc(base, 'portail', cleEmail(email)), { ...complement, email: cleEmail(email), majLe: new Date().toISOString() }, { merge: true });
+}
+
+// logements/{bienId} : le catalogue des documents du logement (v53) visibles
+// par ses colocataires. Écrit par les gérants, lu par les colocataires dont
+// l'espace porte l'identifiant du logement.
+export async function publierLogement(bienId, contenu) {
+  await setDoc(doc(base, 'logements', String(bienId)), { ...contenu, bienId: String(bienId), majLe: new Date().toISOString() });
+}
+
+export async function lireLogement(bienId) {
+  if (!bienId) return null;
+  const photo = await getDoc(doc(base, 'logements', String(bienId)));
+  return photo.exists() ? photo.data() : null;
+}
+
+export async function supprimerLogement(bienId) {
+  try { await deleteDoc(doc(base, 'logements', String(bienId))); } catch { /* déjà absent */ }
 }
 
 export async function supprimerPortail(email) {

@@ -547,3 +547,33 @@ textarea { min-height: 4.5rem; resize: vertical; }
 .espaces button:hover { border-color: var(--accent); }
 .espaces button.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
 .connexion-sous-titre { color: var(--encre-douce); font-weight: 600; margin: 0; }
+
+/* v53 — documents du logement (carte Logements & baux), documents d'un
+   colocataire (fenêtre Locataires) et Corbeille (Paramètres). */
+.doc-logement-cadre { margin-top: 1rem; padding-top: .6rem; border-top: 1px dashed var(--bordure-forte); }
+.doc-logement-entete { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .2rem 0 .4rem; }
+.doc-logement-entete-titre { font-weight: 600; color: var(--accent-fonce); }
+.doc-logement-barre { align-items: center; margin: .3rem 0 .5rem; }
+.doc-logement-barre .legende { flex: 1; min-width: 12rem; }
+.doc-logement-liste { display: flex; flex-direction: column; }
+.doc-logement {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .55rem .3rem; border-top: 1px solid var(--bordure);
+}
+.doc-logement:first-child { border-top: 0; }
+.doc-logement.masque { opacity: .7; }
+.doc-logement-visible { display: flex; flex-direction: column; align-items: center; gap: .1rem; flex: 0 0 auto; cursor: pointer; }
+.doc-logement-visible input { margin: 0; }
+.doc-logement-visible .legende { font-size: .68rem; }
+.doc-logement-icone {
+  font-size: 1.1rem; background: var(--accent-clair); border-radius: 10px;
+  width: 2.2rem; height: 2.2rem; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.doc-logement-details { flex: 1; min-width: 0; }
+.doc-logement-titre { font-weight: 600; }
+.doc-logement .groupe-boutons { flex-wrap: wrap; justify-content: flex-end; }
+.documents-colocataire .doc-logement-liste { margin-top: .4rem; }
+@media (max-width: 700px) {
+  .doc-logement { flex-wrap: wrap; }
+  .doc-logement .groupe-boutons { width: 100%; justify-content: flex-start; }
+}

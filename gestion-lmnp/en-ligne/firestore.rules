@@ -55,6 +55,15 @@ service cloud.firestore {
       match /codes/{edlId} { allow read, write: if false; }
     }
 
+    // Documents du logement (v53) : le catalogue des documents visibles d'un
+    // logement. Le gérant écrit ; un colocataire lit celui du logement que
+    // porte son espace.
+    match /logements/{bienId} {
+      allow read: if estGerant() || (connecte()
+        && get(/databases/$(database)/documents/portail/$(request.auth.token.email.lower())).data.logement.id == bienId);
+      allow write: if estGerant();
+    }
+
     // File d'envoi des courriels (extension Trigger Email) : dépôt par les
     // gérants ; personne ne lit (l'extension passe par l'accès serveur).
     match /mail/{document} {

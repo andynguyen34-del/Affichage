@@ -44,6 +44,9 @@ export async function ecrireMesReponses() { /* sans objet */ }
 export async function completerPortail() { /* sans objet */ }
 export async function creerCompteColocataire() { throw new Error('Création de compte indisponible en version dossier.'); }
 export async function supprimerPortail() { /* sans objet */ }
+export async function publierLogement() { /* sans objet */ }
+export async function lireLogement() { return null; }
+export async function supprimerLogement() { /* sans objet */ }
 export async function envoyerCourriel() { throw new Error('Envoi de courriel indisponible en version dossier.'); }
 export async function telechargerFichier(espace, chemin) { return ouvrirFichier(espace, chemin); }
 export async function deposerOctets(espace, chemin, octets) {
@@ -350,8 +353,9 @@ export async function deplacerFichier(espace, chemin, espaceCible, cible) {
 export async function supprimerFichier(espace, chemin) {
   const dir = await dossier(espace);
   const { parent, nom } = await cheminVersFichier(dir, chemin, false);
-  // On déplace vers la Corbeille plutôt que de supprimer définitivement.
-  try {
+  // On déplace vers la Corbeille plutôt que de supprimer définitivement
+  // (sauf depuis la Corbeille elle-même).
+  if (espace !== 'corbeille') try {
     const fichier = await (await parent.getFileHandle(nom)).getFile();
     const corbeille = await dossier('corbeille');
     const horodatage = new Date().toISOString().replace(/[:T]/g, '').slice(0, 15);

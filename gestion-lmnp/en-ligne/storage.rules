@@ -64,6 +64,17 @@ service firebase.storage {
       allow update, delete: if estGerant();
     }
 
+    // Espace « partage » — documents du logement (v53 : DPE, diagnostics,
+    // règlement…) déposés par le gérant. Les colocataires DU logement lisent
+    // les fichiers inscrits au catalogue publié (logements/{bienId}.fichiers :
+    // seuls les documents cochés « visible ») ; écriture par les gérants.
+    match /partage/documents/{bienId}/{fichier} {
+      allow read: if estGerant() || (connecte()
+        && monPortail().logement.id == bienId
+        && fichier in firestore.get(/databases/(default)/documents/logements/$(bienId)).data.fichiers);
+      allow write: if estGerant();
+    }
+
     match /partage/{reste=**} {
       allow read, write: if estGerant();
     }

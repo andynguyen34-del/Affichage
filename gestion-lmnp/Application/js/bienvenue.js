@@ -68,7 +68,7 @@ export function preparerBienvenue({ locataire, bail = null, bien = null, paramet
     ? `<p>${echapper(remplir(reglage.message, valeurs)).replace(/\n/g, '<br>')}</p>`
     : `<p>Bienvenue ${bien?.nom ? `à <strong>${echapper(bien.nom)}</strong>` : 'chez vous'}${valeurs.adresse ? ` (${echapper(valeurs.adresse)})` : ''}`
       + `${valeurs.entree ? `, à compter du ${echapper(valeurs.entree)}` : ''}. Un espace en ligne vous est réservé : vous y trouverez votre bail, `
-      + 'vos quittances de loyer, l’état des lieux (avec vos réponses et vos photos), le reçu de votre dépôt de garantie, et vous pourrez y déposer vos justificatifs.</p>';
+      + 'vos quittances de loyer, l’état des lieux (avec vos réponses et vos photos), le reçu de votre dépôt de garantie, les documents du logement (DPE, diagnostics, règlement), et vous pourrez y déposer vos justificatifs.</p>';
   const etapes = [
     `Ouvrez l’adresse ci-dessus. La page « Résidence ANIKA — Espace colocataires » s’affiche.`,
     'Saisissez votre adresse e-mail, puis cliquez sur <strong>« Première connexion ou mot de passe oublié ? »</strong>.',

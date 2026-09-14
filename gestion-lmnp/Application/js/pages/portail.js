@@ -13,6 +13,7 @@ import { CATEGORIES_JUSTIFICATIFS, CATEGORIES_DEMANDEES, categorie, classerParCa
 import { ouvrirChangementMotDePasse } from '../compte.js';
 import { pointsDe, bilanReponses, toutDaccord, estRepondu, libelleEtat } from '../contradictoire.js';
 import { demanderSignature } from '../signature.js';
+import { categorieDocument, etatValidite, plusRecentDabord } from '../documents-logement.js';
 
 const LIBELLES_TYPE = {
   quittance: { libelle: 'Quittance de loyer', pluriel: 'Quittances de loyer', icone: '🧾' },
@@ -63,6 +64,41 @@ function ligneDocument(document_) {
         api.telechargerFichier('portail', document_.chemin, nomFichier).catch(signalerErreur);
       } }, 'Télécharger'),
     ]),
+  ]);
+}
+
+/** Un document du logement (v53) : DPE, diagnostic, règlement… commun à tous les colocataires. */
+function ligneDocumentLogement(document_) {
+  const categorie = categorieDocument(document_.categorie);
+  const validite = etatValidite(document_, aujourdhui());
+  const nomFichier = document_.nomFichier || String(document_.chemin || '').split('/').pop();
+  return h('div', { class: 'portail-document', 'data-document-logement': document_.id || '' }, [
+    h('span', { class: 'portail-icone', texte: categorie.icone }),
+    h('div', { class: 'portail-details' }, [
+      h('div', { class: 'portail-titre', texte: document_.titre || categorie.libelle }),
+      h('div', { class: 'legende', texte: `${categorie.libelle}${validite.libelle ? ` · ${validite.libelle}` : ''}`
+        + (document_.deposeLe ? ` · déposé le ${date(document_.deposeLe)}` : '') + (document_.taille ? ` · ${taille(document_.taille)}` : '') }),
+    ]),
+    h('div', { class: 'groupe-boutons' }, [
+      h('button', { class: 'bouton bouton-petit', type: 'button', onclick: () => {
+        api.ouvrirFichier('partage', document_.chemin).catch(signalerErreur);
+      } }, 'Consulter'),
+      h('button', { class: 'bouton bouton-petit bouton-primaire', type: 'button', onclick: () => {
+        api.telechargerFichier('partage', document_.chemin, nomFichier).catch(signalerErreur);
+      } }, 'Télécharger'),
+    ]),
+  ]);
+}
+
+/** La section « Documents du logement » de la rubrique Bail & documents (v53). */
+function sectionDocumentsLogement(logement, nomLogement) {
+  const documents = [...(logement?.documents || [])].sort(plusRecentDabord);
+  return h('div', { class: 'portail-documents-logement' }, [
+    h('h2', { texte: `🏠 Documents du logement${nomLogement ? ` — ${nomLogement}` : ''}`, style: 'margin-top:1.2rem' }),
+    h('p', { class: 'legende', texte: 'Communs à tous les colocataires du logement, déposés par votre bailleur : DPE, diagnostics, règlement, notices…' }),
+    documents.length
+      ? h('div', {}, documents.map(ligneDocumentLogement))
+      : h('p', { class: 'legende', texte: 'Aucun document du logement pour l’instant.' }),
   ]);
 }
 
@@ -540,7 +576,7 @@ function sectionJustificatifs({ portail, surChargement = () => {} } = {}) {
 // -------------------------------------------------------------------- accueil
 
 /** L'accueil : ce qui attend le colocataire, la prochaine échéance, le dernier document. */
-function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, allerA }) {
+function sectionAccueil({ portail, documents, logement, etatEdl, justificatifsManquants, allerA }) {
   const taches = [];
   for (const contradictoire of contradictoiresDe(portail)) {
     if (contradictoire.finLe < aujourdhui()) continue;
@@ -567,6 +603,11 @@ function sectionAccueil({ portail, documents, etatEdl, justificatifsManquants, a
   const dernier = [...documents].sort((a, b) => String(b.publieLe).localeCompare(String(a.publieLe)))[0];
   if (dernier) {
     taches.push({ icone: (LIBELLES_TYPE[dernier.type] || LIBELLES_TYPE.autre).icone, fait: true, titre: `${dernier.titre || 'Document'} disponible`, detail: `Publié le ${date(dernier.publieLe)}`, action: 'Voir', rubrique: dernier.type === 'quittance' ? 'quittances' : 'documents' });
+  }
+  // v53 : le dernier document du logement (DPE, diagnostic…) déposé par le bailleur.
+  const dernierLogement = [...(logement?.documents || [])].sort(plusRecentDabord)[0];
+  if (dernierLogement) {
+    taches.push({ icone: categorieDocument(dernierLogement.categorie).icone, fait: true, titre: `Nouveau document pour ${logement?.nom || portail?.logement?.nom || 'votre logement'} : ${dernierLogement.titre || categorieDocument(dernierLogement.categorie).court}`, detail: `Déposé le ${date(dernierLogement.deposeLe)}${logement.documents.length > 1 ? ` · ${logement.documents.length} documents du logement` : ''}`, action: 'Voir', rubrique: 'documents' });
   }
 
   const echeance = portail?.echeance;
@@ -634,6 +675,9 @@ export async function rendrePortail({ seDeconnecter }) {
   // Sa visite est notée pour le gérant (page « Locataires » : « connecté le … »).
   if (portail) api.marquerMonAcces().catch(() => {});
   const documents = portail?.documents || [];
+  // v53 : le catalogue des documents du logement (DPE, diagnostics…), commun aux colocataires.
+  let logement = null;
+  if (portail?.logement?.id) { try { logement = await api.lireLogement(portail.logement.id); } catch { logement = null; } }
 
   const etatPortail = { edl: {}, justificatifsManquants: [] };
   const contradictoires = contradictoiresDe(portail);
@@ -668,7 +712,7 @@ export async function rendrePortail({ seDeconnecter }) {
   const construire = (cle) => {
     if (sections.has(cle)) return sections.get(cle);
     let section;
-    if (cle === 'accueil') section = sectionAccueil({ portail, documents, etatEdl: etatPortail.edl, justificatifsManquants: etatPortail.justificatifsManquants, allerA });
+    if (cle === 'accueil') section = sectionAccueil({ portail, documents, logement, etatEdl: etatPortail.edl, justificatifsManquants: etatPortail.justificatifsManquants, allerA });
     else if (cle === 'edl') {
       // Un bloc repliable par état des lieux publié, replié par défaut ;
       // « Continuer » depuis l'accueil déplie celui qui est visé.
@@ -690,7 +734,10 @@ export async function rendrePortail({ seDeconnecter }) {
       ]);
     }
     else if (cle === 'quittances') section = sectionDocuments(documents, ['quittance'], { titre: '🧾 Quittances de loyer', vide: 'Aucune quittance pour l’instant : elle est publiée ici dès que votre loyer du mois est réglé.' });
-    else if (cle === 'documents') section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'depot', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
+    else if (cle === 'documents') {
+      section = sectionDocuments(documents, ['bail', 'etat-des-lieux', 'regularisation', 'depot', 'restitution', 'autre'], { titre: '📜 Bail, états des lieux et autres documents', vide: 'Aucun document pour l’instant : votre bail et votre état des lieux apparaîtront ici dès que votre bailleur les aura publiés.' });
+      if (portail?.logement?.id) section.append(sectionDocumentsLogement(logement, logement?.nom || portail.logement.nom));
+    }
     else if (cle === 'justificatifs') section = sectionJustificatifs({ portail, surChargement: (manquants) => { etatPortail.justificatifsManquants = manquants; sections.delete('accueil'); dessinerNavigation(); if (rubrique === 'accueil') dessinerRubrique(); } });
     else section = sectionCompte({ portail, seDeconnecter });
     // L'accueil se recalcule à chaque affichage (tâches à jour) ; les autres restent en mémoire.

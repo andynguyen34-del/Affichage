@@ -6,6 +6,7 @@ import * as api from './api.js';
 import * as etat from './etat.js';
 import { aujourdhui, dateLongue } from './format.js';
 import { finEnMillisecondes, DUREE_PAR_DEFAUT } from './contradictoire.js';
+import { catalogueLogement } from './documents-logement.js';
 
 /**
  * Le logement d'un colocataire : celui de son bail le plus récent.
@@ -62,6 +63,15 @@ export async function publierDocument({ locataire, type, titre, nomFichier, octe
     documents,
   });
   return { email, chemin };
+}
+
+/**
+ * Publie le catalogue des documents du logement (v53) visibles par ses
+ * colocataires : document Firestore logements/{bienId}, lu par les espaces.
+ */
+export async function publierCatalogueLogement(bien, documentsLogement) {
+  if (!bien?.id) return;
+  await api.publierLogement(bien.id, catalogueLogement(bien, documentsLogement));
 }
 
 /**

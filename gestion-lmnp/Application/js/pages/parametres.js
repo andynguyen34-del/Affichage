@@ -6,7 +6,7 @@ import * as etat from '../etat.js';
 import * as api from '../api.js';
 import { h, carte, tableau, bouton, badge, formulaire, confirmer, executer,
   barreOutils, notifier, signalerErreur, choisirFichier, journalErreurs, ouvrirModale, fermerModale } from '../ui.js';
-import { date } from '../format.js';
+import { date, taille } from '../format.js';
 import { VERSION_APP } from '../version.js';
 import { REGLAGES_PLEIN_ECRAN, reglagePleinEcran, definirReglagePleinEcran, estInstallee, pleinEcranPossible, enPleinEcran,
   basculerPleinEcran, installable, consigneInstallation, tactile } from '../plein-ecran.js';
@@ -16,6 +16,7 @@ import { moisVise, jourEnvoi, dejaEnvoye } from '../appel-loyer.js';
 import { DEPOT_PAR_DEFAUT, reglageDepotDe } from '../depot-garantie.js';
 import { BIENVENUE_PAR_DEFAUT, reglageBienvenueDe, preparerBienvenue } from '../bienvenue.js';
 import { nomLogement } from '../logements.js';
+import { logementDe } from '../portail-publication.js';
 import { aujourdhui, nomMois, montant } from '../format.js';
 import { TYPES_COPIE, normaliserAdresses, ADRESSE_VALIDE, expediteurCoherent, decomposerExpediteur, formaterExpediteur } from '../courriel-enveloppe.js';
 
@@ -478,6 +479,80 @@ function carteStockage() {
   });
 }
 
+/**
+ * Corbeille (v53) : les fichiers retirés des espaces (documents des
+ * colocataires, documents du logement, justificatifs) y sont copiés avant
+ * suppression, sous « horodatage-nom ». On les relit, les télécharge, ou les
+ * supprime définitivement.
+ */
+function carteCorbeille() {
+  const zone = h('div', {}, h('p', { class: 'legende', texte: 'Chaque document supprimé (espace d’un colocataire, documents du logement, justificatifs) est d’abord copié ici. Relevez la Corbeille pour le télécharger ou le supprimer définitivement.' }));
+  let fichiers = null;
+  const decomposer = (f) => {
+    const nom = String(f.nom || f.chemin || '');
+    // « 2026-09-1409201-nom.pdf » : jour, heure et minute (les secondes sont tronquées).
+    const m = nom.match(/^(\d{4}-\d{2}-\d{2})(\d{2})(\d{2})\d?-(.*)$/);
+    return m ? { quand: m[1], heure: `${m[2]}:${m[3]}`, nom: m[4] } : { quand: '', heure: '', nom };
+  };
+  const dessiner = () => {
+    const contenu = zone.querySelector('.corbeille-liste');
+    if (contenu) contenu.remove();
+    if (fichiers === null) return;
+    const liste = h('div', { class: 'corbeille-liste' });
+    if (!fichiers.length) { liste.append(h('p', { class: 'legende', texte: 'La Corbeille est vide.' })); zone.append(liste); return; }
+    liste.append(h('div', { class: 'doc-logement-liste' }, fichiers.map((f) => {
+      const d = decomposer(f);
+      return h('div', { class: 'doc-logement', 'data-chemin': f.chemin }, [
+        h('span', { class: 'doc-logement-icone', texte: /\.pdf$/i.test(d.nom) ? '📄' : '🖼️' }),
+        h('div', { class: 'doc-logement-details' }, [
+          h('div', { class: 'doc-logement-titre', texte: d.nom }),
+          h('div', { class: 'legende', texte: `${d.quand ? `supprimé le ${date(d.quand)}${d.heure ? ` à ${d.heure}` : ''}` : 'date inconnue'}${f.taille ? ` · ${taille(f.taille)}` : ''}` }),
+        ]),
+        h('div', { class: 'groupe-boutons' }, [
+          bouton('Consulter', () => api.ouvrirFichier('corbeille', f.chemin).catch(signalerErreur), { petit: true }),
+          bouton('Télécharger', () => api.telechargerFichier('corbeille', f.chemin, d.nom).catch(signalerErreur), { petit: true }),
+          bouton('Supprimer définitivement', async () => {
+            const ok = await confirmer({ titre: 'Supprimer définitivement', message: `« ${d.nom} » sera effacé de la Corbeille, sans retour possible.`, libelleValider: 'Effacer', danger: true });
+            if (!ok) return;
+            await api.supprimerFichier('corbeille', f.chemin);
+            fichiers = fichiers.filter((x) => x.chemin !== f.chemin);
+            notifier(`« ${d.nom} » effacé.`, 'succes');
+            dessiner();
+          }, { petit: true, type: 'danger' }),
+        ]),
+      ]);
+    })));
+    zone.append(liste);
+  };
+  const relever = async () => {
+    fichiers = (await api.listerFichiers('corbeille')).sort((a, b) => String(b.nom || b.chemin).localeCompare(String(a.nom || a.chemin)));
+    dessiner();
+    notifier(fichiers.length ? `${fichiers.length} fichier${fichiers.length > 1 ? 's' : ''} dans la Corbeille.` : 'La Corbeille est vide.');
+  };
+  return carte({
+    titre: 'Corbeille',
+    cle: 'corbeille',
+    resume: 'documents supprimés des espaces, à télécharger ou effacer définitivement',
+    actions: [
+      bouton('Relever la Corbeille', () => relever().catch(signalerErreur), { petit: true, type: 'primaire' }),
+      bouton('Vider la Corbeille', async () => {
+        if (fichiers === null) await relever();
+        if (!fichiers.length) return;
+        const ok = await confirmer({ titre: 'Vider la Corbeille', message: `Effacer définitivement les ${fichiers.length} fichier(s) de la Corbeille ?`, libelleValider: 'Tout effacer', danger: true });
+        if (!ok) return;
+        for (const f of fichiers) {
+          // eslint-disable-next-line no-await-in-loop
+          try { await api.supprimerFichier('corbeille', f.chemin); } catch (erreur) { notifier(`${f.nom} : ${erreur.message}`, 'erreur'); }
+        }
+        fichiers = [];
+        dessiner();
+        notifier('Corbeille vidée.', 'succes');
+      }, { petit: true, type: 'danger' }),
+    ],
+    corps: zone,
+  });
+}
+
 async function modifierIdentite(parametres) {
   const saisie = await formulaire({
     titre: 'Identité',
@@ -600,6 +675,7 @@ function carteAcces(donnees) {
                 await api.publierPortail(email, {
                   nom: `${locataire.prenom || ''} ${locataire.nom}`.trim(),
                   locataireId: locataire.id,
+                  logement: logementDe(locataire),
                   documents: [],
                 });
               }
@@ -907,6 +983,7 @@ export default {
     if (api.MODE === 'nuage') conteneur.append(carteBienvenue(donnees));
     if (api.MODE === 'nuage') conteneur.append(carteQuittances(parametres));
     if (api.MODE === 'nuage') conteneur.append(carteStockage());
+    if (api.MODE === 'nuage') conteneur.append(carteCorbeille());
 
     conteneur.append(carte({
       titre: 'Sauvegarde',

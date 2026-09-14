@@ -8,6 +8,7 @@ import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
 import { TYPES_LOCATION, typeLocation, libelleTypeLocation, estCourteDuree, motOccupant, sejoursDe } from '../logements.js';
+import { cadreDocumentsLogement } from './documents-logement.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Local'].map((v) => ({ valeur: v, libelle: v }));
 const TYPES_BAIL = [
@@ -166,7 +167,7 @@ function carteBien(donnees, bien, contexte) {
         if (confirme) await executer(etat.supprimer('biens', bien.id), 'Logement supprimé.');
       }, { petit: true, type: 'danger' }),
     ],
-    corps: h('div', { class: 'grille grille-4' }, courte ? [
+    corps: [h('div', { class: 'grille grille-4' }, courte ? [
       infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
       infoBloc(`Séjours ${annee}`, String(sejours.length)),
       infoBloc(`Recettes ${annee}`, montant(sejours.reduce((s, x) => s + (Number(x.montant) || 0), 0))),
@@ -177,6 +178,8 @@ function carteBien(donnees, bien, contexte) {
       infoBloc('Baux enregistrés', String(bauxDuBien.length)),
       infoBloc(`${motOccupant(bien, true)[0].toUpperCase()}${motOccupant(bien, true).slice(1)} du bail actif`, actif ? String((actif.colocataires || []).length || 1) : '—'),
     ]),
+    // v53 : DPE, diagnostics et autres documents partagés avec les colocataires.
+    cadreDocumentsLogement(contexte?.tout || donnees, bien)],
   });
 }
 

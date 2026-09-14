@@ -65,6 +65,7 @@ export function filtrerDonnees(donnees, bienId) {
     cautions: (donnees.cautions || []).filter((c) => bailIds.has(c.bailId)),
     etatsDesLieux: (donnees.etatsDesLieux || []).filter((e) => (e.bienId ? e.bienId === bienId : bailIds.has(e.bailId))),
     regularisations: (donnees.regularisations || []).filter((r) => bailIds.has(r.bailId)),
+    documentsLogement: (donnees.documentsLogement || []).filter((d) => d.bienId === bienId),
   };
 }
 

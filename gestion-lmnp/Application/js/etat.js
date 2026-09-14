@@ -4,7 +4,7 @@
 import * as api from './api.js';
 
 export const COLLECTIONS = ['parametres', 'biens', 'locataires', 'baux', 'loyers', 'cautions',
-  'etatsDesLieux', 'regularisations'];
+  'etatsDesLieux', 'regularisations', 'documentsLogement'];
 
 export const MODES_REGLEMENT = ['Virement', 'Chèque', 'Espèces', 'Prélèvement', 'CAF / APL', 'Autre'];
 

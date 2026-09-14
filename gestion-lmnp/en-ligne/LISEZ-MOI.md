@@ -34,6 +34,36 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v53 — documents du logement, documents des colocataires,
+Corbeille.**
+- « Logements & baux » : chaque carte de logement a un cadre repliable
+  « Documents du logement » où le gérant dépose une fois le DPE, un diagnostic
+  (électricité, gaz, amiante, plomb, ERP…) ou tout autre document (règlement
+  intérieur, notices, plan) — PDF ou image, 10 Mo au plus — avec un titre, une
+  date de validité facultative (10 ans proposés pour un DPE, 6 pour un
+  diagnostic ; badge « expire le … » trois mois avant) et une case « visible »
+  par document : décochée, le document est masqué aux colocataires sans être
+  retiré. Boutons Consulter, Télécharger, Modifier, Remplacer, Retirer.
+- Les colocataires du logement (baux en cours ou à venir) le voient sur leur
+  espace, rubrique « Bail & documents » → « Documents du logement », et le
+  téléchargent ; l'Accueil signale le dernier dépôt. Un colocataire sorti ne le
+  voit plus, un nouvel arrivant le trouve d'office.
+- E-mail « Nouveau document pour {logement} » à chaque dépôt (case cochée par
+  défaut, copies réglées pour le type « documents ») ; le bouton « Prévenir les
+  colocataires ✉ » annonce en une fois ceux qui ne l'ont pas encore été.
+- « Locataires » : un bouton « Documents (n) » par colocataire ouvre la liste
+  des documents publiés sur son espace (quittances, bail, reçus…) pour les
+  consulter, les télécharger ou les supprimer un par un.
+- Toute suppression (document d'un colocataire, document du logement,
+  justificatif) passe par la Corbeille : Paramètres → « Corbeille » la relève,
+  télécharge ou efface définitivement ses fichiers.
+- Dans le nuage : les fichiers vont dans `partage/documents/{logement}/`, le
+  catalogue visible dans le document Firestore `logements/{logement}` ; la règle
+  de stockage n'autorise un colocataire à lire qu'un fichier de son logement
+  inscrit au catalogue. La collection `documentsLogement` rejoint la
+  sauvegarde. À déployer : hébergement, règles Firestore et de stockage,
+  fonction (suppression définitive depuis la Corbeille via le relais).
+
 **Nouveau en v52 — SIRET complet sur les documents.** Quittance, reçu et
 restitution de dépôt, régularisation : le bloc bailleur imprime « SIRET
 753 660 695 00036 » (les 14 chiffres saisis dans Paramètres → Identité) au
