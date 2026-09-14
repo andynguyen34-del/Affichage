@@ -34,6 +34,18 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v55 — loyers par mois.** La page « Loyers » a un sélecteur
+« Présentation : Par mois / Par locataire » (à droite de la barre d'outils,
+mémorisé sur l'appareil, « Par mois » par défaut). Par mois : une carte
+repliable par mois de l'exercice, dans l'ordre, une ligne par colocataire
+avec les mêmes colonnes et boutons qu'avant (Virement reçu, Quittance,
+Appel/Relancer ✉, ⋯), une ligne « Total du mois » (« 2 / 3 encaissés »), et
+dans le titre le résumé du mois (échéance, reçus / attendus, impayés ou à
+venir) ainsi que « Appel du mois ✉ (n) » ou « Relancer les impayés ✉ (n) »,
+« Pointer les impayés » et « Relevé du mois » (impression). Le mois en cours
+et les mois avec un impayé sont dépliés, les autres repliés. Par locataire :
+l'affichage d'avant, inchangé. À déployer : hébergement seulement.
+
 **Nouveau en v54 — l'état des lieux suit les colocataires du bail.** Un
 état des lieux créé quand le bail n'avait qu'un titulaire (les colocataires
 ajoutés ensuite par « Répartir ») n'était publié qu'à lui. La carte « État des

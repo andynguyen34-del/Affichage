@@ -51,10 +51,10 @@ export const pageRepliCourante = () => pageRepli;
 /** Replié par défaut ? Paramètres : tout sauf « Identité » ; ailleurs : rien. */
 const repliParDefaut = (page, titre) => page === 'parametres' && titre !== 'Identité';
 
-export function estReplie(cle, titre = '') {
+export function estReplie(cle, titre = '', defaut = null) {
   const replis = lireReplis();
   if (Object.prototype.hasOwnProperty.call(replis, cle)) return Boolean(replis[cle]);
-  return repliParDefaut(pageRepli, titre);
+  return defaut === null ? repliParDefaut(pageRepli, titre) : Boolean(defaut);
 }
 
 /** Applique l'état replié à une carte déjà construite. */
@@ -71,7 +71,11 @@ function appliquerRepli(section, replie, { memoriser = true } = {}) {
  *   repliable : false pour une carte toujours ouverte (sans titre : jamais repliable)
  *   cle       : identifiant de mémoire (à défaut le titre)
  */
-export function carte({ titre, aide, actions = [], corps, serre = false, resume = '', repliable = true, cle = '' }) {
+/**
+ *   repliParDefaut : true/false pour imposer l'état initial de cette carte
+ *                    (tant que l'utilisateur ne l'a pas repliée ou dépliée lui-même)
+ */
+export function carte({ titre, aide, actions = [], corps, serre = false, resume = '', repliable = true, cle = '', repliParDefaut: defaut = null }) {
   const peutReplier = Boolean(repliable && titre);
   const cleRepli = peutReplier ? `${pageRepli}|${cle || titre}` : '';
   const chevron = peutReplier ? h('button', { class: 'carte-chevron', type: 'button', 'aria-label': 'Replier ou déplier' }, '▾') : null;
@@ -95,7 +99,7 @@ export function carte({ titre, aide, actions = [], corps, serre = false, resume 
       if (evenement.target.closest('a, input, select, textarea, .bouton, .groupe-boutons')) return;
       basculer();
     });
-    appliquerRepli(section, estReplie(cleRepli, titre), { memoriser: false });
+    appliquerRepli(section, estReplie(cleRepli, titre, defaut), { memoriser: false });
   }
   return section;
 }

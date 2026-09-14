@@ -2,11 +2,11 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer, groupeRepliable,
-  barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur } from '../ui.js';
+  barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur, ligneTotal } from '../ui.js';
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { ouvrirMiseAJour, bandeauMiseAJour } from './maj-ui.js';
-import { imprimerQuittance, imprimerAvis, imprimerReleve } from '../impression.js';
+import { imprimerQuittance, imprimerAvis, imprimerReleve, imprimerReleveMois } from '../impression.js';
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
@@ -480,6 +480,268 @@ function menuEcheance(donnees, bail, echeance) {
   });
 }
 
+// ------------------------------------------------ présentation (v55)
+// La page se présente par mois (une carte par mois, une ligne par
+// colocataire — par défaut) ou par locataire (une carte par payeur, ses douze
+// mois). Le choix est mémorisé sur l'appareil.
+const CLE_PRESENTATION = 'lmnp-loyers-presentation';
+const lirePresentation = () => { try { return localStorage.getItem(CLE_PRESENTATION) === 'locataire' ? 'locataire' : 'mois'; } catch { return 'mois'; } };
+const ecrirePresentation = (valeur) => { try { localStorage.setItem(CLE_PRESENTATION, valeur); } catch { /* sans mémoire */ } };
+
+function selecteurPresentation(contexte, presentation) {
+  const choix = (valeur, libelle) => h('button', {
+    type: 'button', class: `segment-choix${presentation === valeur ? ' actif' : ''}`, 'data-presentation': valeur,
+    'aria-pressed': presentation === valeur ? 'true' : 'false',
+    onclick: () => { if (presentation !== valeur) { ecrirePresentation(valeur); contexte.redessiner?.({ conserverPosition: true }); } },
+  }, libelle);
+  return h('div', { class: 'segment', role: 'group', 'aria-label': 'Présentation' }, [
+    h('span', { class: 'segment-libelle', texte: 'Présentation' }),
+    choix('mois', 'Par mois'),
+    choix('locataire', 'Par locataire'),
+  ]);
+}
+
+const legendeEcheance = (e) => `échéance ${date(e.dateEcheance)}${e.partiel ? ' · mois partiel' : ''}${e.horsBail ? ' · hors bail' : ''}${e.quittanceEmiseLe ? ` · quittance émise le ${date(e.quittanceEmiseLe)}` : ''}`;
+
+/**
+ * Les colonnes d'un tableau d'échéances, communes aux deux présentations :
+ * la première est le mois (par locataire) ou le colocataire (par mois).
+ *   bailDe(echeance) : le bail de la ligne
+ */
+function colonnesEcheances({ contexte, donnees, bailDe, parMois }) {
+  const premiere = parMois
+    ? { titre: 'Colocataire', valeur: (e) => h('div', {}, [
+      h('div', { texte: nomDe(locataireDe(donnees, e, bailDe(e))) }),
+      h('div', { class: 'legende', texte: legendeEcheance(e) }),
+      traceAppels(e),
+    ]) }
+    : { titre: 'Mois', valeur: (e) => h('div', {}, [
+      h('div', { texte: nomMois(e.mois) }),
+      h('div', { class: 'legende', texte: legendeEcheance(e) }),
+      traceAppels(e),
+    ]) };
+  return [
+    premiere,
+    { titre: 'Loyer + charges', nombre: true, valeur: (e) => `${montant(e.loyerHc)} + ${montant(e.charges)}` },
+    { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
+    { titre: 'Encaissé', nombre: true, valeur: (e) => {
+      const recu = calcul.totalEncaisse(e);
+      return recu ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(e) }, montant(recu)) : '—';
+    } },
+    { titre: 'Reste', nombre: true, valeur: (e) => {
+      const reste = centimes(e.total - calcul.totalEncaisse(e));
+      return reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—';
+    } },
+    { titre: 'État', valeur: ligneStatut },
+    { titre: '', actions: true, valeur: (e) => {
+      const bail = bailDe(e);
+      const locataire = locataireDe(donnees, e, bail);
+      return h('div', { class: 'groupe-boutons' }, [
+        bouton('Virement reçu', () => saisirEncaissement(donnees, bail, e).catch(signalerErreur), { petit: true, type: 'primaire' }),
+        bouton('Quittance', () => quittancePdfEtEnvoi(donnees, bail, e), {
+          petit: true,
+          titre: calcul.statut(e) === 'paye'
+            ? 'Générer la quittance PDF (téléchargement, envoi par e-mail)'
+            : 'Quittance possible seulement quand l’échéance est intégralement payée',
+          desactive: calcul.statut(e) !== 'paye',
+        }),
+        api.MODE === 'nuage' && !e.horsBail && centimes(e.total - calcul.totalEncaisse(e)) > 0.005 && locataire?.email
+          ? (resumeAppels(journalAppels, e.id)
+            ? bouton('Relancer ✉', () => appelerEcheance(contexte, e, { relance: true }).catch(signalerErreur), { petit: true, titre: 'Relance de l’appel de loyer de ce mois (objet « Relance — … »)' })
+            : bouton('Appel ✉', () => appelerEcheance(contexte, e).catch(signalerErreur), { petit: true, titre: 'Appel de loyer de ce mois à ce colocataire' }))
+          : null,
+        bouton('⋯', () => menuEcheance(donnees, bail, e), { petit: true, titre: 'Imprimer, ajuster, encaissements…' }),
+      ]);
+    } },
+  ];
+}
+
+/** « Pointer les impayés » : les échéances en retard ou partielles de `lignes` sont encaissées à aujourd'hui ; quittances en un geste (v51). */
+async function pointerImpayes(donnees, lignes, { vide: messageVide = 'Aucun impayé.' } = {}) {
+  const aRegler = lignes.filter(({ echeance }) => ['retard', 'partiel'].includes(calcul.statut(echeance)));
+  if (!aRegler.length) { notifier(messageVide); return; }
+  const confirme = await confirmer({
+    titre: 'Encaisser les impayés',
+    message: `${aRegler.length} échéance(s) seront marquées encaissées à la date d’aujourd’hui, `
+      + `pour un total de ${montant(centimes(aRegler.reduce((s, { echeance: e }) => s + e.total - calcul.totalEncaisse(e), 0)))}.`,
+    libelleValider: 'Encaisser',
+  });
+  if (!confirme) return;
+  let faits = 0;
+  let echoues = 0;
+  const soldees = [];
+  for (const { echeance, bail } of aRegler) {
+    const reste = centimes(echeance.total - calcul.totalEncaisse(echeance));
+    if (reste <= 0) continue;
+    try {
+      /* eslint-disable no-await-in-loop */
+      await etat.modifierElement('loyers', echeance.id, (e) => {
+        e.encaissements = [...(e.encaissements || []), {
+          id: crypto.randomUUID(), date: aujourdhui(), montant: reste, mode: 'Virement', reference: '',
+        }];
+      }, gabaritEcheance(echeance));
+      faits += 1;
+      if (!echeance.quittanceEmiseLe && !echeance.horsBail) soldees.push({ echeance, bail });
+    } catch (erreur) { echoues += 1; console.error(erreur); }
+  }
+  if (faits) notifier(`${faits} impayé(s) encaissé(s).`, 'succes');
+  if (echoues) notifier(`${echoues} échéance(s) n’ont pas pu être enregistrées.`, 'erreur');
+  // v51 : les quittances des mois soldés, en un geste (réglage) ou après confirmation.
+  if (soldees.length && api.MODE === 'nuage') {
+    const tout = { ...donnees, parametres: etat.parametres(), loyers: etat.liste('loyers') };
+    const ok = tout.parametres.quittanceAuto || await confirmer({
+      titre: `${soldees.length} quittance(s) à générer`,
+      message: `Générer, déposer sur les espaces et envoyer par e-mail les quittances de ${soldees.map(({ echeance: e, bail }) => `${nomDe(locataireDe(donnees, e, bail))} — ${nomMois(e.mois)} ${e.annee}`).join(', ')} ?`,
+      libelleValider: 'Générer et envoyer',
+    });
+    if (ok) {
+      for (const { echeance, bail } of soldees) {
+        const aJour = { ...echeance, ...(tout.loyers.find((l) => l.id === echeance.id) || {}) };
+        // eslint-disable-next-line no-await-in-loop
+        await quittanceEnUnGeste(tout, bail, aJour).catch(signalerErreur);
+      }
+    }
+  }
+}
+
+/** Présentation par locataire : une carte par payeur du logement (ses mois de l'année). Renvoie le nombre de cartes. */
+function cartesParLocataire({ contexte, donnees, bien, annee, lignes, cible }) {
+  const bailDe = new Map(lignes.map(({ echeance, bail }) => [echeance.id, bail]));
+  const parLocataire = new Map();
+  for (const { echeance, bail } of lignes) {
+    const cle = echeance.locataireId || bail.locataireId || '';
+    if (!parLocataire.has(cle)) parLocataire.set(cle, []);
+    parLocataire.get(cle).push({ echeance, bail });
+  }
+  let cartes = 0;
+  for (const [locataireId, siennes] of parLocataire) {
+    const locataireCourant = donnees.locataires.find((l) => l.id === locataireId) || null;
+    const echeances = siennes.map((x) => x.echeance);
+    const totalBail = centimes(echeances.reduce((s, e) => s + (e.total || 0), 0));
+    const recuBail = centimes(echeances.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+    cartes += 1;
+    cible.append(carte({
+      titre: `${nomDe(locataireCourant)} — ${bien?.nom || 'logement inconnu'}`,
+      aide: `${montant(recuBail)} reçus sur ${montant(totalBail)} attendus en ${annee}`
+        + (locataireCourant?.email ? '' : ' · pas d’adresse e-mail renseignée'),
+      actions: [
+        bouton('Pointer les impayés', () => pointerImpayes(donnees, siennes, { vide: 'Aucun impayé pour ce colocataire.' }).catch(signalerErreur), { petit: true }),
+        bouton('Relevé annuel', () => imprimerReleve({
+          bailleur: donnees.parametres.bailleurs?.[0],
+          locataire: locataireCourant,
+          bien, annee, echeances,
+        }), { petit: true }),
+      ],
+      serre: true,
+      corps: tableau({ colonnes: colonnesEcheances({ contexte, donnees, bailDe: (e) => bailDe.get(e.id), parMois: false }), lignes: echeances, cle: (e) => e.id, messageVide: 'Aucune échéance.' }),
+    }));
+  }
+  return cartes;
+}
+
+/** Le bouton du mois : « Appel du mois ✉ (n) » pour les colocataires pas encore appelés, sinon « Relancer les impayés ✉ (n) ». */
+function boutonAppelMois(contexte, donnees, bien, annee, mois, lignes) {
+  if (api.MODE !== 'nuage' || !bien || sansAppel(bien)) return null;
+  const journal = journalAppels || { envois: {}, personnes: {} };
+  const impayes = lignes.filter(({ echeance: e, bail }) => !e.horsBail && centimes(e.total - calcul.totalEncaisse(e)) > 0.005 && locataireDe(donnees, e, bail)?.email);
+  if (!impayes.length) return null;
+  const apercu = apercuAppels({ bienId: bien.id, annee, mois, journal });
+  if (apercu.courriels.length) {
+    return bouton(`Appel du mois ✉ (${apercu.courriels.length})`, async () => {
+      const ok = await confirmer({
+        titre: `Appeler le loyer de ${nomMois(mois)} ${annee}`,
+        message: `${apercu.courriels.length} e-mail(s) : ${apercu.courriels.map((c) => `${c.nom} — ${montant(c.montantDu)}`).join(' ; ')}.${apercu.ecartes.length ? ` Non concernés : ${apercu.ecartes.map((e) => `${e.nom} (${e.raison})`).join(', ')}.` : ''}`,
+        libelleValider: 'Envoyer les appels',
+      });
+      if (!ok) return;
+      const resultat = await executer(envoyerAppels({ bienId: bien.id, annee, mois, origine: 'manuel (page Loyers)', force: true }), null);
+      if (resultat) notifier(`${resultat.envoyes} appel(s) de loyer envoyé(s) pour ${nomMois(mois)} ${annee}.`, resultat.envoyes ? 'succes' : 'erreur');
+      chargerJournalAppels(contexte);
+    }, { petit: true, type: 'primaire', titre: 'Un e-mail d’appel de loyer à chaque colocataire du mois pas encore appelé' });
+  }
+  const aRelancer = impayes.filter(({ echeance: e }) => resumeAppels(journal, e.id));
+  if (!aRelancer.length) return null;
+  return bouton(`Relancer les impayés ✉ (${aRelancer.length})`, async () => {
+    const ok = await confirmer({
+      titre: `Relancer les impayés de ${nomMois(mois)} ${annee}`,
+      message: `Relance de l’appel de loyer à : ${aRelancer.map(({ echeance: e, bail }) => `${nomDe(locataireDe(donnees, e, bail))} — ${montant(centimes(e.total - calcul.totalEncaisse(e)))}`).join(' ; ')} (objet « Relance — … »).`,
+      libelleValider: 'Envoyer les relances',
+    });
+    if (!ok) return;
+    let envoyees = 0;
+    for (const { echeance } of aRelancer) {
+      // eslint-disable-next-line no-await-in-loop
+      try { await envoyerAppelEcheance({ echeance, relance: true }); envoyees += 1; } catch (erreur) { notifier(erreur.message, 'erreur'); }
+    }
+    notifier(`${envoyees} relance(s) envoyée(s) pour ${nomMois(mois)} ${annee}.`, envoyees ? 'succes' : 'erreur');
+    chargerJournalAppels(contexte);
+  }, { petit: true, titre: 'Relance de l’appel de loyer aux colocataires du mois qui n’ont pas réglé' });
+}
+
+/** Présentation par mois : une carte repliable par mois de l'année, une ligne par colocataire. Renvoie le nombre de cartes. */
+function cartesParMois({ contexte, donnees, bien, annee, lignes, cible }) {
+  const bailDe = new Map(lignes.map(({ echeance, bail }) => [echeance.id, bail]));
+  const parMois = new Map();
+  for (const ligne of lignes) {
+    const mois = Number(ligne.echeance.mois);
+    if (!parMois.has(mois)) parMois.set(mois, []);
+    parMois.get(mois).push(ligne);
+  }
+  const jour = aujourdhui();
+  const moisCourant = Number(jour.slice(5, 7));
+  const anneeCourante = Number(jour.slice(0, 4));
+  const colonnes = colonnesEcheances({ contexte, donnees, bailDe: (e) => bailDe.get(e.id), parMois: true });
+  let cartes = 0;
+  for (const mois of [...parMois.keys()].sort((a, b) => a - b)) {
+    const siennes = parMois.get(mois).sort((a, b) => nomDe(locataireDe(donnees, a.echeance, a.bail)).localeCompare(nomDe(locataireDe(donnees, b.echeance, b.bail))));
+    const echeances = siennes.map((x) => x.echeance);
+    const total = centimes(echeances.reduce((s, e) => s + (e.total || 0), 0));
+    const recu = centimes(echeances.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+    const reste = centimes(total - recu);
+    const statuts = echeances.map((e) => calcul.statut(e));
+    const nbRetard = statuts.filter((x) => x === 'retard').length;
+    const nbPartiel = statuts.filter((x) => x === 'partiel').length;
+    const nbAVenir = statuts.filter((x) => x === 'attente').length;
+    const nbPayes = statuts.filter((x) => x === 'paye').length;
+    const dateEcheance = echeances.map((e) => e.dateEcheance).filter(Boolean).sort()[0];
+    const etatMois = nbRetard || nbPartiel ? badge(`${nbRetard + nbPartiel} impayé${nbRetard + nbPartiel > 1 ? 's' : ''}`, 'alerte')
+      : (nbAVenir ? badge(`${nbAVenir} à venir`, 'attente') : badge('tout encaissé', 'succes'));
+    const resume = `${dateEcheance ? `échéance le ${date(dateEcheance)} · ` : ''}${montant(recu)} reçus sur ${montant(total)} · ${etatMois.textContent}`;
+    const enCours = Number(annee) === anneeCourante && mois === moisCourant;
+    cartes += 1;
+    cible.append(carte({
+      titre: `${nomMois(mois)[0].toUpperCase()}${nomMois(mois).slice(1)} ${annee}`,
+      cle: `mois:${bien?.id || 'sans-logement'}:${annee}-${String(mois).padStart(2, '0')}`,
+      aide: resume,
+      resume,
+      // C1 : le mois en cours et les mois avec un impayé sont dépliés ; les autres repliés.
+      repliParDefaut: !(enCours || nbRetard || nbPartiel),
+      actions: [
+        boutonAppelMois(contexte, donnees, bien, Number(annee), mois, siennes),
+        bouton('Pointer les impayés', () => pointerImpayes(donnees, siennes, { vide: `Aucun impayé en ${nomMois(mois)} ${annee}.` }).catch(signalerErreur), { petit: true, titre: 'Encaisse à aujourd’hui les échéances en retard ou partielles du mois' }),
+        bouton('Relevé du mois', () => imprimerReleveMois({
+          bailleur: donnees.parametres.bailleurs?.[0], bien, annee, mois,
+          lignes: siennes.map(({ echeance, bail }) => ({ nom: nomDe(locataireDe(donnees, echeance, bail)), echeance })),
+        }), { petit: true, titre: 'Imprime le relevé du mois : une ligne par colocataire' }),
+      ],
+      serre: true,
+      corps: tableau({
+        colonnes, lignes: echeances, cle: (e) => e.id, messageVide: 'Aucune échéance.',
+        pied: ligneTotal(colonnes, [
+          h('strong', { texte: 'Total du mois' }),
+          `${montant(centimes(echeances.reduce((s, e) => s + (e.loyerHc || 0), 0)))} + ${montant(centimes(echeances.reduce((s, e) => s + (e.charges || 0), 0)))}`,
+          h('strong', { texte: montant(total) }),
+          montant(recu),
+          reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—',
+          badge(`${nbPayes} / ${echeances.length} encaissé${nbPayes > 1 ? 's' : ''}`, nbPayes === echeances.length ? 'succes' : (nbRetard || nbPartiel ? 'alerte' : 'attente')),
+          '',
+        ]),
+      }),
+    }));
+  }
+  return cartes;
+}
+
 function ligneStatut(echeance) {
   const info = calcul.LIBELLES_STATUT[calcul.statut(echeance)];
   return badge(info.texte, info.ton);
@@ -642,10 +904,13 @@ export default {
     if (bandeau) conteneur.append(bandeau);
     // v49 : appels de loyer depuis cette page — journal lu à l'affichage.
     if (!journalAppels) chargerJournalAppels(contexte);
+    const presentation = lirePresentation();
     conteneur.append(barreOutils([
       bouton('Mettre à jour les échéances', () => ouvrirMiseAJour(donnees).catch(signalerErreur), { titre: 'Compare les échéances et dépôts enregistrés aux baux : orphelins, montants modifiés' }),
       boutonAppelDuMois(contexte, donnees),
       boutonRegenererQuittances(contexte, donnees, toutes),
+      h('span', { class: 'espace' }),
+      selecteurPresentation(contexte, presentation),
     ]));
 
     // Vue « Tous les logements » : un bandeau par logement, ses cartes, puis
@@ -672,124 +937,17 @@ export default {
       continue;
     }
     const bauxDuLogement = donnees.baux.filter((b) => (bien ? b.bienId === bien.id : !donnees.biens.some((x) => x.id === b.bienId)));
-    let cartes = 0;
+    // v55 : toutes les échéances de l'année du logement, chacune avec son bail,
+    // présentées par mois (une carte par mois) ou par locataire (une carte par payeur).
+    const lignesLogement = [];
     for (const bail of bauxDuLogement) {
-      const toutesEcheances = calcul.echeancesAnnee(bail, annee, donnees.loyers);
-      if (!toutesEcheances.length) continue;
-      attenduLogement += toutesEcheances.reduce((s, e) => s + (e.total || 0), 0);
-      encaisseLogement += toutesEcheances.reduce((s, e) => s + calcul.totalEncaisse(e), 0);
-
-      // Une carte par payeur : chaque colocataire suit ses propres virements.
-      const parLocataire = new Map();
-      for (const echeance of toutesEcheances) {
-        const cle = echeance.locataireId || bail.locataireId || '';
-        if (!parLocataire.has(cle)) parLocataire.set(cle, []);
-        parLocataire.get(cle).push(echeance);
-      }
-
-      for (const [locataireId, echeances] of parLocataire) {
-      const locataireCourant = donnees.locataires.find((l) => l.id === locataireId) || null;
-      const totalBail = centimes(echeances.reduce((s, e) => s + (e.total || 0), 0));
-      const recuBail = centimes(echeances.reduce((s, e) => s + calcul.totalEncaisse(e), 0));
-
-      const colonnes = [
-        { titre: 'Mois', valeur: (e) => h('div', {}, [
-          h('div', { texte: nomMois(e.mois) }),
-          h('div', { class: 'legende', texte: `échéance ${date(e.dateEcheance)}${e.partiel ? ' · mois partiel' : ''}${e.horsBail ? ' · hors bail' : ''}` }),
-          traceAppels(e),
-        ]) },
-        { titre: 'Loyer + charges', nombre: true, valeur: (e) => `${montant(e.loyerHc)} + ${montant(e.charges)}` },
-        { titre: 'Total dû', nombre: true, valeur: (e) => montant(e.total) },
-        { titre: 'Encaissé', nombre: true, valeur: (e) => {
-          const recu = calcul.totalEncaisse(e);
-          return recu ? h('button', { class: 'bouton-lien', style: 'color:inherit', onclick: () => voirEncaissements(e) }, montant(recu)) : '—';
-        } },
-        { titre: 'Reste', nombre: true, valeur: (e) => {
-          const reste = centimes(e.total - calcul.totalEncaisse(e));
-          return reste > 0.005 ? h('span', { style: 'color:var(--alerte)', texte: montant(reste) }) : '—';
-        } },
-        { titre: 'État', valeur: ligneStatut },
-        { titre: '', actions: true, valeur: (e) => h('div', { class: 'groupe-boutons' }, [
-          bouton('Virement reçu', () => saisirEncaissement(donnees, bail, e).catch(signalerErreur), { petit: true, type: 'primaire' }),
-          bouton('Quittance', () => quittancePdfEtEnvoi(donnees, bail, e), {
-            petit: true,
-            titre: calcul.statut(e) === 'paye'
-              ? 'Générer la quittance PDF (téléchargement, envoi par e-mail)'
-              : 'Quittance possible seulement quand l’échéance est intégralement payée',
-            desactive: calcul.statut(e) !== 'paye',
-          }),
-          api.MODE === 'nuage' && !e.horsBail && centimes(e.total - calcul.totalEncaisse(e)) > 0.005 && locataireCourant?.email
-            ? (resumeAppels(journalAppels, e.id)
-              ? bouton('Relancer ✉', () => appelerEcheance(contexte, e, { relance: true }).catch(signalerErreur), { petit: true, titre: 'Relance de l’appel de loyer de ce mois (objet « Relance — … »)' })
-              : bouton('Appel ✉', () => appelerEcheance(contexte, e).catch(signalerErreur), { petit: true, titre: 'Appel de loyer de ce mois à ce colocataire' }))
-            : null,
-          bouton('⋯', () => menuEcheance(donnees, bail, e), { petit: true, titre: 'Imprimer, ajuster, encaissements…' }),
-        ]) },
-      ];
-
-      cartes += 1;
-      cible.append(carte({
-        titre: `${nomDe(locataireCourant)} — ${bien?.nom || 'logement inconnu'}`,
-        aide: `${montant(recuBail)} reçus sur ${montant(totalBail)} attendus en ${annee}`
-          + (locataireCourant?.email ? '' : ' · pas d’adresse e-mail renseignée'),
-        actions: [
-          bouton('Pointer les impayés', async () => {
-            const aRegler = echeances.filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
-            if (!aRegler.length) { notifier('Aucun impayé pour ce colocataire.'); return; }
-            const confirme = await confirmer({
-              titre: 'Encaisser les impayés',
-              message: `${aRegler.length} échéance(s) seront marquées encaissées à la date d’aujourd’hui, `
-                + `pour un total de ${montant(centimes(aRegler.reduce((s, e) => s + e.total - calcul.totalEncaisse(e), 0)))}.`,
-              libelleValider: 'Encaisser',
-            });
-            if (!confirme) return;
-            let faits = 0;
-            let echoues = 0;
-            const soldees = [];
-            for (const echeance of aRegler) {
-              const reste = centimes(echeance.total - calcul.totalEncaisse(echeance));
-              if (reste <= 0) continue;
-              try {
-                /* eslint-disable no-await-in-loop */
-                await etat.modifierElement('loyers', echeance.id, (e) => {
-                  e.encaissements = [...(e.encaissements || []), {
-                    id: crypto.randomUUID(), date: aujourdhui(), montant: reste, mode: 'Virement', reference: '',
-                  }];
-                }, gabaritEcheance(echeance));
-                faits += 1;
-                if (!echeance.quittanceEmiseLe && !echeance.horsBail) soldees.push(echeance);
-              } catch (erreur) { echoues += 1; console.error(erreur); }
-            }
-            if (faits) notifier(`${faits} impayé(s) encaissé(s).`, 'succes');
-            if (echoues) notifier(`${echoues} échéance(s) n’ont pas pu être enregistrées.`, 'erreur');
-            // v51 : les quittances des mois soldés, en un geste (réglage) ou après confirmation.
-            if (soldees.length && api.MODE === 'nuage') {
-              const tout = { ...donnees, parametres: etat.parametres(), loyers: etat.liste('loyers') };
-              const ok = tout.parametres.quittanceAuto || await confirmer({
-                titre: `${soldees.length} quittance(s) à générer`,
-                message: `Générer, déposer sur son espace et envoyer par e-mail les quittances de ${soldees.map((e) => `${nomMois(e.mois)} ${e.annee}`).join(', ')} ?`,
-                libelleValider: 'Générer et envoyer',
-              });
-              if (ok) {
-                for (const echeance of soldees) {
-                  const aJour = { ...echeance, ...(tout.loyers.find((l) => l.id === echeance.id) || {}) };
-                  // eslint-disable-next-line no-await-in-loop
-                  await quittanceEnUnGeste(tout, bail, aJour).catch(signalerErreur);
-                }
-              }
-            }
-          }, { petit: true }),
-          bouton('Relevé annuel', () => imprimerReleve({
-            bailleur: donnees.parametres.bailleurs?.[0],
-            locataire: locataireCourant,
-            bien, annee, echeances,
-          }), { petit: true }),
-        ],
-        serre: true,
-        corps: tableau({ colonnes, lignes: echeances, cle: (e) => e.id, messageVide: 'Aucune échéance.' }),
-      }));
-      }
+      for (const echeance of calcul.echeancesAnnee(bail, annee, donnees.loyers)) lignesLogement.push({ echeance, bail });
     }
+    attenduLogement += lignesLogement.reduce((s, x) => s + (x.echeance.total || 0), 0);
+    encaisseLogement += lignesLogement.reduce((s, x) => s + calcul.totalEncaisse(x.echeance), 0);
+    const cartes = presentation === 'mois'
+      ? cartesParMois({ contexte, donnees, bien, annee, lignes: lignesLogement, cible })
+      : cartesParLocataire({ contexte, donnees, bien, annee, lignes: lignesLogement, cible });
     if (!cartes) {
       cible.append(carte({
         titre: bien ? bien.nom : 'Baux sans logement',

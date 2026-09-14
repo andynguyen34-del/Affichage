@@ -128,6 +128,31 @@ export function imprimerAvis({ bailleur, locataire, bien, bail, echeance, lieu }
 }
 
 /** Relevé annuel de tous les encaissements d'un bail. */
+/** Relevé d'un mois (v55) : une ligne par colocataire du logement. */
+export function imprimerReleveMois({ bailleur, bien, annee, mois, lignes }) {
+  const recuDe = (e) => (e.encaissements || []).reduce((x, v) => x + (Number(v.montant) || 0), 0);
+  const total = lignes.reduce((s, x) => s + (x.echeance.total || 0), 0);
+  const encaisse = lignes.reduce((s, x) => s + recuDe(x.echeance), 0);
+  const cellule = (texte, droite = false, gras = false) => h('td', { style: `${droite ? 'text-align:right;' : ''}${gras ? 'border-top:1px solid #000;font-weight:600;' : ''}`, texte });
+  imprimer(h('div', { class: 'document-imprime' }, [
+    h('div', { class: 'entete-doc' }, [
+      blocAdresse('Bailleur', [bailleur?.nom, ...(bailleur?.adresse || '').split('\n'), bailleur?.telephone, bailleur?.email]),
+      blocAdresse('Logement', [bien?.nom, bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(' ')]),
+    ]),
+    h('h2', { texte: `Relevé de ${nomMois(mois)} ${annee}` }),
+    h('table', { style: 'width:100%' }, [
+      h('thead', {}, h('tr', {}, ['Colocataire', 'Échéance', 'Dû', 'Encaissé', 'Solde', 'Réglé le'].map((t, i) => h('th', { style: `text-align:${i >= 2 && i <= 4 ? 'right' : 'left'};border-bottom:1px solid #000`, texte: t })))),
+      h('tbody', {}, lignes.map(({ nom, echeance: e }) => {
+        const recu = recuDe(e);
+        const dernier = (e.encaissements || []).slice(-1)[0];
+        return h('tr', {}, [cellule(nom), cellule(e.dateEcheance ? dateLongue(e.dateEcheance) : '—'), cellule(montant(e.total || 0), true), cellule(montant(recu), true), cellule(montant((e.total || 0) - recu), true), cellule(dernier?.date ? dateLongue(dernier.date) : '—')]);
+      })),
+      h('tfoot', {}, h('tr', {}, [cellule('Total du mois', false, true), cellule('', false, true), cellule(montant(total), true, true), cellule(montant(encaisse), true, true), cellule(montant(total - encaisse), true, true), cellule('', false, true)])),
+    ]),
+    h('div', { class: 'signature', texte: `Établi le ${dateLongue(aujourdhui())}` }),
+  ]));
+}
+
 export function imprimerReleve({ bailleur, locataire, bien, annee, echeances }) {
   const total = echeances.reduce((s, e) => s + (e.total || 0), 0);
   const encaisse = echeances.reduce((s, e) => s + (e.encaissements || []).reduce((x, v) => x + (Number(v.montant) || 0), 0), 0);
