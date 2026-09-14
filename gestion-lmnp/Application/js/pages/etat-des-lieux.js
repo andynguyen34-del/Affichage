@@ -122,16 +122,16 @@ async function creerEtatDesLieux(donnees, contexte) {
     valeurs: { type: 'entree', date: aujourdhui(), bailId: bailActif?.id || (donnees.biens.find(sansBail) ? `bien:${donnees.biens.find(sansBail).id}` : '') },
   });
   if (!saisie) return;
-  const sansBail = String(saisie.bailId || '').startsWith('bien:');
-  const bail = sansBail ? null : donnees.baux.find((b) => b.id === saisie.bailId);
+  const sansBailChoisi = String(saisie.bailId || '').startsWith('bien:');
+  const bail = sansBailChoisi ? null : donnees.baux.find((b) => b.id === saisie.bailId);
   const locataireIds = (bail?.colocataires?.length
     ? bail.colocataires.map((c) => c.locataireId)
     : [bail?.locataireId, bail?.coTitulaireId]).filter(Boolean);
   const nouveau = await executer(etat.enregistrer('etatsDesLieux', {
     type: saisie.type,
     date: saisie.date,
-    bailId: sansBail ? '' : saisie.bailId,
-    bienId: sansBail ? saisie.bailId.slice(5) : (bail?.bienId || ''),
+    bailId: sansBailChoisi ? '' : saisie.bailId,
+    bienId: sansBailChoisi ? saisie.bailId.slice(5) : (bail?.bienId || ''),
     locataireIds,
     pieces: PIECES_PROPOSEES.slice(0, 6).map((nom) => ({ id: crypto.randomUUID(), nom, etatGeneral: '', commentaire: '', elements: elementsParDefaut(), photos: [], meubles: [] })),
     compteurs: COMPTEURS_PAR_DEFAUT.map((c) => ({ ...c })),

@@ -34,14 +34,14 @@ export const destinatairesDe = (locataire) => [locataire?.email, locataire?.emai
  * Publie un document (octets PDF) pour un colocataire.
  * type : 'quittance' | 'etat-des-lieux' | 'bail' | 'autre'.
  */
-export async function publierDocument({ locataire, type, titre, nomFichier, octets }) {
+export async function publierDocument({ locataire, type, titre, nomFichier, octets, typeMime = 'application/pdf' }) {
   const email = String(locataire?.email || '').trim().toLowerCase();
   if (!email) {
     throw new Error(`${locataire?.prenom || ''} ${locataire?.nom || 'Ce colocataire'} n'a pas d'adresse e-mail : `
       + 'renseignez-la dans « Logements & baux » pour publier ses documents.');
   }
   const chemin = `${email}/${nettoyerNomFichier(nomFichier)}`;
-  await api.deposerOctets('portail', chemin, octets, 'application/pdf');
+  await api.deposerOctets('portail', chemin, octets, typeMime || 'application/pdf');
 
   const actuel = (await api.lirePortail(email)) || {};
   const documents = (actuel.documents || []).filter((d) => d.chemin !== chemin);

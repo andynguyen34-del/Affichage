@@ -34,7 +34,7 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
-**En préparation pour la prochaine version (livrée au « go »).**
+**Nouveau en v57 — logements mieux distingués, locataires rattachés, charges par logement.**
 - En-tête : le nom du logement s'affiche en entier dans le sélecteur.
 - « Logements & baux » : les baux sont sous leur logement, dans sa carte, du
   plus récent au plus ancien ; les baux dépassés sont regroupés dans
@@ -56,7 +56,19 @@ disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
   sur Logements & baux, Loyers, Locataires et États des lieux.
 - « Charges » (régularisation) : en vue « Tous les logements », un cadre
   coloré par logement avec son « + Régularisation » (baux du logement
-  seulement) et ses décomptes.
+  seulement), ses provisions de l'année, le détail et le total de ses
+  dépenses réelles, et ses décomptes.
+- Régularisation : « Autres charges récupérables » en lignes détaillées
+  (« + Ajouter une charge » : nature, montant), réparties comme l'eau et la
+  TEOM ; l'ancien champ unique reste lisible.
+- Régularisation : « Pièces justificatives » — facture d'eau, avis de TEOM,
+  autres factures jointes à la régularisation (PDF ou image), avec rappel de
+  ce qui manque ; chaque décompte déposé sur l'espace d'un colocataire est
+  accompagné des justificatifs, et l'e-mail le dit. Consulter / Retirer
+  (Corbeille).
+- « Loyers » : les fenêtres portent le nom du colocataire (v56) ; garde-fou
+  contre les virements en double (v56).
+- À déployer : hébergement seulement.
 
 **Nouveau en v56 — plus de virement saisi en double.** « Virement reçu »
 sur une échéance déjà soldée avertit (« déjà intégralement encaissée »),

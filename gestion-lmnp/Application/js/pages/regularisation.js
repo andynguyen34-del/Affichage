@@ -4,7 +4,7 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer, groupeRepliable,
-  barreOutils, notifier, ouvrirModale } from '../ui.js';
+  barreOutils, notifier, ouvrirModale, choisirFichier, signalerErreur } from '../ui.js';
 import { montant, date, dateLongue, aujourdhui, centimes, nomFichierTelechargement } from '../format.js';
 import { provisionsPeriode, decompteRegularisation } from '../calculs/loyers.js';
 import { pdfRegularisationAnika, dateLongueFr, sirenDepuisSiret, formaterSiret, nbMoisEntre } from '../pdf-anika.js';
@@ -19,8 +19,167 @@ function depensesDe(regularisation) {
   return [
     { libelle: 'Eau (consommation et abonnement)', montant: Number(regularisation.eau) || 0 },
     { libelle: 'Taxe d\'enlèvement des ordures ménagères (TEOM)', montant: Number(regularisation.teom) || 0 },
+    // Autres charges, une ligne par nature (entretien chaudière, espaces verts, électricité des communs…).
+    ...(regularisation.autresLignes || []).map((l) => ({ libelle: l.libelle || 'Autre charge récupérable', montant: Number(l.montant) || 0 })),
+    // Ancien champ unique « Autres charges » (avant les lignes détaillées).
     { libelle: regularisation.notes ? `Autres charges récupérables — ${regularisation.notes}` : 'Autres charges récupérables', montant: Number(regularisation.autres) || 0 },
   ].filter((d) => d.montant > 0);
+}
+
+/** Ajoute ou modifie une ligne « autre charge » d'une régularisation. */
+async function saisirAutreCharge(regularisation, ligne = null) {
+  const saisie = await formulaire({
+    titre: ligne ? 'Modifier la charge' : 'Ajouter une charge récupérable',
+    aide: 'Une ligne par nature de dépense : entretien de la chaudière, espaces verts, électricité des parties communes… Elle est répartie comme l’eau et la TEOM, au prorata des provisions.',
+    champs: [
+      { cle: 'libelle', libelle: 'Nature de la charge', type: 'texte', requis: true, largeur: 'pleine', exemple: 'Entretien de la chaudière' },
+      { cle: 'montant', libelle: 'Montant réel sur la période (€)', type: 'montant', requis: true },
+    ],
+    valeurs: ligne ? { libelle: ligne.libelle, montant: ligne.montant } : { montant: 0 },
+    libelleValider: ligne ? 'Enregistrer' : 'Ajouter',
+  });
+  if (!saisie) return;
+  if (!(Number(saisie.montant) > 0)) { notifier('Indiquez un montant supérieur à zéro.', 'erreur'); return; }
+  await executer(etat.modifierElement('regularisations', regularisation.id, (r) => {
+    const lignes = r.autresLignes || [];
+    const nouvelle = { id: ligne?.id || crypto.randomUUID(), libelle: String(saisie.libelle || '').trim(), montant: Number(saisie.montant) || 0 };
+    r.autresLignes = ligne ? lignes.map((l) => (l.id === ligne.id ? nouvelle : l)) : [...lignes, nouvelle];
+  }), ligne ? 'Charge modifiée.' : 'Charge ajoutée.');
+}
+
+async function retirerAutreCharge(regularisation, ligne) {
+  const ok = await confirmer({ titre: 'Retirer la charge', message: `Retirer « ${ligne.libelle} » (${montant(ligne.montant)}) de la régularisation ?`, libelleValider: 'Retirer', danger: true });
+  if (!ok) return;
+  await executer(etat.modifierElement('regularisations', regularisation.id, (r) => { r.autresLignes = (r.autresLignes || []).filter((l) => l.id !== ligne.id); }), 'Charge retirée.');
+}
+
+/** Résumé d'un logement (vue « Tous les logements ») : provisions de l'année et dépenses réelles de ses régularisations, détail et total. */
+function resumeLogement(siennes, regs, annee) {
+  let prevu = 0;
+  let encaisse = 0;
+  for (const bail of siennes.baux) {
+    for (const ligne of provisionsPeriode(bail, siennes.loyers, `${annee}-01-01`, `${annee}-12-31`)) { prevu += ligne.prevu; encaisse += ligne.encaisse; }
+  }
+  const parNature = new Map();
+  for (const r of regs) for (const d of depensesDe(r)) parNature.set(d.libelle, (parNature.get(d.libelle) || 0) + d.montant);
+  const totalReel = centimes([...parNature.values()].reduce((s, x) => s + x, 0));
+  return h('div', { class: 'resume-logement-charges' }, [
+    h('div', { class: 'grille grille-3', style: 'margin:.2rem 0 .6rem' }, [
+      tuile({ libelle: `Provisions prévues ${annee}`, valeur: montant(centimes(prevu), { rond: true }), detail: `${siennes.baux.length} bail${siennes.baux.length > 1 ? 'x' : ''}` }),
+      tuile({ libelle: `Provisions encaissées ${annee}`, valeur: montant(centimes(encaisse), { rond: true }), ton: 'positif' }),
+      tuile({ libelle: 'Dépenses réelles régularisées', valeur: montant(totalReel, { rond: true }), ton: totalReel > encaisse ? 'negatif' : 'neutre', detail: regs.length ? `${regs.length} régularisation${regs.length > 1 ? 's' : ''}` : 'aucune régularisation' }),
+    ]),
+    parNature.size ? h('p', { class: 'legende', style: 'margin:0 0 .6rem .2rem', texte: `Détail des dépenses : ${[...parNature.entries()].map(([l, m]) => `${l} ${montant(centimes(m))}`).join(' · ')} — total ${montant(totalReel)}` }) : null,
+  ]);
+}
+
+/** Le bloc « Autres charges récupérables » d'une carte de régularisation. */
+function blocAutresCharges(regularisation) {
+  const lignes = regularisation.autresLignes || [];
+  const ancien = (Number(regularisation.autres) || 0) > 0 ? { libelle: regularisation.notes ? `Autres charges récupérables — ${regularisation.notes}` : 'Autres charges récupérables (ancien champ)', montant: Number(regularisation.autres) } : null;
+  return h('div', { class: 'autres-charges' }, [
+    h('div', { class: 'doc-logement-entete' }, [
+      h('span', { class: 'doc-logement-entete-titre', texte: `Autres charges récupérables (${lignes.length + (ancien ? 1 : 0)})` }),
+      h('span', { class: 'legende', texte: 'En plus de l’eau et de la TEOM : une ligne par nature de dépense, réparties de la même façon.' }),
+      bouton('+ Ajouter une charge', () => saisirAutreCharge(regularisation).catch(signalerErreur), { petit: true }),
+    ]),
+    lignes.length || ancien ? h('div', { class: 'doc-logement-liste' }, [
+      ...lignes.map((l) => h('div', { class: 'doc-logement', 'data-charge': l.id }, [
+        h('span', { class: 'doc-logement-icone', texte: '🧾' }),
+        h('div', { class: 'doc-logement-details' }, [h('div', { class: 'doc-logement-titre', texte: l.libelle }), h('div', { class: 'legende', texte: montant(l.montant) })]),
+        h('div', { class: 'groupe-boutons' }, [
+          bouton('Modifier', () => saisirAutreCharge(regularisation, l).catch(signalerErreur), { petit: true }),
+          bouton('Retirer', () => retirerAutreCharge(regularisation, l).catch(signalerErreur), { petit: true, type: 'danger' }),
+        ]),
+      ])),
+      ancien ? h('div', { class: 'doc-logement' }, [
+        h('span', { class: 'doc-logement-icone', texte: '🧾' }),
+        h('div', { class: 'doc-logement-details' }, [h('div', { class: 'doc-logement-titre', texte: ancien.libelle }), h('div', { class: 'legende', texte: `${montant(ancien.montant)} · saisi dans l’ancien champ « Autres charges » (Modifier la régularisation pour le corriger)` })]),
+      ]) : null,
+    ]) : null,
+  ]);
+}
+
+// ------------------------------------------------ pièces justificatives
+// Les factures (eau, TEOM, autres) sont jointes à la régularisation : elles
+// vivent dans le dossier Documents du gérant (regularisations/{id}/…) et sont
+// déposées sur l'espace de chaque colocataire avec son décompte.
+const CATEGORIES_PIECES = [
+  { cle: 'eau', libelle: 'Facture d’eau', icone: '💧' },
+  { cle: 'teom', libelle: 'Avis de TEOM (taxe foncière)', icone: '🗑️' },
+  { cle: 'autre', libelle: 'Autre justificatif', icone: '📄' },
+];
+const categoriePiece = (cle) => CATEGORIES_PIECES.find((c) => c.cle === cle) || CATEGORIES_PIECES[2];
+const TAILLE_MAX_PIECE = 10 * 1024 * 1024;
+const nettoyerNom = (nom) => String(nom || 'piece').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+
+/** Les justificatifs qui manquent : eau saisie sans facture, TEOM saisie sans avis. */
+function piecesManquantes(regularisation) {
+  const pieces = regularisation.pieces || [];
+  const manque = [];
+  if ((Number(regularisation.eau) || 0) > 0 && !pieces.some((p) => p.categorie === 'eau')) manque.push('facture d’eau');
+  if ((Number(regularisation.teom) || 0) > 0 && !pieces.some((p) => p.categorie === 'teom')) manque.push('avis de TEOM');
+  return manque;
+}
+
+async function joindrePiece(regularisation, categorie = 'eau') {
+  const fichier = await choisirFichier({ accept: 'application/pdf,image/*' });
+  if (!fichier) return;
+  if (fichier.size > TAILLE_MAX_PIECE) { notifier('Fichier trop lourd : 10 Mo au plus.', 'erreur'); return; }
+  const saisie = await formulaire({
+    titre: 'Joindre un justificatif',
+    aide: `Fichier : ${fichier.name}. Il sera déposé sur l’espace de chaque colocataire avec son décompte.`,
+    champs: [
+      { cle: 'categorie', libelle: 'Nature', type: 'liste', requis: true, largeur: 'pleine', options: CATEGORIES_PIECES.map((c) => ({ valeur: c.cle, libelle: c.libelle })) },
+      { cle: 'libelle', libelle: 'Libellé (affiché au colocataire)', type: 'texte', requis: true, largeur: 'pleine' },
+    ],
+    valeurs: { categorie, libelle: `${categoriePiece(categorie).libelle} — ${date(regularisation.debut)} au ${date(regularisation.fin)}` },
+    libelleValider: 'Joindre',
+  });
+  if (!saisie) return;
+  const depot = await api.deposerFichier('documents', `regularisations/${regularisation.id}/${nettoyerNom(fichier.name)}`, fichier);
+  await executer(etat.modifierElement('regularisations', regularisation.id, (r) => {
+    r.pieces = [...(r.pieces || []), {
+      id: crypto.randomUUID(), categorie: saisie.categorie, libelle: String(saisie.libelle || '').trim() || categoriePiece(saisie.categorie).libelle,
+      nom: depot.chemin.split('/').pop(), chemin: depot.chemin, taille: fichier.size, typeMime: fichier.type || 'application/pdf', deposeLe: aujourdhui(),
+    }];
+  }), `Justificatif joint : ${fichier.name}.`);
+}
+
+async function retirerPiece(regularisation, piece) {
+  const ok = await confirmer({ titre: 'Retirer le justificatif', message: `« ${piece.libelle} » sera retiré de la régularisation et déposé dans la Corbeille. Les copies déjà déposées sur les espaces ne sont pas retirées.`, libelleValider: 'Retirer', danger: true });
+  if (!ok) return;
+  try { await api.supprimerFichier('documents', piece.chemin); } catch (erreur) { notifier(`Fichier non retiré du nuage : ${erreur.message}`, 'erreur'); }
+  await executer(etat.modifierElement('regularisations', regularisation.id, (r) => { r.pieces = (r.pieces || []).filter((p) => p.id !== piece.id); }), 'Justificatif retiré.');
+}
+
+/** Le bloc « Pièces justificatives » d'une carte de régularisation. */
+function blocPieces(regularisation) {
+  const pieces = regularisation.pieces || [];
+  const manque = piecesManquantes(regularisation);
+  return h('div', { class: 'pieces-regularisation' }, [
+    h('div', { class: 'doc-logement-entete' }, [
+      h('span', { class: 'doc-logement-entete-titre', texte: `Pièces justificatives (${pieces.length})` }),
+      manque.length ? badge(`manque : ${manque.join(', ')}`, 'alerte') : (pieces.length ? badge('complet', 'succes') : null),
+      h('span', { class: 'legende', texte: 'Facture d’eau, avis de TEOM, autres factures : jointes ici, déposées sur l’espace de chaque colocataire avec son décompte.' }),
+    ]),
+    h('div', { class: 'groupe-boutons', style: 'margin:.3rem 0 .4rem' }, [
+      bouton('Joindre la facture d’eau', () => joindrePiece(regularisation, 'eau').catch(signalerErreur), { petit: true, type: manque.includes('facture d’eau') ? 'primaire' : undefined }),
+      bouton('Joindre l’avis de TEOM', () => joindrePiece(regularisation, 'teom').catch(signalerErreur), { petit: true, type: manque.includes('avis de TEOM') ? 'primaire' : undefined }),
+      bouton('Joindre un autre justificatif', () => joindrePiece(regularisation, 'autre').catch(signalerErreur), { petit: true }),
+    ]),
+    pieces.length ? h('div', { class: 'doc-logement-liste' }, pieces.map((p) => h('div', { class: 'doc-logement', 'data-piece': p.id }, [
+      h('span', { class: 'doc-logement-icone', texte: categoriePiece(p.categorie).icone }),
+      h('div', { class: 'doc-logement-details' }, [
+        h('div', { class: 'doc-logement-titre', texte: p.libelle }),
+        h('div', { class: 'legende', texte: `${categoriePiece(p.categorie).libelle} · ${p.nom} · joint le ${date(p.deposeLe)}` }),
+      ]),
+      h('div', { class: 'groupe-boutons' }, [
+        bouton('Consulter', () => api.ouvrirFichier('documents', p.chemin).catch(signalerErreur), { petit: true }),
+        bouton('Retirer', () => retirerPiece(regularisation, p).catch(signalerErreur), { petit: true, type: 'danger' }),
+      ]),
+    ]))) : null,
+  ]);
 }
 
 function badgeSolde(solde) {
@@ -41,7 +200,7 @@ async function saisirRegularisation(donnees, contexte, existante = null, bien = 
   const saisie = await formulaire({
     titre: `${existante ? 'Régularisation' : 'Nouvelle régularisation'}${bien ? ` — ${bien.nom}` : ''}`,
     aide: 'Les dépenses réelles de la période sont réparties entre colocataires au prorata de leurs '
-      + 'provisions, puis comparées à ce que chacun a réellement versé.',
+      + 'provisions, puis comparées à ce que chacun a réellement versé. Joignez ensuite les justificatifs (facture d’eau, avis de TEOM) sur la carte de la régularisation : ils accompagnent chaque décompte.',
     champs: [
       { cle: 'bailId', libelle: 'Bail', type: 'liste', options: baux.map((b) => ({
         valeur: b.id,
@@ -53,8 +212,8 @@ async function saisirRegularisation(donnees, contexte, existante = null, bien = 
         aide: 'Factures du service des eaux sur la période (consommation + abonnement).' },
       { cle: 'teom', libelle: 'Ordures ménagères — TEOM (€)', type: 'montant',
         aide: 'Ligne « TEOM » du détail des cotisations de l\'avis de taxe foncière (hors frais de gestion).' },
-      { cle: 'autres', libelle: 'Autres charges récupérables (€)', type: 'montant' },
-      { cle: 'notes', libelle: 'Nature des autres charges (facultatif)', type: 'texte', largeur: 'pleine' },
+      { cle: 'autres', libelle: 'Autres charges (ancien champ, €)', type: 'montant', quand: () => (Number(existante?.autres) || 0) > 0, aide: 'Préférez désormais « + Ajouter une charge » sur la carte : une ligne par nature.' },
+      { cle: 'notes', libelle: 'Nature des autres charges (ancien champ)', type: 'texte', largeur: 'pleine', quand: () => (Number(existante?.autres) || 0) > 0 },
     ],
     valeurs: existante ? {
       bailId: existante.bailId,
@@ -82,6 +241,8 @@ async function saisirRegularisation(donnees, contexte, existante = null, bien = 
     teom: Number(saisie.teom) || 0,
     autres: Number(saisie.autres) || 0,
     notes: saisie.notes || '',
+    autresLignes: existante?.autresLignes || [],
+    pieces: existante?.pieces || [],
   }), 'Régularisation enregistrée.');
 }
 
@@ -136,6 +297,21 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
     titre: `Régularisation des charges — ${dateLongue(regularisation.debut)} au ${dateLongue(regularisation.fin)}`,
     nomFichier, octets,
   }); } catch (erreur) { erreurPublication = erreur; }
+  // Les justificatifs (factures) accompagnent le décompte sur l'espace.
+  const pieces = regularisation.pieces || [];
+  let piecesPubliees = 0;
+  if (publie) {
+    for (const piece of pieces) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const contenu = await api.lireOctets('documents', piece.chemin);
+        // eslint-disable-next-line no-await-in-loop
+        await publierDocument({ locataire, type: 'regularisation', titre: `Justificatif — ${piece.libelle}`, nomFichier: `justificatif_${nettoyerNom(piece.nom)}`, octets: contenu, typeMime: piece.typeMime || 'application/pdf' });
+        piecesPubliees += 1;
+      } catch (erreur) { notifier(`Justificatif « ${piece.libelle} » non déposé : ${erreur.message}`, 'erreur'); }
+    }
+  }
+  const manque = piecesManquantes(regularisation);
 
   const telecharger = () => {
     const lien = document.createElement('a');
@@ -164,6 +340,7 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
         + 'est disponible sur votre espace :</p>'
         + `<p><a href="${window.location.origin}">${window.location.origin}</a></p>`
         + `<p>${phrase}</p>`
+        + (piecesPubliees ? `<p>Les justificatifs des dépenses (${pieces.map((p) => p.libelle).join(', ')}) sont déposés sur votre espace avec le décompte.</p>` : '')
         + `<p>Bien cordialement,<br>${bailleur.nom}</p>`,
     }), `Notification de mise à disposition envoyée à ${locataire.email}.`);
   };
@@ -174,9 +351,12 @@ async function decomptePdfEtEnvoi(donnees, regularisation, decompte, ligne) {
       h('p', { texte: `Décompte de ${nomDe(locataire)} — solde de ${montant(ligne.solde)} `
         + `(${ligne.solde > 0.005 ? 'à lui rembourser' : (ligne.solde < -0.005 ? 'à lui réclamer' : 'équilibré')}).` }),
       publie
-        ? h('p', { class: 'legende', texte: 'Déposé sur son espace : il peut le consulter et le télécharger en PDF.' })
-        : h('p', { class: 'legende', style: 'color:var(--alerte)', texte:
-          `Non déposé sur son espace : ${erreurPublication?.message || 'erreur inconnue'}` }),
+        ? h('p', { class: 'legende', texte: `Déposé sur son espace : il peut le consulter et le télécharger en PDF${piecesPubliees ? `, avec ${piecesPubliees} justificatif${piecesPubliees > 1 ? 's' : ''}` : ''}.` })
+        : null,
+      manque.length ? h('p', { class: 'legende', style: 'color:var(--alerte)', texte: `Justificatifs manquants sur cette régularisation : ${manque.join(', ')}. Joignez-les (carte de la régularisation) puis regénérez le décompte.` }) : null,
+      !publie
+        ? h('p', { class: 'legende', style: 'color:var(--alerte)', texte:
+          `Non déposé sur son espace : ${erreurPublication?.message || 'erreur inconnue'}` }) : null,
     ]),
     pied: [
       h('button', { class: 'bouton', type: 'button', onclick: telecharger }, 'Télécharger le PDF'),
@@ -228,7 +408,7 @@ function carteRegularisation(donnees, regularisation, teinte = '') {
       bouton('Supprimer', () => supprimerRegularisation(regularisation), { petit: true, type: 'danger' }),
     ],
     serre: true,
-    corps: tableau({
+    corps: [tableau({
       colonnes,
       lignes: decompte.lignes,
       cle: (l) => l.locataireId,
@@ -241,7 +421,7 @@ function carteRegularisation(donnees, regularisation, teinte = '') {
         h('td', {}), h('td', {}),
       ]),
       messageVide: 'Aucune provision sur cette période : vérifiez le bail et les dates.',
-    }),
+    }), blocAutresCharges(regularisation), blocPieces(regularisation)],
   });
 }
 
@@ -318,6 +498,7 @@ export default {
           h('span', { class: 'legende', texte: `${[bien.adresse, bien.ville].filter(Boolean).join(', ')} · ${regs.length ? `${regs.length} régularisation${regs.length > 1 ? 's' : ''}` : 'aucune régularisation'}` }),
           bouton('+ Régularisation', () => saisirRegularisation(siennes, contexte, null, bien), { petit: true, type: 'primaire', titre: `Nouvelle régularisation pour ${bien.nom}` }),
         ]) });
+        if (siennes.baux.length) groupe.corps.append(resumeLogement(siennes, regs, contexte.annee));
         if (!regs.length) groupe.corps.append(h('p', { class: 'legende', style: 'margin:0 0 .8rem .4rem', texte: siennes.baux.length ? 'Aucune régularisation pour ce logement : « + Régularisation » pour établir le décompte d’une période.' : 'Aucun bail sur ce logement : rien à régulariser.' }));
         for (const regularisation of regs) groupe.corps.append(carteRegularisation(siennes, regularisation, teinte));
         conteneur.append(groupe.element);
