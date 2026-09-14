@@ -34,6 +34,19 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**Nouveau en v54 — l'état des lieux suit les colocataires du bail.** Un
+état des lieux créé quand le bail n'avait qu'un titulaire (les colocataires
+ajoutés ensuite par « Répartir ») n'était publié qu'à lui. La carte « État des
+lieux contradictoire » affiche désormais « Colocataires concernés (n) » :
+ceux notés sur l'état des lieux, complétés par les occupants actuels du bail,
+avec un badge « ajouté au bail » pour ceux qui n'ont pas encore reçu l'état
+des lieux. « Ouvrir la fenêtre contradictoire » ou « Republier l'état des
+lieux » le publie à tous et les inscrit (signatures attendues, relevé,
+rappels). Chaque colocataire répond depuis son espace dans son propre
+document de réponses : ils peuvent répondre en même temps sans se gêner, et
+le gérant relève les réponses de chacun séparément. À déployer :
+hébergement seulement.
+
 **Nouveau en v53 — documents du logement, documents des colocataires,
 Corbeille.**
 - « Logements & baux » : chaque carte de logement a un cadre repliable

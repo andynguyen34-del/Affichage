@@ -559,9 +559,26 @@ function cartePlan(edl) {
  * gérant : publication, réglage de la date de fin, relevé des réponses,
  * rappel, rapport avec annexe.
  */
+/**
+ * Les colocataires concernés par un état des lieux (v54) : ceux notés dessus à
+ * sa création, complétés par les occupants actuels de son bail — un
+ * colocataire ajouté au bail après la création de l'état des lieux doit lui
+ * aussi le voir et y répondre. Renvoie { locataires, ajoutes } (ajoutés : pas
+ * encore inscrits sur l'état des lieux, donc pas encore publiés).
+ */
+function locatairesConcernes(edl, donnees) {
+  const bail = (donnees.baux || []).find((b) => b.id === edl.bailId);
+  const duBail = bail ? (bail.colocataires?.length ? bail.colocataires.map((c) => c?.locataireId) : [bail.locataireId, bail.coTitulaireId]) : [];
+  const inscrits = new Set(edl.locataireIds || []);
+  const ids = [...new Set([...inscrits, ...duBail.filter(Boolean)])];
+  const locataires = ids.map((id) => (donnees.locataires || []).find((l) => l.id === id)).filter(Boolean);
+  return { locataires, ajoutes: locataires.filter((l) => !inscrits.has(l.id)) };
+}
+
 function carteContradictoire(edl, donnees, contexte) {
-  const locataires = (edl.locataireIds || []).map((id) => donnees.locataires.find((l) => l.id === id)).filter(Boolean);
-  const bien = bienDeEdl(contexte?.tout || donnees, edl);
+  const tout = contexte?.tout || donnees;
+  const { locataires, ajoutes } = locatairesConcernes(edl, tout);
+  const bien = bienDeEdl(tout, edl);
   const zone = h('div');
   const apercu = apercuPourColocataire(edl);
 
@@ -596,10 +613,13 @@ function carteContradictoire(edl, donnees, contexte) {
       } catch (erreur) { notifier(erreur.message, 'erreur'); }
     }
     if (ouverts) {
+      // Les colocataires ajoutés au bail depuis la création sont désormais inscrits sur l'état des lieux (signatures attendues, relevé).
+      const locataireIds = locataires.map((l) => l.id);
       await executer(etat.modifierElement('etatsDesLieux', edl.id, (e) => {
-        e.contradictoireFinLe = finLe; e.contradictoireDuree = dureeJours; e.contradictoirePublieLe = aujourdhui();
+        e.contradictoireFinLe = finLe; e.contradictoireDuree = dureeJours; e.contradictoirePublieLe = aujourdhui(); e.locataireIds = locataireIds;
       }), `État des lieux publié pour ${ouverts} colocataire(s) (${copie.copiees}/${copie.total} photos), fenêtre ouverte jusqu'au ${date(finLe)}${envoyerEmail ? ', e-mails envoyés' : ''}.`);
-      Object.assign(edl, { contradictoireFinLe: finLe, contradictoireDuree: dureeJours });
+      Object.assign(edl, { contradictoireFinLe: finLe, contradictoireDuree: dureeJours, locataireIds });
+      ajoutes.length = 0;
       dessiner();
     }
   };
@@ -713,8 +733,20 @@ function carteContradictoire(edl, donnees, contexte) {
     notifier(`Rappel envoyé à ${retardataires.length} colocataire(s).`, 'succes');
   };
 
+  /** « Colocataires concernés : … » avec, le cas échéant, ceux ajoutés au bail depuis la création (à publier). */
+  const ligneConcernes = () => h('p', { class: 'edl-concernes', style: 'margin:.2rem 0 .6rem' }, [
+    h('strong', { texte: `Colocataires concernés (${locataires.length}) : ` }),
+    ...(locataires.length ? locataires.flatMap((l, i) => [
+      i ? ', ' : '', h('span', { texte: nomDe(l) }),
+      ajoutes.includes(l) ? ' ' : null,
+      ajoutes.includes(l) ? badge(edl.contradictoireFinLe ? 'ajouté au bail — republier pour lui ouvrir l’état des lieux' : 'ajouté au bail depuis la création', 'attention') : null,
+    ]) : [h('span', { class: 'legende', texte: 'aucun — rattachez l’état des lieux à un bail avec des colocataires' })]),
+    !locataires.some((l) => String(l.email || '').trim()) && locataires.length ? h('span', { class: 'legende', texte: ' · aucun n’a d’adresse e-mail' }) : null,
+  ]);
+
   const dessiner = () => {
     zone.replaceChildren();
+    zone.append(ligneConcernes());
     if (!edl.contradictoireFinLe) {
       zone.append(
         h('p', { class: 'legende', texte: 'Après la visite et les signatures, ouvrez la fenêtre contradictoire : l’état des lieux est publié sur l’espace de chaque colocataire, '
