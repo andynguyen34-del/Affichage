@@ -65,6 +65,7 @@
   let journeeId = null;
   let portail = null;
   let profil = null;
+  let standDemande = null; // arrivée par le QR d'un stand (?stand=<id>)
 
   // ------------------------------------------------------------- inscription
 
@@ -170,8 +171,7 @@
       try {
         await db.collection('participants').doc(uid).set(nouveau);
         profil = nouveau;
-        await enregistrerInscription();
-        vueMenu();
+        await apresProfil();
       } catch (e) {
         vueInscription(
           "L'enregistrement a échoué. Vérifiez votre connexion puis réessayez." + detailErreur(e),
@@ -206,6 +206,106 @@
       dernierAccesLe: new Date().toISOString(),
       nbAcces: firebase.firestore.FieldValue.increment(1),
     });
+  }
+
+  // ------------------------------------------------------------------- stand
+  // Arrivée par le QR code d'un stand : on propose d'enregistrer le passage,
+  // avec partage consenti des coordonnées au fournisseur.
+
+  async function vueStand(fournisseurId) {
+    let fournisseur = null;
+    try {
+      const doc = await db.collection('fournisseurs').doc(fournisseurId).get();
+      if (doc.exists) fournisseur = doc.data();
+    } catch (_) {
+      /* traité ci-dessous */
+    }
+    if (!fournisseur) {
+      message(
+        `<h2>Stand introuvable</h2>
+        <p>Ce QR code ne correspond à aucun stand connu.</p>
+        <div class="ligne-boutons"><button id="bouton-retour-menu">Retour au menu</button></div>`,
+      );
+      document.getElementById('bouton-retour-menu').addEventListener('click', retourMenu);
+      return;
+    }
+
+    let dejaVisite = false;
+    try {
+      const v = await db.collection('visites').doc(fournisseurId + '_' + uid).get();
+      dejaVisite = v.exists;
+    } catch (_) {
+      /* pas encore de passage */
+    }
+
+    $app.innerHTML = `
+      <div class="carte">
+        <h2>🏭 ${echapper(fournisseur.nom)}</h2>
+        <p class="muet">${fournisseur.stand ? 'Stand ' + echapper(fournisseur.stand) : ''}</p>
+        ${fournisseur.description ? `<p>${echapper(fournisseur.description)}</p>` : ''}
+        ${
+          dejaVisite
+            ? `<div class="info">✅ Votre passage sur ce stand est déjà enregistré.
+                Merci de votre visite !</div>`
+            : `<p>Enregistrer votre passage sur ce stand ?</p>
+              <p class="muet petit">En confirmant, vous acceptez que vos coordonnées
+              (prénom, nom, établissement, mobile${profil.email ? ', e-mail' : ''})
+              soient transmises à <strong>${echapper(fournisseur.nom)}</strong> afin
+              qu'il puisse vous recontacter après les journées d'études.</p>
+              <div id="erreur-stand" class="erreur" hidden></div>
+              <div class="ligne-boutons">
+                <button id="bouton-confirmer-visite">✅ Je confirme mon passage</button>
+              </div>`
+        }
+        <div class="ligne-boutons">
+          <button id="bouton-retour-menu" class="secondaire">Retour au menu</button>
+        </div>
+      </div>`;
+
+    document.getElementById('bouton-retour-menu').addEventListener('click', retourMenu);
+
+    const boutonConfirmer = document.getElementById('bouton-confirmer-visite');
+    if (boutonConfirmer) {
+      boutonConfirmer.addEventListener('click', async () => {
+        boutonConfirmer.disabled = true;
+        try {
+          await db
+            .collection('visites')
+            .doc(fournisseurId + '_' + uid)
+            .set({
+              fournisseurId,
+              fournisseurNom: fournisseur.nom || '',
+              journeeId: journeeId || '',
+              participantId: uid,
+              type: profil.type,
+              nom: profil.nom,
+              prenom: profil.prenom,
+              organisme: profil.organisme || '',
+              email: profil.email || '',
+              mobile: profil.mobile || '',
+              numeroInscription: profil.numeroInscription || '',
+              viseLe: new Date().toISOString(),
+            });
+          vueStand(fournisseurId);
+        } catch (e) {
+          const erreur = document.getElementById('erreur-stand');
+          erreur.textContent =
+            "L'enregistrement du passage a échoué. Réessayez." + detailErreur(e);
+          erreur.hidden = false;
+          boutonConfirmer.disabled = false;
+        }
+      });
+    }
+  }
+
+  function retourMenu() {
+    standDemande = null;
+    try {
+      history.replaceState(null, '', location.pathname);
+    } catch (_) {
+      /* sans gravité */
+    }
+    vueMenu();
   }
 
   // -------------------------------------------------------------------- menu
@@ -312,6 +412,59 @@
       questionnaires = [];
     }
 
+    // Exposants et passages sur les stands.
+    let fournisseurs = [];
+    try {
+      const snapF = await db
+        .collection('fournisseurs')
+        .where('journeeId', '==', journeeId)
+        .get();
+      fournisseurs = snapF.docs.map((d) => ({ id: d.id, ...d.data() }));
+      fournisseurs.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+    } catch (_) {
+      fournisseurs = [];
+    }
+    let standsVisites = new Set();
+    try {
+      const snapMv = await db
+        .collection('visites')
+        .where('participantId', '==', uid)
+        .get();
+      standsVisites = new Set(
+        snapMv.docs.map((d) => d.data()).filter((v) => v.journeeId === journeeId).map((v) => v.fournisseurId),
+      );
+    } catch (_) {
+      standsVisites = new Set();
+    }
+
+    function htmlExposants(filtre) {
+      const texte = (filtre || '').trim().toLowerCase();
+      const retenus = fournisseurs.filter(
+        (f) =>
+          !texte ||
+          (f.nom || '').toLowerCase().includes(texte) ||
+          (f.description || '').toLowerCase().includes(texte) ||
+          (f.stand || '').toLowerCase().includes(texte),
+      );
+      if (!retenus.length) return '<p class="muet petit">Aucun exposant trouvé.</p>';
+      return (
+        '<ul class="liste">' +
+        retenus
+          .map(
+            (f) => `<li>
+              <div>
+                <span class="titre-item">${echapper(f.nom)}</span>
+                ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
+                ${standsVisites.has(f.id) ? '<span class="badge ouvert">✓ visité</span>' : ''}
+                ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
+              </div>
+            </li>`,
+          )
+          .join('') +
+        '</ul>'
+      );
+    }
+
     const dejaRepondu = {};
     await Promise.all(
       questionnaires.map(async (q) => {
@@ -375,6 +528,19 @@
           : ''
       }
 
+      ${
+        fournisseurs.length
+          ? `<div class="carte">
+              <h2>🏭 Exposants${standsVisites.size ? ` <span class="badge ouvert">${standsVisites.size} stand${standsVisites.size > 1 ? 's' : ''} visité${standsVisites.size > 1 ? 's' : ''}</span>` : ''}</h2>
+              <p class="muet petit">Scannez le QR code affiché sur un stand pour
+              enregistrer votre passage et laisser vos coordonnées au fournisseur.</p>
+              <input id="recherche-exposant" placeholder="🔍 Rechercher un fournisseur, un stand…"
+                style="width:100%;font:inherit;padding:0.5rem 0.6rem;border:1px solid var(--bord);border-radius:8px;margin-bottom:0.6rem">
+              <div id="liste-exposants">${htmlExposants('')}</div>
+            </div>`
+          : ''
+      }
+
       <div id="carte-installation"></div>
 
       <div class="carte">
@@ -401,6 +567,13 @@
       </div>`;
 
     majCarteInstallation();
+
+    const champRecherche = document.getElementById('recherche-exposant');
+    if (champRecherche) {
+      champRecherche.addEventListener('input', () => {
+        document.getElementById('liste-exposants').innerHTML = htmlExposants(champRecherche.value);
+      });
+    }
 
     document.getElementById('bouton-profil').addEventListener('click', () => {
       vueInscription();
@@ -500,9 +673,19 @@
 
   // --------------------------------------------------------------- démarrage
 
+  // Après identification : passage sur un stand si on est arrivé par son QR,
+  // sinon menu de choix.
+  async function apresProfil() {
+    await enregistrerInscription();
+    if (standDemande) vueStand(standDemande);
+    else vueMenu();
+  }
+
   async function demarrer() {
     const params = new URLSearchParams(location.search);
     const demande = params.get('e');
+    const stand = params.get('stand');
+    if (stand && /^[A-Za-z0-9_-]+$/.test(stand)) standDemande = stand;
 
     try {
       if (demande && /^[A-Za-z0-9_-]+$/.test(demande)) {
@@ -543,8 +726,7 @@
       const doc = await db.collection('participants').doc(uid).get();
       if (doc.exists) {
         profil = doc.data();
-        await enregistrerInscription();
-        vueMenu();
+        await apresProfil();
       } else {
         vueInscription();
       }

@@ -311,6 +311,23 @@ ul.liste a:hover { text-decoration: underline; }
 /* Connexion */
 .boite-connexion { max-width: 380px; margin: 8vh auto; }
 
+/* Impression des QR de stands : une page par stand */
+#impression-qr { display: none; }
+@media print {
+  body.mode-impression-qr header.appbar,
+  body.mode-impression-qr main { display: none !important; }
+  body.mode-impression-qr #impression-qr { display: block; }
+  .qr-stand {
+    text-align: center;
+    page-break-after: always;
+    padding-top: 2.5cm;
+  }
+  .qr-stand-titre { font-size: 30pt; font-weight: 700; color: #1d4e89; }
+  .qr-stand-sous { font-size: 18pt; color: #444; margin-bottom: 0.8cm; }
+  .qr-stand-code img, .qr-stand-code canvas { display: inline-block; margin: 0 auto; }
+  .qr-stand-legende { font-size: 13pt; color: #333; margin-top: 0.8cm; line-height: 1.5; }
+}
+
 /* Impression du bilan */
 @media print {
   body { background: #fff; }

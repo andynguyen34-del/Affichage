@@ -70,6 +70,16 @@ gérées atelier par atelier). Les autres sont en liste d'attente ordonnée
 selon les mêmes priorités. Chaque participant voit son résultat sur le
 portail ; une **feuille d'émargement CSV** est exportable par atelier.
 
+**Passages sur les stands.** Chaque fournisseur exposant reçoit son **QR code
+de stand** (imprimable depuis l'administration, une page par stand) : le
+visiteur le scanne avec l'appareil photo de son téléphone, l'application le
+reconnaît, il **confirme son passage et consent** au partage de ses
+coordonnées avec ce fournisseur. L'administration suit les passages par
+stand et **exporte pour chaque fournisseur la liste de ses visiteurs**
+(CSV : identité, établissement, mobile, e-mail). Le portail offre aussi la
+**recherche d'exposants** (nom, stand, activité) avec le fil de ses propres
+passages.
+
 **Questionnaires.** Créés par journée à partir de modèles :
 
 - *Évaluation stagiaire (modèle URBH)* — reprend le questionnaire officiel

@@ -501,6 +501,17 @@
       }),
     );
 
+    // Fournisseurs exposants et passages sur les stands.
+    const snapFo = await db.collection('fournisseurs').where('journeeId', '==', journeeId).get();
+    const fournisseursJ = snapFo.docs.map((d) => ({ id: d.id, ...d.data() }));
+    fournisseursJ.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+    const snapVis = await db.collection('visites').where('journeeId', '==', journeeId).get();
+    const visitesJ = snapVis.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const visitesParFournisseur = {};
+    visitesJ.forEach((v) => {
+      (visitesParFournisseur[v.fournisseurId] = visitesParFournisseur[v.fournisseurId] || []).push(v);
+    });
+
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
     const base = location.origin + location.pathname.replace(/index\.html$/, '');
@@ -743,6 +754,57 @@
             <input id="at-intervenants"></label>
           <div class="ligne-boutons">
             <button type="submit">Créer l'atelier</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="carte">
+        <h2>🏭 Fournisseurs &amp; passages sur les stands</h2>
+        <p class="muet petit">Chaque stand affiche son QR code : le visiteur le
+        scanne avec l'appareil photo de son téléphone, confirme son passage et
+        consent au partage de ses coordonnées avec le fournisseur. Vous
+        exportez ensuite la liste des visiteurs de chaque stand.</p>
+        <div class="tuiles">
+          <div class="tuile"><div class="valeur">${fournisseursJ.length}</div>
+            <div class="legende">fournisseurs</div></div>
+          <div class="tuile"><div class="valeur">${visitesJ.length}</div>
+            <div class="legende">passages enregistrés</div></div>
+        </div>
+        ${
+          fournisseursJ.length
+            ? `<div class="ligne-boutons">
+                <button id="bouton-imprimer-qr-stands" class="secondaire">🖨️ Imprimer les QR des stands</button>
+                <button id="bouton-csv-visites" class="secondaire" ${visitesJ.length ? '' : 'disabled'}>Exporter tous les passages (CSV)</button>
+              </div>
+              <ul class="liste">${fournisseursJ
+                .map(
+                  (f) => `<li>
+                    <div>
+                      <span class="titre-item">${echapper(f.nom)}</span>
+                      ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
+                      <span class="badge ouvert">${(visitesParFournisseur[f.id] || []).length} passage(s)</span>
+                      ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
+                    </div>
+                    <div class="pousse">
+                      <button class="discret bouton-csv-fournisseur" data-id="${attr(f.id)}"
+                        ${(visitesParFournisseur[f.id] || []).length ? '' : 'disabled'}>CSV visiteurs</button>
+                      <button class="discret bouton-supprimer-fournisseur" data-id="${attr(f.id)}">Supprimer</button>
+                    </div>
+                  </li>`,
+                )
+                .join('')}</ul>`
+            : `<p class="muet">Aucun fournisseur enregistré pour cette journée.</p>`
+        }
+        <h3>Ajouter un fournisseur</h3>
+        <form id="form-fournisseur">
+          <label class="champ">Nom *
+            <input id="fo-nom" required placeholder="Ex. : GIRBAU"></label>
+          <label class="champ">N° de stand
+            <input id="fo-stand" placeholder="Ex. : 12" style="max-width:8rem"></label>
+          <label class="champ">Description / activité
+            <input id="fo-description" placeholder="Ex. : matériel de blanchisserie"></label>
+          <div class="ligne-boutons">
+            <button type="submit">Ajouter le fournisseur</button>
           </div>
         </form>
       </div>
@@ -1171,6 +1233,119 @@
       }),
     );
 
+    // --- fournisseurs & passages sur les stands
+
+    document.getElementById('form-fournisseur').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      await db.collection('fournisseurs').add({
+        journeeId,
+        nom: document.getElementById('fo-nom').value.trim(),
+        stand: document.getElementById('fo-stand').value.trim(),
+        description: document.getElementById('fo-description').value.trim(),
+        creeLe: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      router();
+    });
+
+    document.querySelectorAll('.bouton-supprimer-fournisseur').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const visites = visitesParFournisseur[b.dataset.id] || [];
+        if (!confirm(`Supprimer ce fournisseur${visites.length ? ` et ses ${visites.length} passages enregistrés` : ''} ?`)) return;
+        const lot = db.batch();
+        visites.forEach((v) => lot.delete(db.collection('visites').doc(v.id)));
+        lot.delete(db.collection('fournisseurs').doc(b.dataset.id));
+        await lot.commit();
+        router();
+      }),
+    );
+
+    function csvVisites(visites, fichier) {
+      const sep = ';';
+      const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const lignes = [
+        ['Fournisseur', 'Prénom', 'Nom', 'Établissement', 'Profil', 'N° inscription', 'Mobile', 'E-mail', 'Passage le']
+          .map(cellule)
+          .join(sep),
+      ];
+      visites.forEach((v) =>
+        lignes.push(
+          [
+            v.fournisseurNom || '',
+            v.prenom || '',
+            v.nom || '',
+            v.organisme || '',
+            v.type === 'exposant' ? 'Exposant' : 'Visiteur',
+            v.numeroInscription || '',
+            v.mobile || '',
+            v.email || '',
+            v.viseLe ? new Date(v.viseLe).toLocaleString('fr-FR') : '',
+          ]
+            .map(cellule)
+            .join(sep),
+        ),
+      );
+      const blob = new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fichier;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    const boutonCsvVisites = document.getElementById('bouton-csv-visites');
+    if (boutonCsvVisites) {
+      boutonCsvVisites.addEventListener('click', () => csvVisites(visitesJ, 'passages-stands.csv'));
+    }
+    document.querySelectorAll('.bouton-csv-fournisseur').forEach((b) =>
+      b.addEventListener('click', () => {
+        const f = fournisseursJ.find((x) => x.id === b.dataset.id);
+        csvVisites(
+          visitesParFournisseur[b.dataset.id] || [],
+          'visiteurs-' + (f && f.nom ? f.nom.replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase() : 'stand') + '.csv',
+        );
+      }),
+    );
+
+    const boutonImprimerQr = document.getElementById('bouton-imprimer-qr-stands');
+    if (boutonImprimerQr) {
+      boutonImprimerQr.addEventListener('click', () => {
+        if (!window.QRCode) {
+          alert('La bibliothèque QR code ne s’est pas chargée : vérifiez la connexion internet.');
+          return;
+        }
+        const ancien = document.getElementById('impression-qr');
+        if (ancien) ancien.remove();
+        const zone = document.createElement('div');
+        zone.id = 'impression-qr';
+        document.body.appendChild(zone);
+        fournisseursJ.forEach((f) => {
+          const bloc = document.createElement('div');
+          bloc.className = 'qr-stand';
+          bloc.innerHTML = `
+            <div class="qr-stand-titre">${echapper(f.nom)}</div>
+            <div class="qr-stand-sous">${f.stand ? 'Stand ' + echapper(f.stand) : ''}</div>
+            <div class="qr-stand-code"></div>
+            <div class="qr-stand-legende">📲 Scannez avec l'appareil photo de votre téléphone<br>
+            pour enregistrer votre passage et laisser vos coordonnées</div>`;
+          zone.appendChild(bloc);
+          new QRCode(bloc.querySelector('.qr-stand-code'), {
+            text: base + 'portail.html?stand=' + f.id,
+            width: 380,
+            height: 380,
+            correctLevel: QRCode.CorrectLevel.H,
+          });
+        });
+        document.body.classList.add('mode-impression-qr');
+        const fin = () => {
+          document.body.classList.remove('mode-impression-qr');
+          zone.remove();
+          window.removeEventListener('afterprint', fin);
+        };
+        window.addEventListener('afterprint', fin);
+        setTimeout(() => window.print(), 250);
+      });
+    }
+
     // --- journée : modification / suppression
 
     document.getElementById('bouton-modifier-journee').addEventListener('click', () => {
@@ -1217,6 +1392,8 @@
         ...participationsTirage.map((p) => db.collection('tirage').doc(p.id)),
         ...ateliers.map((a) => db.collection('ateliers').doc(a.id)),
         ...snapV.docs.map((d) => d.ref),
+        ...fournisseursJ.map((f) => db.collection('fournisseurs').doc(f.id)),
+        ...visitesJ.map((v) => db.collection('visites').doc(v.id)),
         refPortail,
         db.collection('journees').doc(journeeId),
       ];
