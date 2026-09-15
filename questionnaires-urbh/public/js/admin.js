@@ -81,6 +81,21 @@
     return `${location.origin}${location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')}/repondre.html?id=${questionnaireId}`;
   }
 
+  // Une même personne connectée depuis plusieurs appareils (ou après une
+  // purge de navigateur) possède plusieurs identités anonymes : les tirages
+  // ne gardent qu'une chance par N° de carte.
+  function dedupeParNumero(liste) {
+    const vus = new Set();
+    const resultat = [];
+    (liste || []).forEach((p) => {
+      const cle = normaliserNumero(p.numeroInscription) || '~' + p.participantId;
+      if (vus.has(cle)) return;
+      vus.add(cle);
+      resultat.push(p);
+    });
+    return resultat;
+  }
+
   // Moments de pointage (émargement) : ils conditionnent la participation à
   // la tombola de clôture — mêmes clés que sur le portail participants.
   const MOMENTS_POINTAGE = [
@@ -722,7 +737,7 @@
     const exclusCA = new Set(
       ((portail.tombola && portail.tombola.exclusCA) || []).map(normaliserNumero),
     );
-    const candidatsTombola = pointagesJ.filter(
+    const candidatsTombola = dedupeParNumero(pointagesJ.filter(
       (p) =>
         p.moment === 'tombola' &&
         p.type === 'visiteur' &&
@@ -731,7 +746,7 @@
         parMoment.ouverture.has(p.participantId) &&
         parMoment.ag.has(p.participantId) &&
         aRepondu(p.participantId),
-    );
+    ));
 
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
@@ -881,6 +896,9 @@
                       ${i.mobile ? ' — 📱 ' + echapper(i.mobile) : ''}
                       ${i.dernierAccesLe ? ' — dernier accès ' + new Date(i.dernierAccesLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
                       ${i.nbAcces ? ` (${i.nbAcces} connexions)` : ''}</div>
+                  </div>
+                  <div class="pousse">
+                    <button class="discret bouton-supprimer-inscrit" data-id="${attr(i.id)}">Supprimer</button>
                   </div>
                 </li>`,
                 )
@@ -1593,6 +1611,17 @@
       });
     }
 
+    // Suppression d'une entrée d'inscrit (doublon de test : la même personne
+    // depuis plusieurs navigateurs). Le profil de l'appareil n'est pas touché.
+    document.querySelectorAll('.bouton-supprimer-inscrit').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = inscriptions.find((x) => x.id === b.dataset.id);
+        if (!confirm(`Supprimer l'entrée « ${i ? i.prenom + ' ' + i.nom : ''} » de la liste des inscrits ?`)) return;
+        await db.collection('inscriptions').doc(b.dataset.id).delete();
+        router();
+      }),
+    );
+
     // --- tirage au sort
 
     document.getElementById('bouton-basculer-tirage').addEventListener('click', async () => {
@@ -1603,7 +1632,14 @@
     const boutonTirer = document.getElementById('bouton-tirer');
     boutonTirer.addEventListener('click', async () => {
       const dejaGagnants = new Set(gagnants.map((g2) => g2.participantId));
-      const candidats = participationsTirage.filter((p) => !dejaGagnants.has(p.participantId));
+      const dejaGagnantsNumero = new Set(
+        gagnants.map((g2) => normaliserNumero(g2.numeroInscription)).filter(Boolean),
+      );
+      const candidats = dedupeParNumero(participationsTirage).filter(
+        (p) =>
+          !dejaGagnants.has(p.participantId) &&
+          !dejaGagnantsNumero.has(normaliserNumero(p.numeroInscription)),
+      );
       if (!candidats.length) return;
       const elu = candidats[Math.floor(Math.random() * candidats.length)];
       await refPortail.update({
@@ -1751,7 +1787,14 @@
         const lot = lotsTombola[i];
         if (!lot) return;
         const dejaGagnantsT = new Set(gagnantsTombola.map((g) => g.participantId));
-        const restants = candidatsTombola.filter((c) => !dejaGagnantsT.has(c.participantId));
+        const dejaGagnantsTNumero = new Set(
+          gagnantsTombola.map((g) => normaliserNumero(g.numeroInscription)).filter(Boolean),
+        );
+        const restants = candidatsTombola.filter(
+          (c) =>
+            !dejaGagnantsT.has(c.participantId) &&
+            !dejaGagnantsTNumero.has(normaliserNumero(c.numeroInscription)),
+        );
         if (!restants.length) {
           alert('Aucun participant éligible restant (présence en salle + AG + ouverture, visiteurs uniquement).');
           return;
@@ -1795,7 +1838,14 @@
         }
         const nouveaux = gagnantsTombola.map((g) => (g === actif ? { ...g, raye: true } : g));
         const dejaGagnantsT = new Set(nouveaux.map((g) => g.participantId));
-        const restants = candidatsTombola.filter((c) => !dejaGagnantsT.has(c.participantId));
+        const dejaGagnantsTNumero = new Set(
+          nouveaux.map((g) => normaliserNumero(g.numeroInscription)).filter(Boolean),
+        );
+        const restants = candidatsTombola.filter(
+          (c) =>
+            !dejaGagnantsT.has(c.participantId) &&
+            !dejaGagnantsTNumero.has(normaliserNumero(c.numeroInscription)),
+        );
         if (restants.length) {
           const elu = restants[Math.floor(Math.random() * restants.length)];
           nouveaux.push({
@@ -1998,7 +2048,11 @@
           (x.retenus || []).forEach((r) => retenusAilleurs.add(r.participantId));
         }
       });
-      const { retenus, attente } = tirerEquitable(voeux, atelier.capacite || 20, retenusAilleurs);
+      const { retenus, attente } = tirerEquitable(
+        dedupeParNumero(voeux),
+        atelier.capacite || 20,
+        retenusAilleurs,
+      );
       await db.collection('ateliers').doc(atelierId).update({
         statut: 'tire',
         retenus: retenus.map(versPublic),

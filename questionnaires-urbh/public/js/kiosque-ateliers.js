@@ -33,8 +33,119 @@
   const db = firebase.firestore();
 
   const $grille = document.getElementById('grille');
+  const $bandeau = document.getElementById('bandeau-creneau');
   const dejaTires = new Set(); // ateliers déjà affichés « tirés » (pas de re-animation)
   let premierAffichage = true;
+  let groupes = []; // un groupe par créneau horaire : [{ horaire, ateliers }]
+  let indexGroupe = 0;
+
+  // Avec 20 places par atelier, tout ne tient pas sur un seul écran : le
+  // kiosque affiche UN créneau à la fois (ses salles côte à côte, noms sur
+  // deux colonnes) et fait tourner les créneaux toutes les 12 secondes.
+  // Un tirage qui tombe bascule immédiatement sur son créneau.
+
+  function grouper(ateliers) {
+    const parHoraire = new Map();
+    ateliers.forEach((a) => {
+      const cle = a.horaire || '';
+      if (!parHoraire.has(cle)) parHoraire.set(cle, []);
+      parHoraire.get(cle).push(a);
+    });
+    return [...parHoraire.entries()].map(([horaire, liste]) => ({ horaire, ateliers: liste }));
+  }
+
+  function carteAtelier(a, nouveauTirage) {
+    const carte = document.createElement('div');
+    carte.className = 'atelier';
+    if (nouveauTirage) carte.classList.add('vient-d-etre-tire');
+
+    const haut = document.createElement('div');
+    haut.className = 'haut';
+    const salle = document.createElement('span');
+    salle.className = 'salle';
+    salle.textContent = a.salle || '?';
+    const bloc = document.createElement('div');
+    const nom = document.createElement('div');
+    nom.className = 'nom';
+    nom.textContent = a.nom || '';
+    bloc.append(nom);
+    haut.append(salle, bloc);
+    carte.append(haut);
+
+    if (a.statut === 'tire') {
+      const retenus = a.retenus || [];
+      const liste = document.createElement('ol');
+      liste.className = 'retenus' + (retenus.length > 8 ? ' colonnes' : '');
+      retenus.forEach((r, i) => {
+        const li = document.createElement('li');
+        // Cascade d'apparition uniquement pour un tirage qui vient d'arriver.
+        li.style.animationDelay = nouveauTirage ? `${0.3 + i * 0.25}s` : '0s';
+        const fort = document.createElement('strong');
+        fort.textContent = `${r.prenom || ''} ${(r.nom || '').toUpperCase()}`.trim();
+        li.append(fort);
+        if (r.organisme) {
+          const org = document.createElement('span');
+          org.className = 'org';
+          org.textContent = ` — ${r.organisme}`;
+          li.append(org);
+        }
+        liste.append(li);
+      });
+      carte.append(liste);
+      const attente = a.listeAttente || [];
+      if (attente.length) {
+        const bloc2 = document.createElement('div');
+        bloc2.className = 'attente-liste';
+        const visibles = attente.slice(0, 8);
+        bloc2.textContent =
+          "Liste d'attente : " +
+          visibles
+            .map((r, i) => `${i + 1}. ${r.prenom || ''} ${(r.nom || '').toUpperCase()}`.trim())
+            .join(' · ') +
+          (attente.length > visibles.length ? ` · +${attente.length - visibles.length} autres` : '');
+        carte.append(bloc2);
+      }
+    } else {
+      const etat = document.createElement('div');
+      etat.className = 'etat';
+      etat.textContent = '⏳ Tirage au sort à venir — résultats affichés ici en direct.';
+      carte.append(etat);
+    }
+    return carte;
+  }
+
+  function rendre(nouveaux) {
+    nouveaux = nouveaux || new Set();
+    $grille.innerHTML = '';
+    $bandeau.innerHTML = '';
+    if (!groupes.length) {
+      $grille.innerHTML = '<div class="vide">Les ateliers seront affichés ici.</div>';
+      return;
+    }
+    if (indexGroupe >= groupes.length) indexGroupe = 0;
+    const groupe = groupes[indexGroupe];
+
+    const titre = document.createElement('span');
+    titre.textContent = groupe.horaire || 'Ateliers';
+    $bandeau.append(titre);
+    if (groupes.length > 1) {
+      const points = document.createElement('span');
+      points.className = 'points';
+      groupes.forEach((g, i) => {
+        const point = document.createElement('button');
+        point.className = 'point' + (i === indexGroupe ? ' actif' : '');
+        point.title = g.horaire;
+        point.addEventListener('click', () => {
+          indexGroupe = i;
+          rendre();
+        });
+        points.append(point);
+      });
+      $bandeau.append(points);
+    }
+
+    groupe.ateliers.forEach((a) => $grille.append(carteAtelier(a, nouveaux.has(a.id))));
+  }
 
   function afficher(ateliers) {
     ateliers.sort(
@@ -42,74 +153,38 @@
         String(a.horaire || '').localeCompare(String(b.horaire || '')) ||
         String(a.salle || '').localeCompare(String(b.salle || '')),
     );
-    $grille.innerHTML = '';
-    if (!ateliers.length) {
-      $grille.innerHTML = '<div class="vide">Les ateliers seront affichés ici.</div>';
-      return;
-    }
-
+    const nouveaux = new Set();
     ateliers.forEach((a) => {
-      const carte = document.createElement('div');
-      carte.className = 'atelier';
-      const nouveauTirage = a.statut === 'tire' && !dejaTires.has(a.id) && !premierAffichage;
+      if (a.statut === 'tire' && !dejaTires.has(a.id) && !premierAffichage) nouveaux.add(a.id);
       if (a.statut === 'tire') dejaTires.add(a.id);
-      if (nouveauTirage) carte.classList.add('vient-d-etre-tire');
-
-      const haut = document.createElement('div');
-      haut.className = 'haut';
-      const salle = document.createElement('span');
-      salle.className = 'salle';
-      salle.textContent = a.salle || '?';
-      const bloc = document.createElement('div');
-      const nom = document.createElement('div');
-      nom.className = 'nom';
-      nom.textContent = a.nom || '';
-      const horaire = document.createElement('div');
-      horaire.className = 'horaire';
-      horaire.textContent = a.horaire || '';
-      bloc.append(nom, horaire);
-      haut.append(salle, bloc);
-      carte.append(haut);
-
-      if (a.statut === 'tire') {
-        const liste = document.createElement('ol');
-        liste.className = 'retenus';
-        (a.retenus || []).forEach((r, i) => {
-          const li = document.createElement('li');
-          // Cascade d'apparition uniquement pour un tirage qui vient d'arriver.
-          li.style.animationDelay = nouveauTirage ? `${0.3 + i * 0.35}s` : '0s';
-          const fort = document.createElement('strong');
-          fort.textContent = `${r.prenom || ''} ${(r.nom || '').toUpperCase()}`.trim();
-          li.append(fort);
-          if (r.organisme) {
-            const org = document.createElement('span');
-            org.className = 'org';
-            org.textContent = ` — ${r.organisme}`;
-            li.append(org);
-          }
-          liste.append(li);
-        });
-        carte.append(liste);
-        if ((a.listeAttente || []).length) {
-          const attente = document.createElement('div');
-          attente.className = 'attente-liste';
-          attente.textContent =
-            "Liste d'attente : " +
-            (a.listeAttente || [])
-              .map((r, i) => `${i + 1}. ${r.prenom || ''} ${(r.nom || '').toUpperCase()}`.trim())
-              .join(' · ');
-          carte.append(attente);
-        }
-      } else {
-        const etat = document.createElement('div');
-        etat.className = 'etat';
-        etat.textContent = '⏳ Tirage au sort à venir — résultats affichés ici en direct.';
-        carte.append(etat);
-      }
-      $grille.append(carte);
     });
+    groupes = grouper(ateliers);
+    if (nouveaux.size) {
+      const idx = groupes.findIndex((g) => g.ateliers.some((a) => nouveaux.has(a.id)));
+      if (idx >= 0) indexGroupe = idx;
+    }
     premierAffichage = false;
+    rendre(nouveaux);
   }
+
+  // Rotation automatique entre les créneaux ; ◀ ▶ au clavier pour la main.
+  setInterval(() => {
+    if (groupes.length > 1) {
+      indexGroupe = (indexGroupe + 1) % groupes.length;
+      rendre();
+    }
+  }, 12000);
+  document.addEventListener('keydown', (e) => {
+    if (!groupes.length) return;
+    if (e.key === 'ArrowRight') {
+      indexGroupe = (indexGroupe + 1) % groupes.length;
+      rendre();
+    }
+    if (e.key === 'ArrowLeft') {
+      indexGroupe = (indexGroupe + groupes.length - 1) % groupes.length;
+      rendre();
+    }
+  });
 
   async function demarrer() {
     const params = new URLSearchParams(location.search);

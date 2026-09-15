@@ -53,14 +53,35 @@
       font-size: clamp(1.3rem, 2.8vw, 2.3rem);
       margin: 0.15rem 0 0;
     }
+    .bandeau-creneau {
+      text-align: center;
+      margin-bottom: 1.4vh;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--or);
+      font-size: clamp(0.95rem, 1.9vw, 1.5rem);
+    }
+    .bandeau-creneau .points { margin-left: 0.9rem; }
+    .bandeau-creneau .point {
+      width: 0.75em;
+      height: 0.75em;
+      border-radius: 50%;
+      border: 1px solid var(--or);
+      background: transparent;
+      margin: 0 0.22em;
+      padding: 0;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .bandeau-creneau .point.actif { background: var(--or); }
     #grille {
       flex: 1;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      display: flex;
       gap: 1.2rem;
+      align-items: stretch;
       overflow: auto;
-      align-content: start;
     }
+    #grille .atelier { flex: 1 1 0; min-width: 0; }
     .atelier {
       background: var(--voile);
       border: 1px solid var(--bord);
@@ -84,7 +105,9 @@
     .atelier .horaire { font-size: clamp(0.75rem, 1.3vw, 1rem); opacity: 0.8; }
     .atelier .nom { font-weight: 700; font-size: clamp(0.9rem, 1.6vw, 1.25rem); line-height: 1.25; }
     .atelier .etat { margin-top: 0.8rem; opacity: 0.7; font-size: clamp(0.85rem, 1.4vw, 1.05rem); }
-    ol.retenus { margin: 0.7rem 0 0; padding-left: 1.6em; font-size: clamp(0.85rem, 1.5vw, 1.15rem); }
+    ol.retenus { margin: 0.7rem 0 0; padding-left: 1.6em; font-size: clamp(0.8rem, 1.35vw, 1.05rem); }
+    ol.retenus.colonnes { columns: 2; column-gap: 1.6rem; }
+    ol.retenus.colonnes li { break-inside: avoid; }
     ol.retenus li { margin-bottom: 0.15em; opacity: 0; animation: apparaitre 0.4s ease forwards; }
     @keyframes apparaitre { to { opacity: 1; } }
     ol.retenus li strong { color: var(--or); font-weight: 700; }
@@ -103,6 +126,7 @@
       <div class="surtitre" id="surtitre">Journées d'études</div>
       <h1 id="titre">Ateliers — participants retenus</h1>
     </div>
+    <div id="bandeau-creneau" class="bandeau-creneau"></div>
     <div id="grille"><div class="vide">Connexion…</div></div>
   </div>
   <div class="aide">double-clic : plein écran</div>
