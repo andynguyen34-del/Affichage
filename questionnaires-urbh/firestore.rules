@@ -151,6 +151,32 @@ service cloud.firestore {
     match /ateliers/{atelierId} {
       allow get, list: if connecte();
       allow write: if isAdmin();
+      // Désistement d'un retenu depuis le portail : il se retire de la liste
+      // des retenus et le premier de la liste d'attente est promu. Seules ces
+      // deux listes peuvent changer, et exactement une personne sort au
+      // total — impossible d'ajouter qui que ce soit.
+      allow update: if connecte()
+        && resource.data.statut == 'tire'
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['retenus', 'listeAttente'])
+        && request.resource.data.retenus.size() <= resource.data.retenus.size()
+        && request.resource.data.retenus.size() + request.resource.data.listeAttente.size()
+           == resource.data.retenus.size() + resource.data.listeAttente.size() - 1;
+    }
+
+    // Trace d'un désistement d'atelier (une par personne et par atelier),
+    // avec la personne promue depuis la liste d'attente : l'administration
+    // y retrouve qui prévenir par SMS.
+    match /desistements/{desistementId} {
+      allow create: if connecte()
+        && desistementId == request.resource.data.atelierId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['atelierId', 'journeeId', 'participantId', 'nom', 'prenom',
+              'organisme', 'promuId', 'promuNom', 'promuPrenom', 'creeLe']);
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
     }
 
     // Vœu d'inscription à un atelier. Identifiant imposé

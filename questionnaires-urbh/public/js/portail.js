@@ -1062,7 +1062,10 @@
         const retenu = (a.retenus || []).some((r) => r.participantId === uid);
         const posAttente = (a.listeAttente || []).findIndex((r) => r.participantId === uid);
         if (retenu) {
-          etat = `<div class="info">🎉 Vous êtes retenu pour cet atelier — rendez-vous salle ${echapper(a.salle)}, ${echapper(a.horaire || '')}.</div>`;
+          etat = `<div class="info">🎉 Vous êtes retenu pour cet atelier — rendez-vous salle ${echapper(a.salle)}, ${echapper(a.horaire || '')}.
+            <span class="muet petit">Empêché ? Libérez votre place : elle sera
+            aussitôt proposée à la personne suivante de la liste d'attente.</span></div>`;
+          action = `<button class="secondaire bouton-liberer-place" data-id="${attr(a.id)}">Je libère ma place</button>`;
         } else if (posAttente >= 0) {
           etat = `<div class="info">Vous êtes en liste d'attente (position ${posAttente + 1}) : présentez-vous à la salle, une place peut se libérer.</div>`;
         } else if (inscrit) {
@@ -1193,6 +1196,60 @@
           vueMenu();
         } catch (_) {
           erreurAtelier('La désinscription a échoué (inscriptions closes ?).');
+          b.disabled = false;
+        }
+      }),
+    );
+
+    // Un retenu libère sa place : il sort de la liste des retenus et le
+    // premier de la liste d'attente est promu à sa place (il en est averti
+    // par la notification de l'application, et l'administration reçoit son
+    // mobile pour le prévenir par SMS). Définitif : pas de reprise de place.
+    document.querySelectorAll('.bouton-liberer-place').forEach((b) =>
+      b.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Libérer votre place à cet atelier ? Elle sera aussitôt proposée à ' +
+              'la personne suivante sur la liste d’attente — vous ne pourrez pas la reprendre.',
+          )
+        ) {
+          return;
+        }
+        b.disabled = true;
+        try {
+          const ref = db.collection('ateliers').doc(b.dataset.id);
+          const doc = await ref.get();
+          if (!doc.exists) throw new Error('atelier introuvable');
+          const a = doc.data();
+          const retenusActuels = a.retenus || [];
+          if (!retenusActuels.some((r) => r.participantId === uid)) {
+            vueMenu();
+            return;
+          }
+          const nouveauxRetenus = retenusActuels.filter((r) => r.participantId !== uid);
+          const attente = [...(a.listeAttente || [])];
+          const promu = attente.shift() || null;
+          if (promu) nouveauxRetenus.push(promu);
+          await ref.update({ retenus: nouveauxRetenus, listeAttente: attente });
+          try {
+            await db.collection('desistements').doc(b.dataset.id + '_' + uid).set({
+              atelierId: b.dataset.id,
+              journeeId,
+              participantId: uid,
+              nom: profil.nom,
+              prenom: profil.prenom,
+              organisme: profil.organisme || '',
+              promuId: promu ? promu.participantId : '',
+              promuNom: promu ? promu.nom || '' : '',
+              promuPrenom: promu ? promu.prenom || '' : '',
+              creeLe: new Date().toISOString(),
+            });
+          } catch (_) {
+            /* trace facultative : la place est déjà libérée */
+          }
+          vueMenu();
+        } catch (e) {
+          erreurAtelier('La libération de la place a échoué. Réessayez.' + detailErreur(e));
           b.disabled = false;
         }
       }),

@@ -184,10 +184,15 @@
     const numero = docProfil.exists ? docProfil.data().numeroInscription || '' : '';
 
     const maj = [];
-    for (const col of ['inscriptions', 'tirage', 'voeux', 'visites', 'pointages']) {
+    for (const col of ['inscriptions', 'tirage', 'voeux', 'visites', 'pointages', 'desistements']) {
       const snap = await db.collection(col).where('participantId', '==', uidCible).get();
       snap.docs.forEach((d) => maj.push({ ref: d.ref, donnees: vide }));
     }
+    // Désistements où la personne apparaît comme promue.
+    const snapPromu = await db.collection('desistements').where('promuId', '==', uidCible).get();
+    snapPromu.docs.forEach((d) =>
+      maj.push({ ref: d.ref, donnees: { promuNom: 'Anonymisé', promuPrenom: '' } }),
+    );
     // Gagnants annoncés sur les portails (tirage au sort et tombola).
     const snapPo = await db.collection('portails').get();
     snapPo.docs.forEach((d) => {
@@ -687,6 +692,15 @@
     // présence en salle au moment du tirage).
     const snapPt = await db.collection('pointages').where('journeeId', '==', journeeId).get();
     const pointagesJ = snapPt.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Désistements d'ateliers (place libérée → promu depuis la liste
+    // d'attente, à prévenir par SMS).
+    const snapDe2 = await db.collection('desistements').where('journeeId', '==', journeeId).get();
+    const desistementsJ = snapDe2.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const desistementsParAtelier = {};
+    desistementsJ.forEach((d) => {
+      (desistementsParAtelier[d.atelierId] = desistementsParAtelier[d.atelierId] || []).push(d);
+    });
     const parMoment = { ouverture: new Set(), ag: new Set(), tombola: new Set() };
     pointagesJ.forEach((p) => {
       if (parMoment[p.moment]) parMoment[p.moment].add(p.participantId);
@@ -1132,7 +1146,21 @@
                                     .join(' · ')}
                                 </div>`
                               : ''
-                          }`
+                          }
+                          ${(desistementsParAtelier[a.id] || [])
+                            .map((de) => {
+                              const voeuPromu = voeux.find((v) => v.participantId === de.promuId);
+                              const mobilePromu = voeuPromu ? voeuPromu.mobile || '' : '';
+                              const sms = mobilePromu
+                                ? `sms:${attr(mobilePromu)}?body=${encodeURIComponent(
+                                    `URBH : une place s'est libérée, vous êtes retenu pour l'atelier « ${a.nom} », salle ${a.salle}, ${a.horaire || ''}. Ouvrez l'application pour voir votre place (ou la libérer à votre tour).`,
+                                  )}`
+                                : '';
+                              return `<div class="muet petit">🔄 <s>${echapper(de.prenom)} ${echapper(de.nom)}</s>
+                                s'est désisté${de.promuNom ? ` → promu : <strong>${echapper(de.promuPrenom)} ${echapper(de.promuNom)}</strong>` : ' — liste d’attente épuisée, place vacante'}
+                                ${mobilePromu ? ` — 📱 <a href="${sms}">${echapper(mobilePromu)}</a> <span class="badge brouillon">SMS à envoyer</span>` : ''}</div>`;
+                            })
+                            .join('')}`
                         : ''
                     }
                   </div>`;
@@ -2322,6 +2350,7 @@
         ...fournisseursJ.map((f) => db.collection('fournisseurs').doc(f.id)),
         ...visitesJ.map((v) => db.collection('visites').doc(v.id)),
         ...pointagesJ.map((p) => db.collection('pointages').doc(p.id)),
+        ...desistementsJ.map((d) => db.collection('desistements').doc(d.id)),
         refPortail,
         db.collection('journees').doc(journeeId),
       ];
