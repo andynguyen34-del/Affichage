@@ -1483,6 +1483,21 @@
     navigator.serviceWorker.register('sw.js').catch(() => {
       /* hors hébergement HTTPS : sans gravité */
     });
+    // Dès qu'une nouvelle version de l'application prend la main (nouveau
+    // service worker activé), la page se recharge toute seule : le téléphone
+    // ne reste jamais bloqué sur une ancienne version.
+    let dejaControle = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (dejaControle) location.reload();
+      dejaControle = true;
+    });
+    // Au retour au premier plan (application rouverte depuis la mémoire du
+    // téléphone), on vérifie qu'une mise à jour n'attend pas.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        navigator.serviceWorker.getRegistration().then((reg) => reg && reg.update()).catch(() => {});
+      }
+    });
   }
 
   let promptInstallation = null;
