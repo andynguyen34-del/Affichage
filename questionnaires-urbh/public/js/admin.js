@@ -1086,10 +1086,13 @@
                     <div>
                       <span class="titre-item">${echapper(f.nom)}</span>
                       ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
+                      ${f.nouveau ? '<span class="badge brouillon">🆕 nouveau</span>' : ''}
                       <span class="badge ouvert">${(visitesParFournisseur[f.id] || []).length} passage(s)</span>
                       ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
                     </div>
                     <div class="pousse">
+                      <button class="discret bouton-basculer-nouveau" data-id="${attr(f.id)}">
+                        ${f.nouveau ? 'Retirer « nouveau »' : 'Marquer 🆕 nouveau'}</button>
                       <button class="discret bouton-csv-fournisseur" data-id="${attr(f.id)}"
                         ${(visitesParFournisseur[f.id] || []).length ? '' : 'disabled'}>CSV visiteurs</button>
                       <button class="discret bouton-supprimer-fournisseur" data-id="${attr(f.id)}">Supprimer</button>
@@ -1107,10 +1110,21 @@
             <input id="fo-stand" placeholder="Ex. : 12" style="max-width:8rem"></label>
           <label class="champ">Description / activité
             <input id="fo-description" placeholder="Ex. : matériel de blanchisserie"></label>
+          <label class="champ" style="font-weight:normal">
+            <input type="checkbox" id="fo-nouveau" style="display:inline;width:auto">
+            🆕 Nouveau fournisseur — mis en avant sur le portail (avec son n° de stand)</label>
           <div class="ligne-boutons">
             <button type="submit">Ajouter le fournisseur</button>
           </div>
         </form>
+        <h3>Importer une liste (Excel ou CSV)</h3>
+        <p class="muet petit">Importez la liste des fournisseurs avec leur stand,
+        puis la liste des <strong>nouveaux</strong> fournisseurs en cochant
+        « marquer comme nouveaux » : un fournisseur déjà présent (même nom)
+        est simplement mis à jour et mis en avant, pas créé en double.</p>
+        <label class="champ">Fichier (.xlsx ou .csv)
+          <input type="file" id="fo-fichier" accept=".xlsx,.xls,.csv"></label>
+        <div id="fo-zone-mapping"></div>
       </div>
 
       <div class="carte">
@@ -1764,9 +1778,125 @@
         nom: document.getElementById('fo-nom').value.trim(),
         stand: document.getElementById('fo-stand').value.trim(),
         description: document.getElementById('fo-description').value.trim(),
+        nouveau: document.getElementById('fo-nouveau').checked,
         creeLe: firebase.firestore.FieldValue.serverTimestamp(),
       });
       router();
+    });
+
+    document.querySelectorAll('.bouton-basculer-nouveau').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const f = fournisseursJ.find((x) => x.id === b.dataset.id);
+        if (!f) return;
+        await db.collection('fournisseurs').doc(f.id).update({ nouveau: !f.nouveau });
+        router();
+      }),
+    );
+
+    // Import de la liste des fournisseurs (nom / stand / description) depuis
+    // un fichier Excel ou CSV : les fournisseurs déjà présents (même nom)
+    // sont mis à jour, pas dupliqués — pratique pour la liste des nouveaux.
+    const champFichierFo = document.getElementById('fo-fichier');
+    champFichierFo.addEventListener('change', async () => {
+      const fichier = champFichierFo.files[0];
+      if (!fichier) return;
+      if (!window.XLSX) {
+        alert('La bibliothèque de lecture Excel ne s’est pas chargée : vérifiez la connexion internet.');
+        return;
+      }
+      const tampon = await fichier.arrayBuffer();
+      const classeur = XLSX.read(tampon);
+      const feuille = classeur.Sheets[classeur.SheetNames[0]];
+      const lignes = XLSX.utils
+        .sheet_to_json(feuille, { header: 1, raw: false, defval: '' })
+        .filter((l) => l.some((v) => String(v).trim() !== ''));
+      if (!lignes.length) return;
+
+      const nbCols = Math.max(...lignes.map((l) => l.length));
+      const lettre = (i) => String.fromCharCode(65 + (i % 26));
+      // Pré-sélection d'après la ligne d'en-têtes si elle existe.
+      const entetes = lignes[0].map((v) => String(v).trim().toLowerCase());
+      const chercher = (mots) => entetes.findIndex((e) => mots.some((m) => e.includes(m)));
+      const enTete = chercher(['nom', 'fournisseur', 'société', 'societe', 'stand']) >= 0;
+      const preNom = chercher(['nom', 'fournisseur', 'société', 'societe']);
+      const preStand = chercher(['stand', 'n°', 'numéro', 'numero', 'emplacement']);
+      const preDesc = chercher(['description', 'activité', 'activite', 'produit']);
+
+      const options = (selection, avecAucune) => {
+        let html = avecAucune ? `<option value="-1">— aucune —</option>` : '';
+        for (let c = 0; c < nbCols; c += 1) {
+          const exemple = (lignes[enTete ? 1 : 0] || [])[c] || '';
+          html += `<option value="${c}" ${c === selection ? 'selected' : ''}>Colonne ${lettre(c)} — ex. « ${echapper(String(exemple).slice(0, 25))} »</option>`;
+        }
+        return html;
+      };
+
+      document.getElementById('fo-zone-mapping').innerHTML = `
+        <label class="champ">Colonne du nom *
+          <select id="fo-col-nom">${options(preNom >= 0 ? preNom : 0, false)}</select></label>
+        <label class="champ">Colonne du n° de stand
+          <select id="fo-col-stand">${options(preStand, true)}</select></label>
+        <label class="champ">Colonne de la description
+          <select id="fo-col-desc">${options(preDesc, true)}</select></label>
+        <label class="champ" style="font-weight:normal">
+          <input type="checkbox" id="fo-entetes" style="display:inline;width:auto" ${enTete ? 'checked' : ''}>
+          La première ligne contient les en-têtes (ignorée)</label>
+        <label class="champ" style="font-weight:normal">
+          <input type="checkbox" id="fo-import-nouveaux" style="display:inline;width:auto">
+          🆕 Marquer ces fournisseurs comme <strong>nouveaux</strong> (mis en avant sur le portail)</label>
+        <div class="ligne-boutons">
+          <button type="button" id="fo-importer">Importer ${lignes.length - (enTete ? 1 : 0)} fournisseur(s)</button>
+        </div>
+        <div id="fo-resultat"></div>`;
+
+      document.getElementById('fo-importer').addEventListener('click', async () => {
+        const colNom = Number(document.getElementById('fo-col-nom').value);
+        const colStand = Number(document.getElementById('fo-col-stand').value);
+        const colDesc = Number(document.getElementById('fo-col-desc').value);
+        const nouveaux = document.getElementById('fo-import-nouveaux').checked;
+        const corps = document.getElementById('fo-entetes').checked ? lignes.slice(1) : lignes;
+        const parNom = {};
+        fournisseursJ.forEach((f) => {
+          parNom[(f.nom || '').trim().toLowerCase()] = f;
+        });
+        let ajoutes = 0;
+        let maj = 0;
+        const dejaAjoutes = new Set();
+        const lot = db.batch();
+        corps.forEach((l) => {
+          const nom = String(l[colNom] || '').trim();
+          if (!nom) return;
+          const cle = nom.toLowerCase();
+          const stand = colStand >= 0 ? String(l[colStand] || '').trim() : '';
+          const description = colDesc >= 0 ? String(l[colDesc] || '').trim() : '';
+          const existant = parNom[cle];
+          if (existant) {
+            const donnees = {};
+            if (stand) donnees.stand = stand;
+            if (description) donnees.description = description;
+            if (nouveaux) donnees.nouveau = true;
+            if (Object.keys(donnees).length) {
+              lot.update(db.collection('fournisseurs').doc(existant.id), donnees);
+              maj += 1;
+            }
+          } else if (!dejaAjoutes.has(cle)) {
+            lot.set(db.collection('fournisseurs').doc(), {
+              journeeId,
+              nom,
+              stand,
+              description,
+              nouveau: nouveaux,
+              creeLe: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            ajoutes += 1;
+            dejaAjoutes.add(cle);
+          }
+        });
+        await lot.commit();
+        document.getElementById('fo-resultat').innerHTML =
+          `<div class="info">✅ ${ajoutes} fournisseur(s) ajouté(s), ${maj} mis à jour${nouveaux ? ' — marqués 🆕 nouveaux' : ''}.</div>`;
+        setTimeout(router, 1200);
+      });
     });
 
     document.querySelectorAll('.bouton-supprimer-fournisseur').forEach((b) =>

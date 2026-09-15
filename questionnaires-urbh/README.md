@@ -110,7 +110,14 @@ coordonnées avec ce fournisseur. L'administration suit les passages par
 stand et **exporte pour chaque fournisseur la liste de ses visiteurs**
 (CSV : identité, établissement, mobile, e-mail). Le portail offre aussi la
 **recherche d'exposants** (nom, stand, activité) avec le fil de ses propres
-passages.
+passages. La liste des fournisseurs s'**importe depuis un fichier Excel ou
+CSV** (nom, n° de stand, description — correspondance des colonnes
+pré-détectée) ; un second import de la liste des **nouveaux fournisseurs**
+(case « marquer comme nouveaux ») les met en avant sur le portail — bandeau
+« 🆕 Nouveaux exposants à découvrir » avec leur n° de stand, badge dans la
+recherche — sans créer de doublons. Le **plan de l'exposition** s'affiche
+dans la carte Exposants dès que l'image `public/plan-exposition.png` est
+déployée avec le site (touchez le plan pour l'agrandir).
 
 **Questionnaires.** Créés par journée à partir de modèles :
 

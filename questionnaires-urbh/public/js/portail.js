@@ -607,6 +607,7 @@
               <div>
                 <span class="titre-item">${echapper(f.nom)}</span>
                 ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
+                ${f.nouveau ? '<span class="badge brouillon">🆕 nouveau</span>' : ''}
                 ${standsVisites.has(f.id) ? '<span class="badge ouvert">✓ visité</span>' : ''}
                 ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
               </div>
@@ -616,6 +617,9 @@
         '</ul>'
       );
     }
+
+    // Nouveaux fournisseurs, mis en avant en tête de la carte Exposants.
+    const nouveauxFournisseurs = fournisseurs.filter((f) => f.nouveau);
 
     // Tombola de clôture : lots offerts par les fournisseurs, gagnants et
     // points de présence (pointages) du participant.
@@ -793,6 +797,24 @@
               <h2>🏭 Exposants${standsVisites.size ? ` <span class="badge ouvert">${standsVisites.size} stand${standsVisites.size > 1 ? 's' : ''} visité${standsVisites.size > 1 ? 's' : ''}</span>` : ''}</h2>
               <p class="muet petit">Scannez le QR code affiché sur un stand pour
               enregistrer votre passage et laisser vos coordonnées au fournisseur.</p>
+              ${
+                nouveauxFournisseurs.length
+                  ? `<div class="info">🆕 <strong>Nouveaux exposants à découvrir :</strong>
+                      ${nouveauxFournisseurs
+                        .map(
+                          (f) =>
+                            `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`,
+                        )
+                        .join(' · ')}</div>`
+                  : ''
+              }
+              <div id="zone-plan-expo" hidden style="margin:0.6rem 0">
+                <a href="plan-exposition.png" target="_blank" rel="noopener">
+                  <img id="img-plan-expo" src="plan-exposition.png" alt="Plan de l'exposition"
+                    style="width:100%;border:1px solid var(--bord);border-radius:8px"></a>
+                <p class="muet petit" style="margin:0.2rem 0 0">🗺️ Plan de l'exposition —
+                touchez-le pour l'agrandir.</p>
+              </div>
               <input id="recherche-exposant" placeholder="🔍 Rechercher un fournisseur, un stand…"
                 style="width:100%;font:inherit;padding:0.5rem 0.6rem;border:1px solid var(--bord);border-radius:8px;margin-bottom:0.6rem">
               <div id="liste-exposants">${htmlExposants('')}</div>
@@ -883,6 +905,20 @@
           boutonAnonymisation.disabled = false;
         }
       });
+    }
+
+    // Le plan de l'exposition ne s'affiche que si l'image est bien publiée
+    // sur le site (fichier public/plan-exposition.png).
+    const imgPlan = document.getElementById('img-plan-expo');
+    if (imgPlan) {
+      const zonePlan = document.getElementById('zone-plan-expo');
+      if (imgPlan.complete && imgPlan.naturalWidth > 0) zonePlan.hidden = false;
+      else {
+        imgPlan.addEventListener('load', () => {
+          zonePlan.hidden = false;
+        });
+        imgPlan.addEventListener('error', () => zonePlan.remove());
+      }
     }
 
     const champRecherche = document.getElementById('recherche-exposant');
