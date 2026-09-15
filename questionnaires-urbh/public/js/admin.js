@@ -192,8 +192,15 @@
   // Anonymisation d'un participant (droit à l'effacement) : efface l'identité
   // dans toutes les collections, retire sa fiche de l'annuaire, puis marque la
   // demande « traitée » — le participant voit la confirmation dans son app.
+  //
+  // Le N° DE CARTE est volontairement CONSERVÉ : seul son détenteur le
+  // connaît, et c'est lui qui valide la fiche — si la personne revient
+  // volontairement s'inscrire avec sa carte, elle retrouve sa fiche
+  // (l'inscription étant identifiée par le numéro). Sans ce retour, le
+  // numéro seul ne permet plus de l'identifier : le nom est retiré de
+  // l'annuaire de l'application au passage.
   async function anonymiserParticipant(uidCible) {
-    const vide = { nom: 'Anonymisé', prenom: '', organisme: '', email: '', mobile: '', numeroInscription: '' };
+    const vide = { nom: 'Anonymisé', prenom: '', organisme: '', email: '', mobile: '' };
     const refProfil = db.collection('participants').doc(uidCible);
     const docProfil = await refProfil.get();
     const numero = docProfil.exists ? docProfil.data().numeroInscription || '' : '';
@@ -359,8 +366,11 @@
               participant dans toute la base (profil, inscriptions, tirage,
               ateliers, passages sur les stands, annuaire) — ses réponses aux
               questionnaires sont conservées de façon anonyme — puis affiche la
-              confirmation dans son application. Pensez à répercuter la
-              suppression dans les exports CSV déjà transmis le cas échéant.</p>`
+              confirmation dans son application. Le <strong>n° de carte est
+              conservé</strong> : seul son détenteur le connaît, et s'il
+              revient volontairement s'inscrire avec sa carte, il retrouve sa
+              fiche. Pensez à répercuter la suppression dans les exports CSV
+              déjà transmis le cas échéant.</p>`
             : `<p class="muet">Aucune demande d'anonymisation.</p>`
         }
       </div>

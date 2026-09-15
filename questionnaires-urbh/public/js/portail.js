@@ -1723,6 +1723,8 @@
           <strong>${echapper(new Date(traiteLe).toLocaleDateString('fr-FR'))}</strong> :
           vos données personnelles ont été supprimées de l'application. Vos
           réponses aux questionnaires sont conservées de façon anonyme.</p>
+          <p class="muet petit">Si vous changez d'avis, réinscrivez-vous avec
+          le n° de votre carte : vous retrouverez votre fiche.</p>
           <div class="ligne-boutons">
             <button id="bouton-reinscription" class="secondaire">Me réinscrire</button>
           </div>`,
