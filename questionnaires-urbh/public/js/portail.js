@@ -1623,8 +1623,38 @@
   // L'application s'installe sur l'écran d'accueil : bouton natif sur
   // Android/Chrome, mode d'emploi sur iPhone (Safari impose le geste manuel).
 
+  // Sonde de version : interroge le serveur en contournant TOUS les caches
+  // (argument t= unique + no-store). Si une version plus récente est en
+  // ligne, la page se recharge une seule fois — le service worker, lui aussi
+  // remis à neuf, resservira alors les fichiers frais.
+  async function verifierVersion() {
+    try {
+      const rep = await fetch('js/firebase-config.js?t=' + Date.now(), { cache: 'no-store' });
+      const texte = await rep.text();
+      const m = texte.match(/APP_BUILD\s*=\s*(\d+)/);
+      if (m && Number(m[1]) > (window.APP_BUILD || 0)) {
+        const cle = 'urbh_rechargement_v' + m[1];
+        if (!sessionStorage.getItem(cle)) {
+          sessionStorage.setItem(cle, '1');
+          if ('serviceWorker' in navigator) {
+            try {
+              const reg = await navigator.serviceWorker.getRegistration();
+              if (reg) await reg.update();
+            } catch (_) {
+              /* sans gravité */
+            }
+          }
+          location.reload();
+        }
+      }
+    } catch (_) {
+      /* hors ligne : sans gravité */
+    }
+  }
+  verifierVersion();
+
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {
       /* hors hébergement HTTPS : sans gravité */
     });
     // Dès qu'une nouvelle version de l'application prend la main (nouveau
@@ -1640,6 +1670,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         navigator.serviceWorker.getRegistration().then((reg) => reg && reg.update()).catch(() => {});
+        verifierVersion();
       }
     });
   }

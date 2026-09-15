@@ -11,7 +11,7 @@
 // Le numéro de version doit suivre APP_BUILD (firebase-config.js) : le
 // changer invalide l'ancien cache au déploiement suivant.
 
-const CACHE = 'urbh-v20';
+const CACHE = 'urbh-v21';
 
 const COQUILLE = [
   '/portail.html',
@@ -51,8 +51,16 @@ self.addEventListener('fetch', (evt) => {
   if (url.origin !== self.location.origin) return; // Firebase & CDN : toujours en direct
   if (url.pathname.startsWith('/__/')) return; // adresses réservées Firebase Hosting
 
+  // « cache: no-cache » force la revalidation auprès du serveur (réponse
+  // « 304 inchangé » quasi instantanée sinon) : aucun téléphone ne peut
+  // rester sur une ancienne version à cause du cache HTTP du navigateur.
+  const requeteFraiche =
+    requete.mode === 'navigate'
+      ? fetch(requete.url, { cache: 'no-cache' })
+      : fetch(requete, { cache: 'no-cache' });
+
   evt.respondWith(
-    fetch(requete)
+    requeteFraiche
       .then((reponse) => {
         const copie = reponse.clone();
         caches.open(CACHE).then((cache) => cache.put(requete, copie));
