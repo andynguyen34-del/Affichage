@@ -61,9 +61,11 @@
     let corps = '';
 
     if (q.type === 'echelle4') {
+      // Une question peut porter ses propres libellés (champ « libelles »),
+      // par exemple « Pas du tout satisfait … Très satisfait » des ateliers.
       corps =
         '<div class="echelle">' +
-        ECHELLE4.map(
+        (Array.isArray(q.libelles) && q.libelles.length === 4 ? q.libelles : ECHELLE4).map(
           (lib, i) =>
             `<label><input type="radio" name="${nom}" value="${i + 1}">${echapper(lib)}</label>`,
         ).join('') +

@@ -115,15 +115,29 @@ CSV** (nom, n° de stand, description — correspondance des colonnes
 pré-détectée) ; un second import de la liste des **nouveaux fournisseurs**
 (case « marquer comme nouveaux ») les met en avant sur le portail — bandeau
 « 🆕 Nouveaux exposants à découvrir » avec leur n° de stand, badge dans la
-recherche — sans créer de doublons. Le **plan de l'exposition** s'affiche
-dans la carte Exposants dès que l'image `public/plan-exposition.png` est
-déployée avec le site (touchez le plan pour l'agrandir).
+recherche — sans créer de doublons. Le **plan de l'exposition** (Cité des
+Congrès de Nantes, stands numérotés) est publié avec le site
+(`public/plan-exposition.png`) et s'affiche dans la carte Exposants du
+portail — touchez le plan pour l'agrandir. Le fichier
+`donnees/fournisseurs-stands-2026.xlsx` (87 fournisseurs et leurs stands,
+tiré du tableau des partenaires) est prêt à importer telle quelle dans la
+carte Fournisseurs.
 
 **Questionnaires.** Créés par journée à partir de modèles :
 
 - *Évaluation stagiaire (modèle URBH)* — reprend le questionnaire officiel
   des journées d'études : notation de 1 à 5, un bloc de cinq questions par
   conférence, organisation, bilan et intention de revenir ;
+- *Évaluation partenaires techniques (modèle URBH)* — le questionnaire
+  officiel des exposants : qualité/prix du stand, accompagnements,
+  organisation, intention de réserver en 2027 (à proposer aux exposants
+  uniquement) ;
+- *Ateliers 2026 (modèles URBH)* — un questionnaire par atelier
+  (« Développer ses applications métier avec l'IA », Maintenance,
+  RABC & IA) : grille de connaissances posée avant puis en fin de session
+  (preuve de progression), auto-évaluation, satisfaction sur l'échelle
+  « Pas du tout satisfait … Très satisfait » et questions qualitatives —
+  les corrigés restent dans les documents Word de l'animateur ;
 - *Évaluation à chaud* — organisation, contenu, intervenants, note /10,
   recommandation, remarques libres ;
 - *Évaluation à froid* — mise en pratique, utilité, besoins complémentaires ;

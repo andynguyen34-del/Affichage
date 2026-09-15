@@ -2229,8 +2229,12 @@
       resume = s.n
         ? `moyenne ${s.moyenne.toFixed(2)} / 4 — ${pourcent(s.satisfaits, s.n)} satisfaits`
         : 'aucune réponse';
+      // Certaines questions portent leurs propres libellés d'échelle
+      // (« Pas du tout satisfait … Très satisfait » des ateliers).
+      const libellesEchelle =
+        Array.isArray(q.libelles) && q.libelles.length === 4 ? q.libelles : ECHELLE4;
       corps = htmlBarres(
-        ECHELLE4.map((lib, i) => [lib, s.comptes[i]]),
+        libellesEchelle.map((lib, i) => [lib, s.comptes[i]]),
         s.n,
         ['n1', 'n2', 'n3', 'n4'],
       );
