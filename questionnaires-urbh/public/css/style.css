@@ -377,7 +377,14 @@ ul.liste a.btn.secondaire { color: var(--bleu); }
   cursor: pointer;
   text-align: center;
 }
-.bouton-outil:active { background: var(--bleu-clair); }
+/* Les états survol/focus généraux des boutons (fond bleu foncé) rendaient
+   le libellé illisible sur les tuiles après un appui : on les neutralise. */
+.bouton-outil:hover,
+.bouton-outil:focus,
+.bouton-outil:active {
+  background: var(--bleu-clair);
+  color: var(--bleu-fonce);
+}
 .outil-icone { font-size: 1.9rem; line-height: 1; }
 .outil-libelle { font-size: 0.92rem; line-height: 1.2; }
 .carte-outil .retour-accueil {

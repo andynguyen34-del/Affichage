@@ -1574,9 +1574,11 @@
       return;
     }
 
-    $sousTitre.textContent = [portail.titre, portail.date, portail.lieu]
-      .filter(Boolean)
-      .join(' — ');
+    // Bandeau sans redites : titre court (modifiable dans l'administration,
+    // champ « Titre court du portail »), dates seules en dessous.
+    const h1 = document.querySelector('header.appbar h1');
+    if (h1) h1.textContent = portail.titreCourt || 'URBH — 41ème JE NANTES';
+    $sousTitre.textContent = portail.date || '';
 
     if (modeSimu) installerBarreSimu();
 

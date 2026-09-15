@@ -737,6 +737,9 @@
         <form id="form-modif-journee" hidden style="margin-top:1rem">
           <label class="champ">Titre *
             <input id="jm-titre" required value="${attr(journee.titre)}"></label>
+          <label class="champ">Titre court du portail (bandeau bleu des participants)
+            <input id="jm-titre-court" value="${attr(portail.titreCourt || '')}"
+              placeholder="Ex. : URBH — 41ème JE NANTES"></label>
           <label class="champ">Date de début *
             <input id="jm-date" type="date" required value="${attr(journee.date)}"></label>
           <label class="champ">Date de fin (si plusieurs jours)
@@ -2174,6 +2177,7 @@
       await db.collection('journees').doc(journeeId).update(maj);
       await refPortail.update({
         titre: maj.titre,
+        titreCourt: document.getElementById('jm-titre-court').value.trim(),
         date: fmtPeriode(maj),
         lieu: maj.lieu,
       });
