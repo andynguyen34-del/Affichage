@@ -2881,6 +2881,90 @@
       });
   }
 
+  // -------------------------------------------------------- cartes repliables
+  // Un clic sur le titre d'un cadre le replie/déplie en entier ; les longues
+  // listes (fournisseurs, inscrits…) ont en plus leur propre repli partiel.
+  // L'état est mémorisé sur ce navigateur et survit aux rafraîchissements.
+
+  function cleRepli(texte) {
+    return (
+      'urbh_repli_' +
+      String(texte)
+        .toLowerCase()
+        .replace(/\d+/g, '') // les compteurs (« Inscrits (12) ») varient
+        .replace(/[^a-z]+/g, '-')
+        .slice(0, 60)
+    );
+  }
+
+  function rendreCartesRepliables() {
+    document.querySelectorAll('#app .carte').forEach((carte) => {
+      const h2 = carte.querySelector(':scope > h2');
+      if (!h2 || h2.dataset.repliable) return;
+      h2.dataset.repliable = '1';
+      const cle = cleRepli(h2.textContent);
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron-carte';
+      h2.prepend(chevron);
+      const appliquer = () => {
+        let replie = false;
+        try {
+          replie = localStorage.getItem(cle) === '1';
+        } catch (_) {
+          /* stockage indisponible */
+        }
+        carte.classList.toggle('repliee', replie);
+        chevron.textContent = replie ? '▸ ' : '▾ ';
+      };
+      appliquer();
+      h2.addEventListener('click', (evt) => {
+        if (evt.target.closest('button, a, input, select')) return;
+        try {
+          localStorage.setItem(cle, carte.classList.contains('repliee') ? '0' : '1');
+        } catch (_) {
+          /* stockage indisponible */
+        }
+        appliquer();
+      });
+    });
+
+    // Repli partiel : uniquement la liste, le reste du cadre reste visible.
+    document.querySelectorAll('#app .carte ul.liste').forEach((liste, i) => {
+      if (liste.dataset.repliable) return;
+      const nb = liste.children.length;
+      if (nb < 6) return;
+      liste.dataset.repliable = '1';
+      const carte = liste.closest('.carte');
+      const h2 = carte ? carte.querySelector(':scope > h2') : null;
+      const cle = cleRepli((h2 ? h2.textContent : 'liste') + '-liste-' + i);
+      const bouton = document.createElement('button');
+      bouton.type = 'button';
+      bouton.className = 'discret repli-liste';
+      liste.parentNode.insertBefore(bouton, liste);
+      const appliquer = () => {
+        let replie = false;
+        try {
+          replie = localStorage.getItem(cle) === '1';
+        } catch (_) {
+          /* stockage indisponible */
+        }
+        liste.hidden = replie;
+        bouton.textContent = replie
+          ? `▸ Afficher la liste (${nb})`
+          : `▾ Replier la liste (${nb})`;
+      };
+      appliquer();
+      bouton.addEventListener('click', () => {
+        try {
+          localStorage.setItem(cle, liste.hidden ? '0' : '1');
+        } catch (_) {
+          /* stockage indisponible */
+        }
+        appliquer();
+      });
+    });
+  }
+
   // ------------------------------------------------------------------ routeur
 
   async function router() {
@@ -2895,6 +2979,7 @@
     } catch (e) {
       vueErreur(e);
     }
+    rendreCartesRepliables();
     window.scrollTo(0, 0);
   }
 

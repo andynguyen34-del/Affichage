@@ -433,3 +433,11 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
 #carte-installation .carte h2 { margin-bottom: 0.25rem; font-size: 0.92rem; }
 #carte-installation .carte p { margin: 0.2rem 0; }
 #bouton-quitter { padding: 0.35rem 0.9rem; font-size: 0.85rem; }
+
+/* ---- Administration : cadres repliables (complet) et listes (partiel) ---- */
+#app .carte > h2 { cursor: pointer; user-select: none; }
+.chevron-carte { color: var(--bleu); font-size: 0.85em; }
+.carte.repliee { padding-bottom: 0.6rem; }
+.carte.repliee > :not(h2) { display: none !important; }
+.carte.repliee > h2 { margin-bottom: 0; }
+.repli-liste { display: block; margin: 0.1rem 0 0.3rem; padding-left: 0; }
