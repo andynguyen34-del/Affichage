@@ -661,7 +661,46 @@
       .collection('inscriptions')
       .where('journeeId', '==', journeeId)
       .get();
-    const inscriptions = snapI.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let inscriptions = snapI.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Correction automatique des doublons : les anciennes versions du portail
+    // créaient une fiche PAR SESSION de navigateur (même personne inscrite
+    // plusieurs fois). À chaque ouverture de cette page, les fiches d'un même
+    // n° de carte sont fusionnées (première venue conservée, accès
+    // additionnés, dernier accès le plus récent) et les fiches en trop
+    // supprimées — seul l'administrateur a le droit de faire ce ménage.
+    const fichesParNumero = new Map();
+    inscriptions.forEach((i) => {
+      const cle = normaliserNumero(i.numeroInscription);
+      if (!cle) return;
+      if (!fichesParNumero.has(cle)) fichesParNumero.set(cle, []);
+      fichesParNumero.get(cle).push(i);
+    });
+    for (const [cle, groupe] of fichesParNumero) {
+      if (groupe.length < 2) continue;
+      // On garde en priorité la fiche « officielle » (identifiée par le
+      // numéro de carte), sinon la plus récemment utilisée.
+      groupe.sort((a, b) =>
+        String(b.dernierAccesLe || '').localeCompare(String(a.dernierAccesLe || '')),
+      );
+      const garde = groupe.find((i) => i.id === journeeId + '_' + cle) || groupe[0];
+      const fusion = {
+        creeLe: groupe.map((i) => i.creeLe).filter(Boolean).sort()[0] || garde.creeLe || '',
+        dernierAccesLe: groupe.map((i) => i.dernierAccesLe).filter(Boolean).sort().pop() || '',
+        nbAcces: groupe.reduce((somme, i) => somme + (Number(i.nbAcces) || 0), 0),
+      };
+      try {
+        await db.collection('inscriptions').doc(garde.id).update(fusion);
+        for (const i of groupe) {
+          if (i.id !== garde.id) await db.collection('inscriptions').doc(i.id).delete();
+        }
+        Object.assign(garde, fusion);
+        inscriptions = inscriptions.filter((i) => i === garde || !groupe.includes(i));
+      } catch (_) {
+        /* règles déployées en retard : l'affichage reste inchangé */
+      }
+    }
+
     inscriptions.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
     const nbVisiteurs = inscriptions.filter((i) => i.type === 'visiteur').length;
     const nbExposants = inscriptions.filter((i) => i.type === 'exposant').length;
