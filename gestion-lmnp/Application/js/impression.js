@@ -128,6 +128,42 @@ export function imprimerAvis({ bailleur, locataire, bien, bail, echeance, lieu }
 }
 
 /** Relevé annuel de tous les encaissements d'un bail. */
+/**
+ * Relevé de gérance annuel (v58) : un logement géré par une agence, mois par
+ * mois, avec les éléments pour la déclaration de revenus (loyers bruts,
+ * honoraires, autres retenues, net perçu).
+ */
+export function imprimerReleveGerance({ bailleur, bien, annee, lignes, totaux }) {
+  const cellule = (texte, droite = false, gras = false) => h('td', { style: `${droite ? 'text-align:right;' : ''}${gras ? 'border-top:1px solid #000;font-weight:600;' : ''}`, texte });
+  const natures = [...new Set(lignes.filter((l) => l.releve && Number(l.releve.autres) > 0).map((l) => l.releve.natureAutres).filter(Boolean))];
+  imprimer(h('div', { class: 'document-imprime' }, [
+    h('div', { class: 'entete-doc' }, [
+      blocAdresse('Bailleur', [bailleur?.nom, ...(bailleur?.adresse || '').split('\n'), bailleur?.telephone, bailleur?.email]),
+      blocAdresse('Logement géré par une agence', [bien?.nom, bien?.adresse, [bien?.codePostal, bien?.ville].filter(Boolean).join(' '), bien?.agenceNom ? `Agence : ${bien.agenceNom}` : null, bien?.agenceLocataire ? `Locataire : ${bien.agenceLocataire}` : null]),
+    ]),
+    h('h2', { texte: `Relevé de gérance ${annee}` }),
+    h('table', { style: 'width:100%' }, [
+      h('thead', {}, h('tr', {}, ['Mois', 'Loyer encaissé', 'Honoraires', 'Autres retenues', 'Net versé', 'Versé le'].map((t, i) => h('th', { style: `text-align:${i >= 1 && i <= 4 ? 'right' : 'left'};border-bottom:1px solid #000`, texte: t })))),
+      h('tbody', {}, lignes.map((l) => (l.releve
+        ? h('tr', {}, [cellule(nomMois(l.mois)), cellule(montant(l.releve.loyer || 0), true), cellule(montant(l.releve.honoraires || 0), true), cellule(montant(l.releve.autres || 0), true), cellule(montant(l.releve.net || 0), true), cellule(l.releve.verseLe ? dateLongue(l.releve.verseLe) : '—')])
+        : h('tr', {}, [cellule(nomMois(l.mois)), cellule('—', true), cellule('—', true), cellule('—', true), cellule('—', true), cellule(l.etat === 'manquant' ? 'relevé manquant' : 'à venir')])))),
+      h('tfoot', {}, h('tr', {}, [cellule(`Total ${annee}`, false, true), cellule(montant(totaux.loyers), true, true), cellule(montant(totaux.honoraires), true, true), cellule(montant(totaux.autres), true, true), cellule(montant(totaux.net), true, true), cellule(`${totaux.recus} / ${totaux.attendus} relevés`, false, true)])),
+    ]),
+    h('h2', { texte: `Éléments pour la déclaration de revenus ${annee}`, style: 'margin-top:8mm' }),
+    h('table', { style: 'width:70%' }, [
+      h('tbody', {}, [
+        h('tr', {}, [cellule('Loyers bruts encaissés par l’agence (recettes)'), cellule(montant(totaux.loyers), true)]),
+        h('tr', {}, [cellule('Honoraires de gestion (charges déductibles)'), cellule(montant(totaux.honoraires), true)]),
+        h('tr', {}, [cellule(`Autres retenues de l’agence${natures.length ? ` (${natures.join(', ')})` : ''}`), cellule(montant(totaux.autres), true)]),
+        h('tr', {}, [cellule('Net perçu sur votre compte', false, true), cellule(montant(totaux.net), true, true)]),
+      ]),
+    ]),
+    totaux.manquants.length ? h('p', { style: 'margin-top:4mm', texte: `Relevés manquants : ${totaux.manquants.map((m) => nomMois(m)).join(', ')} — à réclamer à l’agence avant la déclaration.` }) : null,
+    h('p', { style: 'margin-top:4mm;font-size:9.5pt;color:#555', texte: 'Les relevés de gérance de l’agence (PDF) joints mois par mois dans l’application sont les justificatifs de ces montants.' }),
+    h('div', { class: 'signature', texte: `Établi le ${dateLongue(aujourdhui())}` }),
+  ]));
+}
+
 /** Relevé d'un mois (v55) : une ligne par colocataire du logement. */
 export function imprimerReleveMois({ bailleur, bien, annee, mois, lignes }) {
   const recuDe = (e) => (e.encaissements || []).reduce((x, v) => x + (Number(v.montant) || 0), 0);

@@ -8,6 +8,7 @@ export const TYPES_LOCATION = [
   { valeur: 'entiere', libelle: 'Location entière — un bail, un locataire (ou un couple)' },
   { valeur: 'courte', libelle: 'Courte durée — Airbnb, Booking… (séjours, pas de loyer mensuel)' },
   { valeur: 'gracieux', libelle: 'Occupation à titre gracieux — par le bailleur ou un proche, sans bail ni loyer' },
+  { valeur: 'agence', libelle: 'Géré par une agence — relevés de gérance mensuels, sans appel ni quittance' },
 ];
 
 export const LIBELLES_TYPE_LOCATION = {
@@ -15,6 +16,7 @@ export const LIBELLES_TYPE_LOCATION = {
   entiere: 'Location entière',
   courte: 'Courte durée',
   gracieux: 'À titre gracieux',
+  agence: 'Géré par une agence',
 };
 
 export const PLATEFORMES = ['Airbnb', 'Booking', 'Abritel', 'En direct', 'Autre'];
@@ -25,12 +27,14 @@ export const libelleTypeLocation = (bien) => LIBELLES_TYPE_LOCATION[typeLocation
 export const estCourteDuree = (bien) => typeLocation(bien) === 'courte';
 /** Occupé par le bailleur ou un proche, à titre gracieux : ni bail, ni loyer, ni appel. */
 export const estGracieux = (bien) => typeLocation(bien) === 'gracieux';
-/** Un logement sans bail (courte durée ou à titre gracieux) : l'état des lieux se rattache au logement lui-même. */
-export const sansBail = (bien) => estCourteDuree(bien) || estGracieux(bien);
+/** Géré par une agence (v58) : relevés de gérance mensuels ; l'agence s'occupe des locataires, appels, quittances. */
+export const estAgence = (bien) => typeLocation(bien) === 'agence';
+/** Un logement sans bail dans l'application (courte durée, à titre gracieux, agence) : l'état des lieux se rattache au logement lui-même. */
+export const sansBail = (bien) => estCourteDuree(bien) || estGracieux(bien) || estAgence(bien);
 
 /** Le mot pour désigner l'occupant, selon le type de location. */
 export const motOccupant = (bien, pluriel = false) => {
-  const mot = { colocation: 'colocataire', entiere: 'locataire', courte: 'voyageur', gracieux: 'occupant' }[typeLocation(bien)];
+  const mot = { colocation: 'colocataire', entiere: 'locataire', courte: 'voyageur', gracieux: 'occupant', agence: 'locataire' }[typeLocation(bien)];
   return pluriel ? `${mot}s` : mot;
 };
 
@@ -86,6 +90,7 @@ export function filtrerDonnees(donnees, bienId) {
     etatsDesLieux: (donnees.etatsDesLieux || []).filter((e) => (e.bienId ? e.bienId === bienId : bailIds.has(e.bailId))),
     regularisations: (donnees.regularisations || []).filter((r) => bailIds.has(r.bailId)),
     documentsLogement: (donnees.documentsLogement || []).filter((d) => d.bienId === bienId),
+    relevesGerance: (donnees.relevesGerance || []).filter((r) => r.bienId === bienId),
   };
 }
 

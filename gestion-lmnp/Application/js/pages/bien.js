@@ -7,7 +7,8 @@ import { h, carte, tableau, bouton, badge, vide, formulaire, confirmer, executer
 import { montant, date, nombre, isoDepuis, aujourdhui, anneeDe } from '../format.js';
 import { loyerIndexe } from '../calculs/loyers.js';
 import { ouvrirBailSignatures } from './bail-signature.js';
-import { TYPES_LOCATION, TEINTES, teinteLogement, typeLocation, libelleTypeLocation, estCourteDuree, estGracieux, motOccupant, sejoursDe } from '../logements.js';
+import { TYPES_LOCATION, TEINTES, teinteLogement, typeLocation, libelleTypeLocation, estCourteDuree, estGracieux, estAgence, motOccupant, sejoursDe } from '../logements.js';
+import { resumeGerance, honorairesProposes, netDe } from '../gerance.js';
 import { cadreDocumentsLogement } from './documents-logement.js';
 
 const TYPES_BIEN = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Garage', 'Parking / box', 'Cave', 'Local', 'Terrain'].map((v) => ({ valeur: v, libelle: v }));
@@ -21,8 +22,17 @@ const TYPES_BAIL = [
 
 const champsBien = () => [
   { cle: 'nom', libelle: 'Nom du logement', type: 'texte', requis: true, exemple: 'Maison SML — Anika', largeur: 'pleine' },
-  { cle: 'typeLocation', libelle: 'Type de location', type: 'liste', options: TYPES_LOCATION, largeur: 'pleine',
-    aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer. À titre gracieux : occupé par un bailleur ou un proche, rien n’est attendu.' },
+  { cle: 'typeLocation', libelle: 'Type de location', type: 'liste', options: TYPES_LOCATION, largeur: 'pleine', rafraichit: true,
+    aide: 'Colocation ou location entière : un bail et des loyers mensuels. Courte durée : des séjours (page Loyers), sans bail ni appel de loyer. À titre gracieux : occupé par un bailleur ou un proche, rien n’est attendu. Géré par une agence : relevés de gérance mensuels, l’agence s’occupe du reste.' },
+  // v58 : logement géré par une agence
+  { cle: 'agenceNom', libelle: 'Agence', type: 'texte', quand: (v) => v.typeLocation === 'agence', exemple: 'Foncia Lyon Est' },
+  { cle: 'agenceHonoraires', libelle: 'Honoraires de gestion (%)', type: 'nombre', quand: (v) => v.typeLocation === 'agence', aide: 'Proposés sur chaque relevé, modifiables.' },
+  { cle: 'agenceEmail', libelle: 'Courriel de l’agence', type: 'texte', quand: (v) => v.typeLocation === 'agence' },
+  { cle: 'agenceTelephone', libelle: 'Téléphone de l’agence', type: 'texte', quand: (v) => v.typeLocation === 'agence' },
+  { cle: 'agenceLoyer', libelle: 'Loyer mensuel charges comprises (€)', type: 'montant', quand: (v) => v.typeLocation === 'agence', aide: 'Ce que le locataire paie à l’agence.' },
+  { cle: 'agenceJourVersement', libelle: 'Versement attendu le (jour du mois)', type: 'entier', min: 1, max: 28, quand: (v) => v.typeLocation === 'agence' },
+  { cle: 'agenceLocataire', libelle: 'Locataire actuel (information)', type: 'texte', largeur: 'pleine', quand: (v) => v.typeLocation === 'agence', exemple: 'M. et Mme DUPONT — depuis le 01/03/2025', aide: 'Pas de fiche locataire ni d’espace en ligne : c’est l’agence qui gère.' },
+  { cle: 'agenceDepuis', libelle: 'Géré par l’agence depuis (facultatif)', type: 'date', quand: (v) => v.typeLocation === 'agence', aide: 'Les mois antérieurs n’attendent pas de relevé.' },
   { cle: 'type', libelle: 'Type', type: 'liste', options: TYPES_BIEN },
   { cle: 'surface', libelle: 'Surface (m²)', type: 'nombre' },
   { cle: 'teinte', libelle: 'Couleur du logement', type: 'liste', options: [{ valeur: '', libelle: 'Automatique (selon l’ordre)' }, ...TEINTES.map((t) => ({ valeur: t.cle, libelle: t.libelle }))],
@@ -241,6 +251,7 @@ function carteBien(donnees, bien, contexte) {
   const actif = bauxDuBien.find((b) => bailEstActif(b));
   const courte = estCourteDuree(bien);
   const gracieux = estGracieux(bien);
+  const agence = estAgence(bien);
   const annee = contexte?.annee || new Date().getFullYear();
   const sejours = courte ? sejoursDe(donnees.loyers, bien.id, annee) : [];
 
@@ -249,9 +260,9 @@ function carteBien(donnees, bien, contexte) {
     teinte: teinteLogement(bien, (contexte?.tout || donnees).biens),
     aide: [bien.adresse, [bien.codePostal, bien.ville].filter(Boolean).join(' ')].filter(Boolean).join(' — '),
     actions: [
-      badge(libelleTypeLocation(bien), courte ? 'info' : (gracieux ? 'attente' : 'succes')),
-      contexte && !gracieux ? bouton('Voir ses loyers', () => contexte.allerA('loyers', { bienId: bien.id }), { petit: true, titre: 'Ouvrir la page Loyers sur ce logement' }) : null,
-      !courte && !gracieux ? bouton('+ Bail', () => ouvrirBail(contexte?.tout || donnees, null, bien.id), { petit: true, titre: 'Nouveau bail sur ce logement' }) : null,
+      badge(libelleTypeLocation(bien), courte ? 'info' : (gracieux ? 'attente' : (agence ? 'info' : 'succes'))),
+      contexte && !gracieux ? bouton(agence ? 'Voir ses relevés' : 'Voir ses loyers', () => contexte.allerA('loyers', { bienId: bien.id }), { petit: true, titre: 'Ouvrir la page Loyers sur ce logement' }) : null,
+      !courte && !gracieux && !agence ? bouton('+ Bail', () => ouvrirBail(contexte?.tout || donnees, null, bien.id), { petit: true, titre: 'Nouveau bail sur ce logement' }) : null,
       bouton('Modifier', () => ouvrirBien(donnees, bien), { petit: true }),
       bouton('Supprimer', async () => {
         const confirme = await confirmer({
@@ -262,7 +273,12 @@ function carteBien(donnees, bien, contexte) {
         if (confirme) await executer(etat.supprimer('biens', bien.id), 'Logement supprimé.');
       }, { petit: true, type: 'danger' }),
     ],
-    corps: [h('div', { class: 'grille grille-4' }, gracieux ? [
+    corps: [h('div', { class: 'grille grille-4' }, agence ? [
+      infoBloc('Loyer mensuel (CC)', Number(bien.agenceLoyer) > 0 ? montant(Number(bien.agenceLoyer)) : '—'),
+      infoBloc('Honoraires', Number(bien.agenceHonoraires) > 0 ? `${String(bien.agenceHonoraires).replace('.', ',')} % (${montant(honorairesProposes(bien, bien.agenceLoyer))})` : '—'),
+      infoBloc('Net attendu / mois', Number(bien.agenceLoyer) > 0 ? montant(netDe({ loyer: bien.agenceLoyer, honoraires: honorairesProposes(bien, bien.agenceLoyer), autres: 0 })) : '—'),
+      infoBloc('Locataire (agence)', bien.agenceLocataire || '—'),
+    ] : gracieux ? [
       infoBloc('Surface', bien.surface ? `${nombre(bien.surface, 0)} m²` : '—'),
       infoBloc('Occupation', 'à titre gracieux'),
       infoBloc('Loyer', 'aucun'),
@@ -280,6 +296,7 @@ function carteBien(donnees, bien, contexte) {
     ]),
     // Les baux du logement, sous ses chiffres (les terminés repliés).
     courte ? h('p', { class: 'legende', style: 'margin:.8rem 0 0', texte: 'Location de courte durée : pas de bail, les séjours se suivent dans « Loyers ».' })
+      : agence ? h('p', { class: 'legende', style: 'margin:.8rem 0 0', texte: `Géré par ${bien.agenceNom || 'une agence'}${bien.agenceEmail ? ` · ${bien.agenceEmail}` : ''}${bien.agenceTelephone ? ` · ${bien.agenceTelephone}` : ''} — ${resumeGerance(bien, montant) || 'complétez la fiche (loyer, honoraires)'}. Les relevés de gérance se saisissent dans « Loyers » ; pas de bail, d’appel, de quittance ni d’espace colocataire pour ce logement.` })
       : (gracieux ? h('p', { class: 'legende', style: 'margin:.8rem 0 0', texte: 'Occupation à titre gracieux : ni bail, ni loyer, ni appel. L’état des lieux reste possible (rattaché au logement). L’occupant peut être noté dans « Notes ».' })
         : sectionBaux(donnees, contexte?.tout || donnees, bien, contexte)),
     // v53 : DPE, diagnostics et autres documents partagés avec les colocataires.

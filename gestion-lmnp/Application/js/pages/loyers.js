@@ -2,15 +2,17 @@
 
 import * as etat from '../etat.js';
 import { h, carte, tableau, tuile, bouton, badge, vide, formulaire, confirmer, executer, groupeRepliable,
-  barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur, ligneTotal } from '../ui.js';
+  barreOutils, notifier, ouvrirModale, fermerModale, signalerErreur, ligneTotal, choisirFichier } from '../ui.js';
 import { montant, date, nomMois, dateLongue, aujourdhui, centimes, isoDepuis, nomFichierTelechargement } from '../format.js';
 import * as calcul from '../calculs/loyers.js';
 import { ouvrirMiseAJour, bandeauMiseAJour } from './maj-ui.js';
-import { imprimerQuittance, imprimerAvis, imprimerReleve, imprimerReleveMois } from '../impression.js';
+import { imprimerQuittance, imprimerAvis, imprimerReleve, imprimerReleveMois, imprimerReleveGerance } from '../impression.js';
 import { pdfQuittanceAnika, dateLongueFr, sirenDepuisSiret, formaterSiret } from '../pdf-anika.js';
 import { publierDocument, destinatairesDe } from '../portail-publication.js';
 import * as api from '../api.js';
-import { estCourteDuree, estGracieux, teinteLogement, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
+import { estCourteDuree, estGracieux, estAgence, teinteLogement, libelleTypeLocation, sejoursDe, gabaritSejour, nuitsEntre, phaseSejour, PLATEFORMES } from '../logements.js';
+import { lignesAnnee, totauxAnnee, honorairesProposes, netDe, resumeGerance, LIBELLES_ETAT_MOIS } from '../gerance.js';
+import { cheminDocument, nomDuChemin } from '../documents-logement.js';
 import { apercuAppels, apercuAppelEcheance, envoyerAppelEcheance, envoyerAppels, lireJournalAppels, reglageAppel, logementsAvecAppel } from '../appel-loyer-client.js';
 import { resumeAppels, moisVise, sansAppel } from '../appel-loyer.js';
 import { numeroQuittance, soldeAnterieur, dernierReglement } from '../quittance.js';
@@ -874,6 +876,123 @@ function carteSejours(donnees, bien, annee) {
   });
 }
 
+// ------------------------------------------------ gestion par une agence (v58)
+// Un logement géré par une agence n'a ni bail ni échéance : un relevé de
+// gérance par mois (loyer encaissé par l'agence, honoraires, autres retenues,
+// net versé), le PDF de l'agence joint et rangé dans les documents du logement
+// (masqué aux colocataires), et un relevé annuel pour la déclaration.
+
+const nomFichierSur = (nom) => String(nom || 'releve.pdf').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+
+async function saisirReleve(bien, ligne, existant = null) {
+  const loyer = existant ? existant.loyer : (Number(bien.agenceLoyer) || 0);
+  const saisie = await formulaire({
+    titre: `Relevé de gérance — ${bien.nom} — ${ligne.libelle}`,
+    aide: 'Ce que l’agence a encaissé et retenu ce mois-ci, et ce qu’elle vous a versé. Le net est calculé : loyer − honoraires − autres retenues.',
+    champs: [
+      { cle: 'loyer', libelle: 'Loyer encaissé par l’agence (€)', type: 'montant', requis: true },
+      { cle: 'honoraires', libelle: 'Honoraires retenus (€)', type: 'montant', aide: Number(bien.agenceHonoraires) > 0 ? `${String(bien.agenceHonoraires).replace('.', ',')} % proposés d’après la fiche ; corrigez selon le relevé.` : 'Renseignez le taux dans la fiche du logement pour une proposition automatique.' },
+      { cle: 'autres', libelle: 'Autres retenues (€)', type: 'montant', aide: 'Travaux, assurance loyers impayés, frais divers retenus par l’agence.' },
+      { cle: 'natureAutres', libelle: 'Nature des autres retenues (facultatif)', type: 'texte' },
+      { cle: 'verseLe', libelle: 'Versé le', type: 'date', requis: true },
+    ],
+    valeurs: existant
+      ? { loyer: existant.loyer, honoraires: existant.honoraires, autres: existant.autres || 0, natureAutres: existant.natureAutres || '', verseLe: existant.verseLe }
+      : { loyer, honoraires: honorairesProposes(bien, loyer), autres: 0, natureAutres: '', verseLe: aujourdhui() },
+    libelleValider: 'Enregistrer',
+  });
+  if (!saisie) return null;
+  const releve = await executer(etat.enregistrer('relevesGerance', {
+    id: existant?.id, bienId: bien.id, annee: ligne.annee, mois: ligne.mois,
+    loyer: Number(saisie.loyer) || 0, honoraires: Number(saisie.honoraires) || 0, autres: Number(saisie.autres) || 0, natureAutres: saisie.natureAutres || '',
+    net: netDe(saisie), verseLe: saisie.verseLe, documentId: existant?.documentId || '',
+  }), `Relevé de ${ligne.libelle} enregistré : net versé ${montant(netDe(saisie))}.`);
+  if (releve && !existant && !releve.documentId) {
+    const joindre = await confirmer({ titre: 'Relevé PDF de l’agence', message: 'Joindre maintenant le relevé de gérance envoyé par l’agence (PDF ou image) ? Il sera rangé dans les documents du logement, masqué aux colocataires.', libelleValider: 'Joindre le relevé' });
+    if (joindre) await joindreReleve(bien, ligne, releve).catch(signalerErreur);
+  }
+  return releve;
+}
+
+/** Joint le PDF du relevé : document du logement (masqué), rattaché au relevé. */
+async function joindreReleve(bien, ligne, releve) {
+  const fichier = await choisirFichier({ accept: 'application/pdf,image/*' });
+  if (!fichier) return;
+  if (fichier.size > 10 * 1024 * 1024) { notifier('Fichier trop lourd : 10 Mo au plus.', 'erreur'); return; }
+  const nom = `releve-gerance-${ligne.annee}-${String(ligne.mois).padStart(2, '0')}-${nomFichierSur(fichier.name)}`;
+  const depot = await api.deposerFichier('partage', cheminDocument(bien.id, nom), fichier);
+  const document_ = await etat.enregistrer('documentsLogement', {
+    bienId: bien.id, categorie: 'autre', titre: `Relevé de gérance — ${ligne.libelle}`,
+    nomFichier: nomDuChemin(depot.chemin), chemin: depot.chemin, taille: fichier.size, deposeLe: aujourdhui(), deposeA: new Date().toISOString(),
+    valableJusquau: '', visible: false, notifieLe: '',
+  });
+  await executer(etat.modifierElement('relevesGerance', releve.id, (r) => { r.documentId = document_.id; }), `Relevé PDF de ${ligne.libelle} joint.`);
+}
+
+async function retirerReleve(bien, ligne) {
+  const ok = await confirmer({ titre: 'Retirer le relevé', message: `Retirer le relevé de ${ligne.libelle} ? Le PDF éventuellement joint reste dans les documents du logement.`, libelleValider: 'Retirer', danger: true });
+  if (!ok) return;
+  await executer(etat.supprimer('relevesGerance', ligne.releve.id), 'Relevé retiré.');
+}
+
+/**
+ * La carte d'un logement géré par une agence : les mois de l'année, le relevé
+ * de chacun, les totaux. Renvoie { carte, attendu, encaisse } (en net, D1).
+ */
+function carteGerance(donnees, bien, annee, contexte) {
+  const releves = donnees.relevesGerance || etat.liste('relevesGerance');
+  const documents = etat.liste('documentsLogement');
+  const lignes = lignesAnnee(bien, releves, annee, aujourdhui());
+  const totaux = totauxAnnee(lignes);
+  const bailleur = donnees.parametres.bailleurs?.[0];
+  const colonnes = [
+    { titre: 'Mois', valeur: (l) => h('div', {}, [h('div', { texte: l.libelle }), l.releve ? null : h('div', { class: 'legende', texte: `versement attendu le ${date(l.attenduLe)}` })]) },
+    { titre: 'Loyer encaissé', nombre: true, valeur: (l) => (l.releve ? montant(l.releve.loyer || 0) : '—') },
+    { titre: 'Honoraires', nombre: true, valeur: (l) => (l.releve ? montant(l.releve.honoraires || 0) : '—') },
+    { titre: 'Autres retenues', nombre: true, valeur: (l) => (l.releve && Number(l.releve.autres) > 0 ? h('span', { title: l.releve.natureAutres || '' }, [montant(l.releve.autres), l.releve.natureAutres ? h('div', { class: 'legende', texte: l.releve.natureAutres }) : null]) : (l.releve ? '—' : '—')) },
+    { titre: 'Net versé', nombre: true, valeur: (l) => (l.releve ? h('strong', { texte: montant(l.releve.net || 0) }) : '—') },
+    { titre: 'Versé le', valeur: (l) => (l.releve?.verseLe ? date(l.releve.verseLe) : '—') },
+    { titre: 'Relevé', valeur: (l) => {
+      if (!l.releve) return h('span', { class: 'legende', texte: '—' });
+      const document_ = documents.find((d) => d.id === l.releve.documentId);
+      return document_
+        ? bouton(`📄 ${document_.nomFichier}`, () => api.ouvrirFichier('partage', document_.chemin).catch(signalerErreur), { petit: true, titre: 'Ouvrir le relevé de l’agence' })
+        : bouton('Joindre le PDF', () => joindreReleve(bien, l, l.releve).catch(signalerErreur), { petit: true, titre: 'Joindre le relevé de gérance envoyé par l’agence' });
+    } },
+    { titre: 'État', valeur: (l) => badge(LIBELLES_ETAT_MOIS[l.etat].texte, LIBELLES_ETAT_MOIS[l.etat].ton) },
+    { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
+      l.releve
+        ? bouton('Modifier', () => saisirReleve(bien, l, l.releve).catch(signalerErreur), { petit: true })
+        : bouton('Relevé reçu', () => saisirReleve(bien, l).catch(signalerErreur), { petit: true, type: l.etat === 'manquant' ? 'primaire' : undefined, titre: 'Enregistrer le relevé de gérance de ce mois' }),
+      l.releve ? bouton('✕', () => retirerReleve(bien, l).catch(signalerErreur), { petit: true, type: 'danger', titre: 'Retirer le relevé' }) : null,
+    ]) },
+  ];
+  const carteElement = carte({
+    titre: bien.nom,
+    teinte: teinteLogement(bien, (contexte.tout || donnees).biens),
+    aide: resumeGerance(bien, montant) || 'Complétez la fiche du logement (agence, loyer, honoraires).',
+    resume: `${montant(totaux.net)} nets versés · ${totaux.recus} / ${totaux.attendus} relevés${totaux.manquants.length ? ` · ${totaux.manquants.length} manquant${totaux.manquants.length > 1 ? 's' : ''}` : ''}`,
+    actions: [
+      badge('Géré par une agence', 'info'),
+      bouton('Relevé annuel', () => imprimerReleveGerance({ bailleur, bien, annee, lignes, totaux }), { petit: true, titre: 'Mois par mois, avec les éléments pour la déclaration de revenus (loyers bruts, honoraires, net)' }),
+      !contexte.bienId ? bouton('Ce logement seul', () => contexte.definirLogement(bien.id), { petit: true, type: 'discret' }) : null,
+    ],
+    corps: [
+      h('div', { class: 'grille grille-4', style: 'margin-bottom:.8rem' }, [
+        tuile({ libelle: `Loyers encaissés par l’agence ${annee}`, valeur: montant(totaux.loyers, { rond: true }), detail: 'recettes brutes' }),
+        tuile({ libelle: 'Honoraires retenus', valeur: montant(totaux.honoraires, { rond: true }), detail: totaux.autres > 0.005 ? `+ ${montant(totaux.autres)} d’autres retenues` : 'charges déductibles' }),
+        tuile({ libelle: 'Net versé', valeur: montant(totaux.net, { rond: true }), ton: 'positif', detail: `${totaux.recus} / ${totaux.attendus} relevés reçus` }),
+        tuile({ libelle: 'Relevés manquants', valeur: String(totaux.manquants.length), ton: totaux.manquants.length ? 'negatif' : 'neutre', detail: totaux.manquants.length ? totaux.manquants.map((m) => nomMois(m)).join(', ') : 'à jour' }),
+      ]),
+      tableau({
+        colonnes, lignes, cle: (l) => `${l.annee}-${l.mois}`, messageVide: 'Aucun mois : vérifiez la date « géré depuis » de la fiche.',
+        pied: ligneTotal(colonnes, [h('strong', { texte: `Total ${annee}` }), montant(totaux.loyers), montant(totaux.honoraires), montant(totaux.autres), h('strong', { texte: montant(totaux.net) }), '', '', badge(`${totaux.recus} / ${totaux.attendus} relevés`, totaux.manquants.length ? 'alerte' : (totaux.recus === totaux.attendus ? 'succes' : 'attente')), '']),
+      }),
+    ],
+  });
+  return { carte: carteElement, attendu: totaux.netAttendu, encaisse: totaux.net, manquants: totaux.manquants.length };
+}
+
 /** Bandeau d'un logement dans la vue « Tous les logements ». */
 const enteteLogement = (bien, contexte) => h('div', { class: 'section-logement' }, [
   h('h2', { texte: bien.nom }),
@@ -908,8 +1027,9 @@ export default {
     const annee = contexte.annee;
     const conteneur = h('div');
     const logementsCourteDuree = donnees.biens.filter(estCourteDuree);
+    const logementsAgence = donnees.biens.filter(estAgence);
 
-    if (!donnees.baux.length && !logementsCourteDuree.length) {
+    if (!donnees.baux.length && !logementsCourteDuree.length && !logementsAgence.length) {
       return carte({
         titre: 'Aucun bail',
         corps: vide('Rien à quittancer pour l’instant',
@@ -919,16 +1039,19 @@ export default {
 
     const toutes = calcul.echeancesGlobales(donnees.baux, annee, donnees.loyers);
     const sejoursAnnee = logementsCourteDuree.flatMap((bien) => sejoursDe(donnees.loyers, bien.id, annee));
-    const attendu = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + (e.total || 0), 0));
-    const encaisse = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + calcul.totalEncaisse(e), 0));
+    // v58 (D1) : un logement géré par une agence compte en net versé.
+    const gerance = logementsAgence.map((bien) => totauxAnnee(lignesAnnee(bien, donnees.relevesGerance || [], annee, aujourdhui())));
+    const attendu = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + (e.total || 0), 0) + gerance.reduce((s, g) => s + g.netAttendu, 0));
+    const encaisse = centimes([...toutes, ...sejoursAnnee].reduce((s, e) => s + calcul.totalEncaisse(e), 0) + gerance.reduce((s, g) => s + g.net, 0));
     const impayes = [...toutes, ...sejoursAnnee.filter((x) => x.depart && x.depart <= aujourdhui())]
       .filter((e) => ['retard', 'partiel'].includes(calcul.statut(e)));
+    const relevesManquants = gerance.reduce((s, g) => s + g.manquants.length, 0);
     const resteDu = centimes(impayes.reduce((s, e) => s + (e.total - calcul.totalEncaisse(e)), 0));
 
     conteneur.append(h('div', { class: 'grille grille-4', style: 'margin-bottom:1rem' }, [
       tuile({ libelle: `Attendu ${annee}`, valeur: montant(attendu, { rond: true }), detail: `${toutes.length} échéance(s)${sejoursAnnee.length ? `, ${sejoursAnnee.length} séjour(s)` : ''}` }),
       tuile({ libelle: 'Encaissé', valeur: montant(encaisse, { rond: true }), ton: 'positif' }),
-      tuile({ libelle: 'Reste dû', valeur: montant(resteDu, { rond: true }), ton: resteDu > 0 ? 'negatif' : 'neutre', detail: `${impayes.length} échéance(s)` }),
+      tuile({ libelle: 'Reste dû', valeur: montant(resteDu, { rond: true }), ton: resteDu > 0 ? 'negatif' : 'neutre', detail: `${impayes.length} échéance(s)${relevesManquants ? ` · ${relevesManquants} relevé(s) d’agence manquant(s)` : ''}` }),
       tuile({
         libelle: 'Taux de recouvrement',
         valeur: attendu ? `${Math.round((encaisse / attendu) * 100)} %` : '—',
@@ -964,6 +1087,12 @@ export default {
     }
     let attenduLogement = 0;
     let encaisseLogement = 0;
+    if (bien && estAgence(bien)) {
+      const g = carteGerance(donnees, bien, annee, contexte);
+      cible.append(g.carte);
+      if (grouper) cible.append(sousTotalLogement(centimes(g.attendu), centimes(g.encaisse)));
+      continue;
+    }
     if (bien && estGracieux(bien)) {
       cible.append(carte({ titre: bien.nom, teinte: teinteLogement(bien, (contexte.tout || donnees).biens), serre: true, corps: vide('Occupation à titre gracieux', 'Ce logement est occupé par un bailleur ou un proche : aucun loyer n’est attendu, aucun appel n’est envoyé.') }));
       continue;

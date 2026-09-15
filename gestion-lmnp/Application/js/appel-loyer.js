@@ -22,7 +22,7 @@ export const cleMois = (annee, mois) => `${annee}-${String(mois).padStart(2, '0'
 export const cleEnvoi = (bienId, annee, mois) => `${bienId || ''}:${cleMois(annee, mois)}`;
 
 /** Un logement de courte durée (Airbnb…) n'a pas d'appel de loyer. */
-export const sansAppel = (bien) => bien?.typeLocation === 'courte' || bien?.typeLocation === 'gracieux';
+export const sansAppel = (bien) => ['courte', 'gracieux', 'agence'].includes(bien?.typeLocation);
 
 /**
  * Réglages d'appel d'un logement : ceux notés sur le logement, à défaut les

@@ -23,7 +23,7 @@ import { CATEGORIES_DEMANDEES, classerParCategorie, bilanJustificatifs, prefixeC
 import { destinatairesDe, logementDe, ouvrirEspace } from '../portail-publication.js';
 import { preparerBienvenue } from '../bienvenue.js';
 import { bailEstActif, ouvrirLocataire, ouvrirBail, repartirColocataires } from './bien.js';
-import { estCourteDuree, estGracieux, teinteLogement } from '../logements.js';
+import { estCourteDuree, estGracieux, estAgence, teinteLogement } from '../logements.js';
 import { libelleTypeLocation } from '../logements.js';
 import { ouvrirDocumentsColocataire } from './documents-colocataire.js';
 
@@ -103,7 +103,7 @@ const bailOuvert = (bail) => !bail.dateFin || String(bail.dateFin).slice(0, 10) 
 
 /** Rattache un locataire à un logement ; renvoie true si quelque chose a été fait. */
 export async function rattacherLocataire(locataire) {
-  const biens = etat.liste('biens').filter((b) => !estCourteDuree(b) && !estGracieux(b));
+  const biens = etat.liste('biens').filter((b) => !estCourteDuree(b) && !estGracieux(b) && !estAgence(b));
   if (!biens.length) { notifier('Aucun logement à bail : déclarez-en un dans « Logements & baux ».', 'erreur'); return false; }
   const baux = etat.liste('baux');
   const descriptif = (b) => {
@@ -516,7 +516,7 @@ export default {
     // Répartition : par logement du bail courant ; sans bail courant → anciens.
     const courants = new Map(tout.locataires.map((l) => [l.id, bailCourant(tout.baux, l.id)]));
     const surLogement = (l, bienId) => courants.get(l.id)?.bienId === bienId;
-    const logements = contexte.bienId ? tout.biens.filter((b) => b.id === contexte.bienId) : tout.biens;
+    const logements = (contexte.bienId ? tout.biens.filter((b) => b.id === contexte.bienId) : tout.biens).filter((b) => !estAgence(b));
     const sansBailCourant = tout.locataires.filter((l) => !courants.get(l.id)
       && (!contexte.bienId || bauxDe(tout.baux, l.id).some((b) => b.bienId === contexte.bienId)));
     // Jamais eu de bail : à rattacher ; ont eu un bail, terminé : anciens.

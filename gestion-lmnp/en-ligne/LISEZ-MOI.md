@@ -34,6 +34,25 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
+**En préparation pour la prochaine version (livrée au « go »).**
+- Type de location « Géré par une agence » : fiche du logement avec
+  l'agence (nom, courriel, téléphone), le taux d'honoraires, le loyer
+  mensuel, le jour de versement, le locataire en simple texte, la date de
+  début de gestion. Pas de bail, d'appel, de quittance, d'espace colocataire,
+  de dépôt ni de régularisation pour ce logement ; l'état des lieux reste
+  possible.
+- « Loyers » : une carte par logement en gestion, un mois par ligne
+  (« Relevé reçu » : loyer encaissé par l'agence, honoraires proposés d'après
+  le taux, autres retenues et leur nature, net calculé, date de versement),
+  « Relevé manquant » dès que la date de versement est passée, PDF de
+  l'agence joint (document du logement masqué aux colocataires), totaux de
+  l'année. Les tuiles de l'exercice comptent le net versé. « Relevé annuel »
+  imprime le mois par mois et les éléments pour la déclaration de revenus
+  (loyers bruts, honoraires déductibles, autres retenues, net perçu, relevés
+  manquants). Nouvelle collection `relevesGerance` (sauvegarde).
+- Formulaires : les champs conditionnels se mettent à jour dès le changement
+  du type de location (et de la case « visible » d'un document).
+
 **Nouveau en v57 — logements mieux distingués, locataires rattachés, charges par logement.**
 - En-tête : le nom du logement s'affiche en entier dans le sélecteur.
 - « Logements & baux » : les baux sont sous leur logement, dans sa carte, du

@@ -54,7 +54,7 @@ async function deposer(tout, bien) {
         aide: 'DPE : 10 ans de validité proposés · Diagnostic : électricité, gaz, amiante, plomb, ERP… · Autre : règlement intérieur, notices, plan.' },
       { cle: 'titre', libelle: 'Titre affiché aux colocataires', type: 'texte', requis: true, largeur: 'pleine' },
       { cle: 'valableJusquau', libelle: 'Valable jusqu’au (facultatif)', type: 'date', aide: 'Proposé d’après la catégorie ; effacez si sans objet.' },
-      { cle: 'visible', libelle: 'Visible par les colocataires du logement', type: 'case' },
+      { cle: 'visible', libelle: 'Visible par les colocataires du logement', type: 'case', rafraichit: true },
       { cle: 'prevenir', libelle: 'Prévenir les colocataires par e-mail', type: 'case', quand: (v) => v.visible !== false && api.MODE === 'nuage' },
     ],
     valeurs: { categorie: 'dpe', titre: titreDepuisFichier(fichier.name), valableJusquau: validiteProposee('dpe', jour), visible: true, prevenir: true },

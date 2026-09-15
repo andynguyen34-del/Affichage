@@ -163,6 +163,7 @@ export function collecte() {
     etatsDesLieux: etat.liste('etatsDesLieux'),
     regularisations: etat.liste('regularisations'),
     documentsLogement: etat.liste('documentsLogement'),
+    relevesGerance: etat.liste('relevesGerance'),
   };
 }
 
