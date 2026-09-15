@@ -106,13 +106,21 @@
           <label class="champ" style="font-weight:normal">
             <input type="checkbox" id="p-handicap" style="display:inline;width:auto">
             ♿ Je souhaite être accompagné(e) par le référent handicap URBH</label>
+          <label class="champ" style="font-weight:normal">
+            <input type="checkbox" id="p-consentement" style="display:inline;width:auto">
+            🤝 J'accepte que mes coordonnées (prénom, nom, établissement,
+            mobile, e-mail) soient transmises aux <strong>fournisseurs dont je
+            scanne le stand</strong>, afin qu'ils puissent me recontacter.
+            <span class="muet petit">(facultatif — modifiable à tout moment)</span></label>
           <div class="ligne-boutons">
-            <button type="submit" id="p-valider">C'est parti !</button>
+            <button type="submit" id="p-valider">Je valide mes informations</button>
           </div>
-          <p class="muet petit">Votre mobile sert à vous prévenir si vous gagnez
-          au tirage au sort et à vous envoyer certains résultats par SMS. Ces
-          informations restent internes à l'URBH et ne sont jamais transmises à
-          des tiers.</p>
+          <p class="muet petit">✔️ En validant, vous confirmez l'exactitude de
+          ces informations : elles serviront à <strong>mettre à jour l'annuaire
+          de l'association</strong> — corrigez-les si besoin avant de valider.
+          Votre mobile sert à vous prévenir si vous gagnez au tirage au sort et
+          à vous envoyer certains résultats par SMS. Hors consentement
+          ci-dessus, ces informations restent internes à l'URBH.</p>
         </form>
       </div>`;
 
@@ -163,6 +171,10 @@
         mobile: document.getElementById('p-mobile').value.trim(),
         email: document.getElementById('p-email').value.trim(),
         accompagnementHandicap: document.getElementById('p-handicap').checked,
+        consentementPartage: document.getElementById('p-consentement').checked,
+        consentementLe: document.getElementById('p-consentement').checked
+          ? (profil && profil.consentementPartage && profil.consentementLe) || new Date().toISOString()
+          : '',
         creeLe: profil && profil.creeLe ? profil.creeLe : new Date().toISOString(),
         majLe: new Date().toISOString(),
       };
@@ -247,15 +259,25 @@
           dejaVisite
             ? `<div class="info">✅ Votre passage sur ce stand est déjà enregistré.
                 Merci de votre visite !</div>`
-            : `<p>Enregistrer votre passage sur ce stand ?</p>
-              <p class="muet petit">En confirmant, vous acceptez que vos coordonnées
-              (prénom, nom, établissement, mobile${profil.email ? ', e-mail' : ''})
-              soient transmises à <strong>${echapper(fournisseur.nom)}</strong> afin
-              qu'il puisse vous recontacter après les journées d'études.</p>
-              <div id="erreur-stand" class="erreur" hidden></div>
-              <div class="ligne-boutons">
-                <button id="bouton-confirmer-visite">✅ Je confirme mon passage</button>
-              </div>`
+            : profil.consentementPartage
+              ? `<p>Enregistrer votre passage sur ce stand ?</p>
+                <p class="muet petit">Conformément au consentement donné à votre
+                inscription, vos coordonnées seront transmises à
+                <strong>${echapper(fournisseur.nom)}</strong>.</p>
+                <div id="erreur-stand" class="erreur" hidden></div>
+                <div class="ligne-boutons">
+                  <button id="bouton-confirmer-visite">✅ Je confirme mon passage</button>
+                </div>`
+              : `<p>Enregistrer votre passage sur ce stand ?</p>
+                <p class="muet petit">Vous n'avez pas encore consenti au partage de
+                vos coordonnées avec les fournisseurs. Pour que
+                <strong>${echapper(fournisseur.nom)}</strong> puisse vous recontacter,
+                acceptez le partage (prénom, nom, établissement, mobile, e-mail) —
+                modifiable à tout moment depuis votre profil.</p>
+                <div id="erreur-stand" class="erreur" hidden></div>
+                <div class="ligne-boutons">
+                  <button id="bouton-confirmer-visite">🤝 J'accepte le partage et je confirme mon passage</button>
+                </div>`
         }
         <div class="ligne-boutons">
           <button id="bouton-retour-menu" class="secondaire">Retour au menu</button>
@@ -269,6 +291,15 @@
       boutonConfirmer.addEventListener('click', async () => {
         boutonConfirmer.disabled = true;
         try {
+          if (!profil.consentementPartage) {
+            // Consentement donné à l'instant : enregistré au profil.
+            profil.consentementPartage = true;
+            profil.consentementLe = new Date().toISOString();
+            await db.collection('participants').doc(uid).update({
+              consentementPartage: true,
+              consentementLe: profil.consentementLe,
+            });
+          }
           await db
             .collection('visites')
             .doc(fournisseurId + '_' + uid)
@@ -465,6 +496,15 @@
       );
     }
 
+    // Demande d'anonymisation éventuelle du participant.
+    let demandeAnonymisation = null;
+    try {
+      const dm = await db.collection('demandesAnonymisation').doc(uid).get();
+      if (dm.exists) demandeAnonymisation = dm.data();
+    } catch (_) {
+      demandeAnonymisation = null;
+    }
+
     const dejaRepondu = {};
     await Promise.all(
       questionnaires.map(async (q) => {
@@ -541,6 +581,34 @@
           : ''
       }
 
+      <div class="carte">
+        <h2>🔐 Mes données</h2>
+        <p class="muet petit">
+          Partage de mes coordonnées avec les fournisseurs visités :
+          <strong>${profil.consentementPartage ? 'accepté' : 'refusé'}</strong>
+          (modifiable via « modifier » en haut de page). Mes informations
+          validées servent à mettre à jour l'annuaire de l'association.
+        </p>
+        ${
+          demandeAnonymisation
+            ? demandeAnonymisation.statut === 'traitee'
+              ? `<div class="info">✅ Votre demande d'anonymisation a été traitée
+                  le ${echapper(new Date(demandeAnonymisation.traiteLe || Date.now()).toLocaleDateString('fr-FR'))} :
+                  vos données personnelles ont été supprimées de l'application.</div>`
+              : `<div class="info">⏳ Votre demande d'anonymisation est enregistrée
+                  (${echapper(new Date(demandeAnonymisation.demandeLe).toLocaleDateString('fr-FR'))}).
+                  Une confirmation s'affichera ici dès son traitement par l'URBH.</div>`
+            : `<p class="muet petit">À l'issue des journées d'études, vous pouvez
+                demander la suppression de vos données personnelles (droit à
+                l'effacement) : vos réponses aux questionnaires seront conservées
+                de façon anonyme, tout le reste sera effacé.</p>
+              <div class="ligne-boutons">
+                <button id="bouton-anonymisation" class="danger">🗑️ Demander l'anonymisation de mes données</button>
+              </div>
+              <div id="erreur-anonymisation" class="erreur" hidden></div>`
+        }
+      </div>
+
       <div id="carte-installation"></div>
 
       <div class="carte">
@@ -568,6 +636,36 @@
 
     majCarteInstallation();
 
+    const boutonAnonymisation = document.getElementById('bouton-anonymisation');
+    if (boutonAnonymisation) {
+      boutonAnonymisation.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Demander la suppression de vos données personnelles ? ' +
+              'Vous ne pourrez plus participer au tirage ni être recontacté par les fournisseurs.',
+          )
+        ) {
+          return;
+        }
+        boutonAnonymisation.disabled = true;
+        try {
+          await db.collection('demandesAnonymisation').doc(uid).set({
+            participantId: uid,
+            nom: profil.nom || '',
+            prenom: profil.prenom || '',
+            demandeLe: new Date().toISOString(),
+            statut: 'en_attente',
+          });
+          vueMenu();
+        } catch (e) {
+          const erreur = document.getElementById('erreur-anonymisation');
+          erreur.textContent = "La demande n'a pas pu être enregistrée." + detailErreur(e);
+          erreur.hidden = false;
+          boutonAnonymisation.disabled = false;
+        }
+      });
+    }
+
     const champRecherche = document.getElementById('recherche-exposant');
     if (champRecherche) {
       champRecherche.addEventListener('input', () => {
@@ -586,6 +684,7 @@
       document.getElementById('p-mobile').value = profil.mobile || '';
       document.getElementById('p-email').value = profil.email || '';
       document.getElementById('p-handicap').checked = !!profil.accompagnementHandicap;
+      document.getElementById('p-consentement').checked = !!profil.consentementPartage;
     });
 
     function erreurAtelier(texte) {
@@ -724,6 +823,29 @@
 
     try {
       const doc = await db.collection('participants').doc(uid).get();
+      if (doc.exists && doc.data().anonymiseLe) {
+        // Données anonymisées : confirmation du traitement de la demande.
+        profil = null;
+        let traiteLe = doc.data().anonymiseLe;
+        try {
+          const dm = await db.collection('demandesAnonymisation').doc(uid).get();
+          if (dm.exists && dm.data().traiteLe) traiteLe = dm.data().traiteLe;
+        } catch (_) {
+          /* sans gravité */
+        }
+        message(
+          `<h2>✅ Données anonymisées</h2>
+          <p>Votre demande a été traitée le
+          <strong>${echapper(new Date(traiteLe).toLocaleDateString('fr-FR'))}</strong> :
+          vos données personnelles ont été supprimées de l'application. Vos
+          réponses aux questionnaires sont conservées de façon anonyme.</p>
+          <div class="ligne-boutons">
+            <button id="bouton-reinscription" class="secondaire">Me réinscrire</button>
+          </div>`,
+        );
+        document.getElementById('bouton-reinscription').addEventListener('click', () => vueInscription());
+        return;
+      }
       if (doc.exists) {
         profil = doc.data();
         await apresProfil();

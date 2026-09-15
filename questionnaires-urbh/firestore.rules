@@ -59,12 +59,30 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(
              ['type', 'nom', 'prenom', 'organisme', 'email', 'mobile',
-              'numeroInscription', 'accompagnementHandicap', 'creeLe',
-              'majLe'])
+              'numeroInscription', 'accompagnementHandicap',
+              'consentementPartage', 'consentementLe', 'anonymiseLe',
+              'creeLe', 'majLe'])
         && request.resource.data.type in ['visiteur', 'exposant']
         && request.resource.data.nom is string
         && request.resource.data.prenom is string;
+      // L'administrateur peut réécrire un profil : nécessaire pour honorer
+      // une demande d'anonymisation.
+      allow update: if isAdmin();
       allow list, delete: if isAdmin();
+    }
+
+    // Demande d'anonymisation des données (droit à l'effacement). Une par
+    // participant (identifiant = uid). L'administrateur la traite puis la
+    // marque « traitée » : le participant voit la confirmation dans l'app.
+    match /demandesAnonymisation/{uid} {
+      allow create: if connecte()
+        && request.auth.uid == uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['participantId', 'nom', 'prenom', 'demandeLe', 'statut'])
+        && request.resource.data.statut == 'en_attente';
+      allow get: if isAdmin() || (connecte() && request.auth.uid == uid);
+      allow list, update, delete: if isAdmin();
     }
 
     // Présence d'un participant à une journée. Identifiant imposé
@@ -80,6 +98,7 @@ service cloud.firestore {
               'nbAcces'])
         && request.resource.data.type in ['visiteur', 'exposant'];
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow update: if isAdmin(); // anonymisation
       allow list, delete: if isAdmin();
     }
 
@@ -96,7 +115,7 @@ service cloud.firestore {
         && portailTirageOuvert(request.resource.data.journeeId);
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow list, delete: if isAdmin();
-      allow update: if false;
+      allow update: if isAdmin(); // anonymisation
     }
 
     // Annuaire des inscrits attendus, importé depuis les fichiers Excel
@@ -138,7 +157,7 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
                  .data.statut == 'inscriptions_ouvertes');
       allow list: if isAdmin();
-      allow update: if false;
+      allow update: if isAdmin(); // anonymisation
     }
 
     // Fournisseurs exposants : nom, n° de stand, description. Chaque stand
@@ -163,7 +182,7 @@ service cloud.firestore {
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow list: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow delete: if isAdmin();
-      allow update: if false;
+      allow update: if isAdmin(); // anonymisation
     }
 
     match /questionnaires/{questionnaireId} {

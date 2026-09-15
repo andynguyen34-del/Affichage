@@ -157,8 +157,85 @@
     return journees;
   }
 
+  // Anonymisation d'un participant (droit à l'effacement) : efface l'identité
+  // dans toutes les collections, retire sa fiche de l'annuaire, puis marque la
+  // demande « traitée » — le participant voit la confirmation dans son app.
+  async function anonymiserParticipant(uidCible) {
+    const vide = { nom: 'Anonymisé', prenom: '', organisme: '', email: '', mobile: '', numeroInscription: '' };
+    const refProfil = db.collection('participants').doc(uidCible);
+    const docProfil = await refProfil.get();
+    const numero = docProfil.exists ? docProfil.data().numeroInscription || '' : '';
+
+    const maj = [];
+    for (const col of ['inscriptions', 'tirage', 'voeux', 'visites']) {
+      const snap = await db.collection(col).where('participantId', '==', uidCible).get();
+      snap.docs.forEach((d) => maj.push({ ref: d.ref, donnees: vide }));
+    }
+    // Gagnants annoncés sur les portails.
+    const snapPo = await db.collection('portails').get();
+    snapPo.docs.forEach((d) => {
+      const gagnants = (d.data().tirage || {}).gagnants || [];
+      if (gagnants.some((g) => g.participantId === uidCible)) {
+        maj.push({
+          ref: d.ref,
+          donnees: {
+            'tirage.gagnants': gagnants.map((g) =>
+              g.participantId === uidCible ? { ...g, ...vide } : g,
+            ),
+          },
+        });
+      }
+    });
+    // Retenus et listes d'attente des ateliers.
+    const snapAt = await db.collection('ateliers').get();
+    snapAt.docs.forEach((d) => {
+      const a = d.data();
+      const concerne = (l) => (l || []).some((r) => r.participantId === uidCible);
+      if (concerne(a.retenus) || concerne(a.listeAttente)) {
+        maj.push({
+          ref: d.ref,
+          donnees: {
+            retenus: (a.retenus || []).map((r) => (r.participantId === uidCible ? { ...r, ...vide } : r)),
+            listeAttente: (a.listeAttente || []).map((r) =>
+              r.participantId === uidCible ? { ...r, ...vide } : r,
+            ),
+          },
+        });
+      }
+    });
+
+    for (let i = 0; i < maj.length; i += 400) {
+      const lot = db.batch();
+      maj.slice(i, i + 400).forEach((m) => lot.update(m.ref, m.donnees));
+      await lot.commit();
+    }
+    if (docProfil.exists) {
+      await refProfil.update({
+        ...vide,
+        consentementPartage: false,
+        consentementLe: '',
+        anonymiseLe: new Date().toISOString(),
+      });
+    }
+    if (numero) {
+      try {
+        await db.collection('annuaire').doc(numero).delete();
+      } catch (_) {
+        /* fiche déjà absente */
+      }
+    }
+    await db.collection('demandesAnonymisation').doc(uidCible).update({
+      statut: 'traitee',
+      traiteLe: new Date().toISOString(),
+    });
+  }
+
   async function vueListeJournees() {
     const journees = await chargerJournees();
+    const snapDa = await db.collection('demandesAnonymisation').get();
+    const demandes = snapDa.docs.map((d) => ({ id: d.id, ...d.data() }));
+    demandes.sort((a, b) => String(b.demandeLe || '').localeCompare(String(a.demandeLe || '')));
+    const demandesEnAttente = demandes.filter((d) => d.statut === 'en_attente');
     const snapAnnuaire = await db.collection('annuaire').get();
     const annuaire = snapAnnuaire.docs.map((d) => d.data());
     const nbAnnuaireVisiteurs = annuaire.filter((a) => a.type === 'visiteur').length;
@@ -213,6 +290,39 @@
             <button type="submit">Créer la journée</button>
           </div>
         </form>
+      </div>
+
+      <div class="carte">
+        <h2>🔐 Demandes d'anonymisation (RGPD)
+          ${demandesEnAttente.length ? `<span class="badge brouillon">${demandesEnAttente.length} à traiter</span>` : ''}</h2>
+        ${
+          demandes.length
+            ? `<ul class="liste">${demandes
+                .map(
+                  (d) => `<li>
+                    <div>
+                      <span class="titre-item">${echapper(d.prenom || '')} ${echapper(d.nom || '')}</span>
+                      <div class="muet petit">demandé le ${d.demandeLe ? new Date(d.demandeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '?'}
+                        ${d.statut === 'traitee' ? ` — traité le ${d.traiteLe ? new Date(d.traiteLe).toLocaleDateString('fr-FR') : ''}` : ''}</div>
+                    </div>
+                    <div class="pousse">
+                      ${
+                        d.statut === 'traitee'
+                          ? '<span class="badge ouvert">✅ traitée</span>'
+                          : `<button class="danger bouton-anonymiser" data-id="${attr(d.id)}">Anonymiser et confirmer</button>`
+                      }
+                    </div>
+                  </li>`,
+                )
+                .join('')}</ul>
+              <p class="muet petit">« Anonymiser et confirmer » efface l'identité du
+              participant dans toute la base (profil, inscriptions, tirage,
+              ateliers, passages sur les stands, annuaire) — ses réponses aux
+              questionnaires sont conservées de façon anonyme — puis affiche la
+              confirmation dans son application. Pensez à répercuter la
+              suppression dans les exports CSV déjà transmis le cas échéant.</p>`
+            : `<p class="muet">Aucune demande d'anonymisation.</p>`
+        }
       </div>
 
       <div class="carte">
@@ -272,6 +382,29 @@
       });
       location.hash = '#/journee/' + doc.id;
     });
+
+    document.querySelectorAll('.bouton-anonymiser').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const d = demandes.find((x) => x.id === b.dataset.id);
+        if (
+          !confirm(
+            `Anonymiser définitivement les données de ${d ? `${d.prenom} ${d.nom}` : 'ce participant'} ? ` +
+              'Cette action est irréversible.',
+          )
+        ) {
+          return;
+        }
+        b.disabled = true;
+        b.textContent = 'Anonymisation…';
+        try {
+          await anonymiserParticipant(b.dataset.id);
+          router();
+        } catch (e) {
+          alert("L'anonymisation a échoué : " + (e && e.message ? e.message : e));
+          router();
+        }
+      }),
+    );
 
     // --- import de l'annuaire (fichiers Excel des inscrits)
 
@@ -599,6 +732,7 @@
           inscriptions.length
             ? `<div class="ligne-boutons">
                 <button id="bouton-csv-inscrits" class="secondaire">Exporter les inscrits (CSV — pour campagne SMS)</button>
+                <button id="bouton-csv-annuaire" class="secondaire">Mises à jour pour l'annuaire de l'association (CSV)</button>
               </div>
               <ul class="liste">${inscriptions
                 .map(
@@ -985,6 +1119,64 @@
         a.download = 'inscrits-' + fmtDate(journee.date).replace(/\//g, '-') + '.csv';
         a.click();
         URL.revokeObjectURL(a.href);
+      });
+    }
+
+    // Mises à jour pour l'annuaire de l'association : compare la fiche
+    // annuaire de chaque inscrit avec les informations qu'il a validées (ou
+    // corrigées) sur le portail, et signale les différences.
+    const boutonCsvAnnuaire = document.getElementById('bouton-csv-annuaire');
+    if (boutonCsvAnnuaire) {
+      boutonCsvAnnuaire.addEventListener('click', async () => {
+        boutonCsvAnnuaire.disabled = true;
+        const snapAn = await db.collection('annuaire').get();
+        const parNumero = {};
+        snapAn.docs.forEach((d) => {
+          parNumero[d.id] = d.data();
+        });
+        const egal = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+        const sep = ';';
+        const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lignes = [
+          ['N° inscription', 'Statut', 'Nom (annuaire)', 'Nom (validé)', 'Prénom (annuaire)', 'Prénom (validé)',
+           'Établissement (annuaire)', 'Établissement (validé)', 'Mobile (validé)', 'E-mail (validé)', 'À mettre à jour']
+            .map(cellule)
+            .join(sep),
+        ];
+        inscriptions
+          .filter((i) => i.nom && i.nom !== 'Anonymisé')
+          .forEach((i) => {
+            const fiche = parNumero[normaliserNumero(i.numeroInscription)] || null;
+            const different =
+              !fiche ||
+              !egal(fiche.nom, i.nom) ||
+              !egal(fiche.prenom, i.prenom) ||
+              !egal(fiche.organisme, i.organisme);
+            lignes.push(
+              [
+                i.numeroInscription || '',
+                fiche ? 'Connu de l\'annuaire' : 'NOUVEAU (absent de l\'annuaire)',
+                fiche ? fiche.nom || '' : '',
+                i.nom || '',
+                fiche ? fiche.prenom || '' : '',
+                i.prenom || '',
+                fiche ? fiche.organisme || '' : '',
+                i.organisme || '',
+                i.mobile || '',
+                i.email || '',
+                different ? 'OUI' : '',
+              ]
+                .map(cellule)
+                .join(sep),
+            );
+          });
+        const blob = new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mises-a-jour-annuaire.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        boutonCsvAnnuaire.disabled = false;
       });
     }
 
