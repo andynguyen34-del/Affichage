@@ -23,16 +23,18 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    sur l'**écran d'accueil plein écran** — bandeau « Bonjour » avec
    l'information **« réunions en temps réel »** (ce qui se déroule en ce
    moment ou le prochain rendez-vous du programme, mise à jour chaque
-   minute) et grands boutons d'accès aux outils : 📅 Programme pédagogique,
-   🗺️ Plan des stands, 🔍 Recherche d'un fournisseur, 🛠️ Inscription
-   Atelier, 🎟️ Validation Tombola, 🎁 Tirage au sort, 📝 Questionnaires.
+   minute) et grands boutons d'accès aux outils, le tout tenant sur un seul
+   écran de téléphone : 📅 Programme pédagogique, 🗺️ Plan & recherche des
+   stands, 🏭 Visite des stands (avec scanner de QR intégré), 🛠️ Inscription
+   Atelier, 🎟️ Validation Tombola, 🎁 Tirage au sort, 📝 Questionnaires,
+   plus le bouton 🚪 Quitter l'application.
    Le bloc « 🔐 Mes données » (consentement, demande d'anonymisation) se
    trouve dans l'écran « modifier » du bandeau. Chaque outil s'ouvre dans
    son propre écran :
    - 🎁 **participer au tirage au sort** (une seule participation par
      personne, garantie côté serveur) ;
-   - 🎟️ **la tombola de clôture** : trois lots offerts par trois
-     fournisseurs. Conditions affichées au participant : réservée aux
+   - 🎟️ **la tombola de clôture** : trois lots offerts par l'URBH, remis
+     par les représentants des fournisseurs. Conditions affichées au participant : réservée aux
      visiteurs blanchisseurs adhérents, **présence dans la salle lors du
      tirage** requise, et **validation des points de présence** — présence à
      l'Assemblée Générale et pointage à l'ouverture des journées sur la
@@ -86,7 +88,8 @@ sur le portail des participants.
 (émargement) sont ouverts et fermés depuis l'administration : **ouverture des
 journées (première conférence)**, **Assemblée Générale**, **présence en salle
 au moment du tirage**. L'administration enregistre les **lots** (libellé +
-fournisseur offrant), suit le nombre de participants **éligibles** (visiteurs
+fournisseur remettant — les lots sont offerts par l'URBH et remis par les
+représentants des fournisseurs), suit le nombre de participants **éligibles** (visiteurs
 blanchisseurs ayant validé les trois points) et **tire chaque lot** — une même
 personne ne peut gagner qu'un seul lot ; un gagnant s'annule d'un clic. La
 **feuille des pointages (CSV)** sert d'émargement (utile aussi au dossier

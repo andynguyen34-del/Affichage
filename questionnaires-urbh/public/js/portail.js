@@ -61,6 +61,8 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
 
+  document.body.classList.add('page-portail');
+
   let uid = null;
   let journeeId = null;
   let portail = null;
@@ -542,7 +544,7 @@
       accueil: vueAccueil,
       programme: vueProgramme,
       plan: vuePlan,
-      exposants: vueExposants,
+      exposants: vuePlan, // la recherche a rejoint l'écran du plan
       visites: vueVisites,
       ateliers: vueAteliers,
       tombola: vueTombola,
@@ -688,8 +690,7 @@
 
     const OUTILS = [
       { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
-      { vue: 'plan', icone: '🗺️', libelle: 'Plan des stands' },
-      { vue: 'exposants', icone: '🔍', libelle: "Recherche d'un fournisseur" },
+      { vue: 'plan', icone: '🗺️', libelle: 'Plan & recherche des stands' },
       { vue: 'visites', icone: '🏭', libelle: 'Visite des stands' },
       { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
       { vue: 'tombola', icone: '🎟️', libelle: 'Validation Tombola', pastille: pointageOuvert ? 'pointage ouvert' : '' },
@@ -709,7 +710,7 @@
         ).join('')}
       </div>
       <div id="carte-installation"></div>
-      <div class="ligne-boutons" style="justify-content:center;margin-bottom:1rem">
+      <div class="ligne-boutons" style="justify-content:center;margin-bottom:0.5rem">
         <button id="bouton-quitter" class="secondaire">🚪 Quitter l'application</button>
       </div>
       <p id="note-quitter" class="muet petit" style="text-align:center" hidden>
@@ -781,57 +782,9 @@
     brancherNavigation();
   }
 
-  // ----------------------------------------------------------- plan des stands
+  // ---------------------------------- plan des stands & recherche fournisseur
 
   async function vuePlan() {
-    let nouveaux = [];
-    try {
-      const snapF = await db.collection('fournisseurs').where('journeeId', '==', journeeId).get();
-      nouveaux = snapF.docs
-        .map((d) => d.data())
-        .filter((f) => f.nouveau)
-        .sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
-    } catch (_) {
-      nouveaux = [];
-    }
-
-    $app.innerHTML = `${barreRetour('🗺️ Plan des stands')}
-        <div id="zone-plan-expo">
-          <a href="plan-exposition.png" target="_blank" rel="noopener">
-            <img id="img-plan-expo" src="plan-exposition.png" alt="Plan de l'exposition"
-              style="width:100%;border:1px solid var(--bord);border-radius:8px"></a>
-          <p class="muet petit" style="margin:0.2rem 0 0">Touchez le plan pour
-          l'agrandir (zoom possible une fois ouvert).</p>
-        </div>
-        <p id="plan-absent" class="muet" hidden>Le plan de l'exposition sera
-        affiché ici très prochainement.</p>
-        ${
-          nouveaux.length
-            ? `<div class="info" style="margin-top:0.8rem">🆕 <strong>Nouveaux exposants à découvrir :</strong>
-                ${nouveaux
-                  .map((f) => `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`)
-                  .join(' · ')}</div>`
-            : ''
-        }
-      </div>`;
-    brancherNavigation();
-
-    const imgPlan = document.getElementById('img-plan-expo');
-    const zonePlan = document.getElementById('zone-plan-expo');
-    const planAbsent = document.getElementById('plan-absent');
-    const planEnEchec = () => {
-      zonePlan.hidden = true;
-      planAbsent.hidden = false;
-    };
-    if (!(imgPlan.complete && imgPlan.naturalWidth > 0)) {
-      imgPlan.addEventListener('error', planEnEchec);
-      if (imgPlan.complete) planEnEchec();
-    }
-  }
-
-  // ------------------------------------------------------ recherche exposants
-
-  async function vueExposants() {
     let fournisseurs = [];
     try {
       const snapF = await db.collection('fournisseurs').where('journeeId', '==', journeeId).get();
@@ -883,27 +836,28 @@
       );
     }
 
-    $app.innerHTML = `${barreRetour("🔍 Recherche d'un fournisseur")}
+    $app.innerHTML = `${barreRetour('🗺️ Plan des stands & recherche')}
+        <div id="zone-plan-expo">
+          <a href="plan-exposition.png" target="_blank" rel="noopener">
+            <img id="img-plan-expo" src="plan-exposition.png" alt="Plan de l'exposition"
+              style="width:100%;border:1px solid var(--bord);border-radius:8px"></a>
+          <p class="muet petit" style="margin:0.2rem 0 0">Touchez le plan pour
+          l'agrandir (zoom possible une fois ouvert).</p>
+        </div>
+        <p id="plan-absent" class="muet" hidden>Le plan de l'exposition sera
+        affiché ici très prochainement.</p>
+        ${
+          nouveauxFournisseurs.length
+            ? `<div class="info" style="margin-top:0.8rem">🆕 <strong>Nouveaux exposants à découvrir :</strong>
+                ${nouveauxFournisseurs
+                  .map((f) => `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`)
+                  .join(' · ')}</div>`
+            : ''
+        }
+        <h3>Rechercher un fournisseur</h3>
         ${
           fournisseurs.length
-            ? `${
-                standsVisites.size
-                  ? `<p class="muet petit">✓ Vous avez déjà visité ${standsVisites.size} stand${standsVisites.size > 1 ? 's' : ''}.</p>`
-                  : ''
-              }
-              <p class="muet petit">Scannez le QR code affiché sur un stand pour
-              enregistrer votre passage et laisser vos coordonnées au fournisseur.
-              Le <button class="discret lien-vue" data-vue="plan">plan des stands</button>
-              vous aide à les repérer.</p>
-              ${
-                nouveauxFournisseurs.length
-                  ? `<div class="info">🆕 <strong>Nouveaux exposants à découvrir :</strong>
-                      ${nouveauxFournisseurs
-                        .map((f) => `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`)
-                        .join(' · ')}</div>`
-                  : ''
-              }
-              <input id="recherche-exposant" placeholder="🔍 Rechercher un fournisseur, un stand…"
+            ? `<input id="recherche-exposant" placeholder="🔍 Nom, n° de stand, activité…"
                 style="width:100%;font:inherit;padding:0.5rem 0.6rem;border:1px solid var(--bord);border-radius:8px;margin-bottom:0.6rem">
               <div id="liste-exposants">${htmlExposants('')}</div>`
             : `<p class="muet">La liste des exposants sera publiée ici très prochainement.</p>`
@@ -911,12 +865,23 @@
       </div>`;
     brancherNavigation();
 
+    const imgPlan = document.getElementById('img-plan-expo');
+    const zonePlan = document.getElementById('zone-plan-expo');
+    const planAbsent = document.getElementById('plan-absent');
+    const planEnEchec = () => {
+      zonePlan.hidden = true;
+      planAbsent.hidden = false;
+    };
+    if (!(imgPlan.complete && imgPlan.naturalWidth > 0)) {
+      imgPlan.addEventListener('error', planEnEchec);
+      if (imgPlan.complete) planEnEchec();
+    }
+
     const champRecherche = document.getElementById('recherche-exposant');
     if (champRecherche) {
       champRecherche.addEventListener('input', () => {
         document.getElementById('liste-exposants').innerHTML = htmlExposants(champRecherche.value);
       });
-      champRecherche.focus();
     }
   }
 
@@ -977,9 +942,8 @@
                 .join('')}</ul>`
             : `<p class="muet">Aucun passage enregistré pour le moment.</p>`
         }
-        <p class="muet petit">Retrouvez les exposants avec la
-          <button class="discret lien-vue" data-vue="exposants">recherche d'un fournisseur</button>
-          et le <button class="discret lien-vue" data-vue="plan">plan des stands</button>.</p>
+        <p class="muet petit">Retrouvez les exposants avec le
+          <button class="discret lien-vue" data-vue="plan">plan des stands et la recherche</button>.</p>
       </div>`;
     brancherNavigation();
 
@@ -1274,7 +1238,7 @@
                 .map((lot, i) => {
                   const g = gagnantsTombola.find((x) => x.lotIndex === i);
                   return `<li>🎁 <strong>${echapper(lot.libelle)}</strong>${
-                    lot.fournisseurNom ? ` <span class="muet petit">— offert par ${echapper(lot.fournisseurNom)}</span>` : ''
+                    lot.fournisseurNom ? ` <span class="muet petit">— remis par ${echapper(lot.fournisseurNom)}</span>` : ''
                   }${
                     g
                       ? `<br>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}${g.numeroInscription ? ' (carte n° ' + echapper(g.numeroInscription) + ')' : ''}${g.organisme ? ' — ' + echapper(g.organisme) : ''}`
@@ -1282,8 +1246,9 @@
                   }</li>`;
                 })
                 .join('')}</ul>`
-            : `<p class="muet petit">Trois lots offerts par les fournisseurs seront
-                tirés au sort à la clôture des journées.</p>`
+            : `<p class="muet petit">Trois lots offerts par l'URBH, remis par les
+                représentants des fournisseurs, seront tirés au sort à la
+                clôture des journées.</p>`
         }
         <p class="muet petit"><strong>Pour participer :</strong> la tombola est
         réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La

@@ -402,3 +402,23 @@ ul.liste a:hover { text-decoration: underline; }
   border-bottom-color: transparent;
 }
 .prog-passe { opacity: 0.55; }
+
+/* ---- Accueil compact : tout tient sur l'écran du téléphone sans défiler --- */
+body.page-portail header.appbar { padding: 0.5rem 1rem; }
+body.page-portail header.appbar h1 { font-size: 1rem; }
+body.page-portail header.appbar .sous-titre { font-size: 0.75rem; }
+body.page-portail main { padding: 0.7rem 0.8rem; }
+.carte-bonjour { padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; }
+.carte-bonjour h2 { margin: 0 0 0.15rem; font-size: 1rem; }
+.carte-bonjour p { margin: 0; font-size: 0.85rem; }
+.info-reunion { margin-top: 0.45rem; padding: 0.4rem 0.6rem; font-size: 0.84rem; }
+.grille-outils { gap: 0.55rem; margin-bottom: 0.6rem; }
+.bouton-outil { min-height: 4.3rem; padding: 0.45rem 0.4rem; gap: 0.25rem; border-radius: 12px; }
+.outil-icone { font-size: 1.4rem; }
+.outil-libelle { font-size: 0.82rem; }
+/* Nombre impair de boutons : le dernier occupe toute la largeur. */
+.bouton-outil:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 3.2rem; flex-direction: row; }
+#carte-installation .carte { padding: 0.55rem 0.9rem; margin-bottom: 0.6rem; }
+#carte-installation .carte h2 { margin-bottom: 0.25rem; font-size: 0.92rem; }
+#carte-installation .carte p { margin: 0.2rem 0; }
+#bouton-quitter { padding: 0.35rem 0.9rem; font-size: 0.85rem; }

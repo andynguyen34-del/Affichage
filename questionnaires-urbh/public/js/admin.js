@@ -889,8 +889,8 @@
 
       <div class="carte">
         <h2>🎟️ Tombola de clôture</h2>
-        <p class="muet petit">Trois lots offerts par trois fournisseurs, tirés
-        au sort à la clôture. <strong>Conditions de participation</strong>
+        <p class="muet petit">Trois lots offerts par l'URBH, remis par les
+        représentants de trois fournisseurs, tirés au sort à la clôture. <strong>Conditions de participation</strong>
         (affichées aux participants) : être visiteur blanchisseur adhérent,
         être <strong>présent dans la salle lors du tirage</strong>, et avoir
         <strong>validé ses points de présence</strong> — présence à
@@ -933,7 +933,7 @@
                   return `<li>
                     <div>
                       🎁 <span class="titre-item">${echapper(lot.libelle)}</span>
-                      ${lot.fournisseurNom ? `<span class="muet petit"> — offert par ${echapper(lot.fournisseurNom)}</span>` : ''}
+                      ${lot.fournisseurNom ? `<span class="muet petit"> — remis par ${echapper(lot.fournisseurNom)}</span>` : ''}
                       ${
                         g
                           ? `<div>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}
@@ -959,7 +959,7 @@
         <form id="form-lot" class="ligne-boutons" style="align-items:flex-end">
           <label class="champ" style="margin:0;flex:1;min-width:180px">Lot
             <input id="lot-libelle" required placeholder="Ex. : un séjour thalasso"></label>
-          <label class="champ" style="margin:0;flex:1;min-width:180px">Offert par (fournisseur)
+          <label class="champ" style="margin:0;flex:1;min-width:180px">Remis par (représentant du fournisseur)
             <input id="lot-fournisseur" list="liste-fournisseurs-lots" placeholder="Ex. : GIRBAU">
             <datalist id="liste-fournisseurs-lots">
               ${fournisseursJ.map((f) => `<option value="${attr(f.nom)}"></option>`).join('')}
