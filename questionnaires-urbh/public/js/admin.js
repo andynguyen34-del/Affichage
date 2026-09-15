@@ -703,11 +703,17 @@
     }
     const aRepondu = (participantId) =>
       questionnairesTombola.every((q) => repondantsParQuestionnaire[q.id].has(participantId));
+    // Les membres du Conseil d'Administration (liste des N° d'inscription
+    // tenue dans la carte Tombola) ne peuvent pas gagner à la tombola.
+    const exclusCA = new Set(
+      ((portail.tombola && portail.tombola.exclusCA) || []).map(normaliserNumero),
+    );
     const candidatsTombola = pointagesJ.filter(
       (p) =>
         p.moment === 'tombola' &&
         p.type === 'visiteur' &&
         p.nom !== 'Anonymisé' &&
+        !exclusCA.has(normaliserNumero(p.numeroInscription)) &&
         parMoment.ouverture.has(p.participantId) &&
         parMoment.ag.has(p.participantId) &&
         aRepondu(p.participantId),
@@ -949,9 +955,21 @@
             📽️ Écran de projection (kiosque)
           </a>
         </div>
+        <h3>Membres du Conseil d'Administration (exclus de la tombola)</h3>
+        <p class="muet petit">Les N° d'inscription listés ici ne peuvent pas
+        gagner à la tombola. Ils participent normalement au reste (ateliers,
+        pointages — utiles pour l'émargement).</p>
+        <label class="champ">N° d'inscription des membres du CA (séparés par des virgules)
+          <textarea id="ca-numeros" rows="2"
+            placeholder="Ex. : JE2026-001, JE2026-015…">${(tombolaInfo.exclusCA || []).join(', ')}</textarea></label>
+        <div class="ligne-boutons">
+          <button type="button" id="bouton-enregistrer-ca">Enregistrer la liste du CA</button>
+          <button type="button" id="bouton-prefill-ca" class="secondaire">Pré-remplir avec le CA des 41es JE</button>
+        </div>
         <h3>Lots et tirage</h3>
         <p class="muet petit"><strong>${candidatsTombola.length}</strong>
-        participant(s) éligible(s) actuellement (visiteurs blanchisseurs,
+        participant(s) éligible(s) actuellement (visiteurs blanchisseurs hors
+        membres du CA${(tombolaInfo.exclusCA || []).length ? ` — ${(tombolaInfo.exclusCA || []).length} exclus` : ' — liste du CA non renseignée'},
         trois points validés, questionnaires répondus${questionnairesTombola.length ? ` — ${questionnairesTombola.length} questionnaire(s) ouvert(s) pris en compte` : ' — aucun questionnaire ouvert pour le moment'}).
         Une même personne ne peut gagner qu'un seul lot.</p>
         ${
@@ -1034,6 +1052,14 @@
               value="${attr(versDatetimeLocal(agInfo && agInfo.fin))}"></label>
           <button type="submit">Enregistrer la période</button>
         </form>
+        <div class="ligne-boutons">
+          <a class="btn secondaire" href="kiosque-ateliers.html?e=${journeeId}" target="_blank" rel="noopener">
+            📽️ Écran des ateliers (kiosque)
+          </a>
+        </div>
+        <p class="muet petit">À projeter devant les salles : les listes des
+        retenus et les listes d'attente s'affichent en direct, nom par nom,
+        dès que vous tirez un atelier au sort ci-dessous.</p>
         <h3>Ateliers</h3>
         ${
           ateliers.length
@@ -1580,6 +1606,36 @@
         router();
       }),
     );
+
+    // Liste des membres du CA (N° d'inscription) exclus de la tombola.
+    document.getElementById('bouton-enregistrer-ca').addEventListener('click', async () => {
+      const numeros = [
+        ...new Set(
+          document
+            .getElementById('ca-numeros')
+            .value.split(/[\s,;]+/)
+            .map(normaliserNumero)
+            .filter(Boolean),
+        ),
+      ];
+      await refPortail.update({ 'tombola.exclusCA': numeros });
+      router();
+    });
+
+    document.getElementById('bouton-prefill-ca').addEventListener('click', () => {
+      // CA des 41es JE, retrouvé dans le fichier des participants ; Evelyne
+      // THIERRY (présidente) n'y figure pas encore : ajoutez son numéro.
+      document.getElementById('ca-numeros').value = [
+        'JE2026-001', 'JE2026-015', 'JE2026-016', 'JE2026-020', 'JE2026-022',
+        'JE2026-029', 'JE2026-030', 'JE2026-031', 'JE2026-032', 'JE2026-034',
+        'JE2026-035', 'JE2026-037', 'JE2026-039', 'JE2026-041', 'JE2026-150',
+      ].join(', ');
+      alert(
+        '15 numéros du CA pré-remplis (fichier des participants). ' +
+          "Evelyne THIERRY n'y figure pas encore : ajoutez son numéro, " +
+          'puis « Enregistrer la liste du CA ».',
+      );
+    });
 
     const boutonCsvPointages = document.getElementById('bouton-csv-pointages');
     if (boutonCsvPointages) {

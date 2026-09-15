@@ -1257,6 +1257,11 @@
     const questionnairesOk =
       questionnairesAttendus.length > 0 && nbRepondus === questionnairesAttendus.length;
 
+    // Les membres du Conseil d'Administration ne participent pas à la
+    // tombola (liste des N° d'inscription tenue par l'administration).
+    const exclusCA = new Set((tombolaInfo.exclusCA || []).map(normaliserNumero));
+    const membreCA = exclusCA.has(normaliserNumero(profil.numeroInscription));
+
     function htmlPoint(m) {
       const p = mesPointages[m.cle];
       if (p) {
@@ -1294,18 +1299,23 @@
                 clôture des journées.</p>`
         }
         <p class="muet petit"><strong>Pour participer :</strong> la tombola est
-        réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La
+        réservée aux <strong>visiteurs blanchisseurs adhérents</strong> (les
+        membres du Conseil d'Administration n'y participent pas). La
         <strong>présence dans la salle lors du tirage au sort</strong> est
         requise, la <strong>validation des points de présence</strong> est
         nécessaire — présence à l'Assemblée Générale et pointage à l'ouverture
         des journées sur la première conférence — et il faut avoir
         <strong>répondu aux questionnaires de satisfaction</strong> proposés.</p>
         ${
-          profil.type === 'exposant'
-            ? `<p class="muet petit">Vous êtes enregistré comme exposant
-                fournisseur : vos pointages servent d'émargement, mais la
-                tombola est réservée aux visiteurs blanchisseurs.</p>`
-            : ''
+          membreCA
+            ? `<div class="info">👥 Membre du Conseil d'Administration : vous ne
+                participez pas à la tombola. Vos pointages restent utiles pour
+                l'émargement, et les ateliers vous sont ouverts normalement.</div>`
+            : profil.type === 'exposant'
+              ? `<p class="muet petit">Vous êtes enregistré comme exposant
+                  fournisseur : vos pointages servent d'émargement, mais la
+                  tombola est réservée aux visiteurs blanchisseurs.</p>`
+              : ''
         }
         <h3 style="margin-bottom:0.3rem">Mes points de présence</h3>
         <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}
@@ -1322,6 +1332,7 @@
           }
         </ul>
         ${
+          !membreCA &&
           profil.type !== 'exposant' &&
           mesPointages.ouverture &&
           mesPointages.ag &&

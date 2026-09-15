@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Kiosque — Ateliers URBH</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icone-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&display=swap">
+  <style>
+    /* Écran de projection des ateliers : même monde sombre que le kiosque
+       des tirages, volontairement unique (salle). */
+    :root {
+      --nuit: #0b1c33;
+      --nuit-2: #143a68;
+      --encre: #f2f6fc;
+      --or: #f0b23e;
+      --bleu-clair: #7fb3ff;
+      --voile: rgba(255, 255, 255, 0.07);
+      --bord: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+      color: var(--encre);
+      background: radial-gradient(120% 90% at 50% 0%, var(--nuit-2) 0%, var(--nuit) 62%);
+      overflow: hidden;
+    }
+    .scene { height: 100%; display: flex; flex-direction: column; padding: 2.5vh 3vw; }
+    .entete { text-align: center; margin-bottom: 2vh; }
+    .entete .surtitre {
+      text-transform: uppercase;
+      letter-spacing: 0.35em;
+      font-size: clamp(0.65rem, 1.2vw, 1rem);
+      color: var(--bleu-clair);
+      font-weight: 600;
+    }
+    .entete h1 {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(1.3rem, 2.8vw, 2.3rem);
+      margin: 0.15rem 0 0;
+    }
+    #grille {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.2rem;
+      overflow: auto;
+      align-content: start;
+    }
+    .atelier {
+      background: var(--voile);
+      border: 1px solid var(--bord);
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .atelier.vient-d-etre-tire { animation: surgir 0.8s ease; border-color: var(--or); }
+    @keyframes surgir { 0% { transform: scale(0.94); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
+    .atelier .haut { display: flex; align-items: center; gap: 0.7rem; }
+    .salle {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(1.4rem, 3vw, 2.4rem);
+      color: var(--nuit);
+      background: var(--or);
+      border-radius: 10px;
+      padding: 0.05em 0.45em;
+      line-height: 1.2;
+    }
+    .atelier .horaire { font-size: clamp(0.75rem, 1.3vw, 1rem); opacity: 0.8; }
+    .atelier .nom { font-weight: 700; font-size: clamp(0.9rem, 1.6vw, 1.25rem); line-height: 1.25; }
+    .atelier .etat { margin-top: 0.8rem; opacity: 0.7; font-size: clamp(0.85rem, 1.4vw, 1.05rem); }
+    ol.retenus { margin: 0.7rem 0 0; padding-left: 1.6em; font-size: clamp(0.85rem, 1.5vw, 1.15rem); }
+    ol.retenus li { margin-bottom: 0.15em; opacity: 0; animation: apparaitre 0.4s ease forwards; }
+    @keyframes apparaitre { to { opacity: 1; } }
+    ol.retenus li strong { color: var(--or); font-weight: 700; }
+    ol.retenus li .org { opacity: 0.65; font-size: 0.85em; }
+    .attente-liste { margin-top: 0.5rem; font-size: clamp(0.72rem, 1.2vw, 0.92rem); opacity: 0.6; }
+    .vide { text-align: center; opacity: 0.7; font-size: 1.2rem; padding: 4rem 1rem; }
+    .aide { position: fixed; right: 1rem; bottom: 0.6rem; font-size: 0.75rem; opacity: 0.4; }
+    @media (prefers-reduced-motion: reduce) {
+      .atelier.vient-d-etre-tire, ol.retenus li { animation: none; opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <div class="entete">
+      <div class="surtitre" id="surtitre">Journées d'études</div>
+      <h1 id="titre">Ateliers — participants retenus</h1>
+    </div>
+    <div id="grille"><div class="vide">Connexion…</div></div>
+  </div>
+  <div class="aide">double-clic : plein écran</div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="js/kiosque-ateliers.js"></script>
+</body>
+</html>
