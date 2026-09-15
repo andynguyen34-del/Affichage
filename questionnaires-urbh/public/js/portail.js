@@ -375,6 +375,8 @@
           : ''
       }
 
+      <div id="carte-installation"></div>
+
       <div class="carte">
         <h2>📝 Questionnaires</h2>
         ${
@@ -397,6 +399,8 @@
             : `<p class="muet">Aucun questionnaire ouvert pour le moment — repassez par ici, notamment en fin de journée pour le questionnaire de satisfaction.</p>`
         }
       </div>`;
+
+    majCarteInstallation();
 
     document.getElementById('bouton-profil').addEventListener('click', () => {
       vueInscription();
@@ -551,6 +555,91 @@
 
   const piedVersion = document.getElementById('pied-version');
   if (piedVersion && window.APP_BUILD) piedVersion.textContent = ' — v' + window.APP_BUILD;
+
+  // ------------------------------------------------- installation (PWA)
+  // L'application s'installe sur l'écran d'accueil : bouton natif sur
+  // Android/Chrome, mode d'emploi sur iPhone (Safari impose le geste manuel).
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      /* hors hébergement HTTPS : sans gravité */
+    });
+  }
+
+  let promptInstallation = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    promptInstallation = e;
+    majCarteInstallation();
+  });
+
+  function estInstallee() {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function installationMasquee() {
+    try {
+      return localStorage.getItem('urbh_installation_masquee') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function majCarteInstallation() {
+    const zone = document.getElementById('carte-installation');
+    if (!zone) return;
+    if (estInstallee() || installationMasquee()) {
+      zone.innerHTML = '';
+      return;
+    }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    let corps;
+    if (promptInstallation) {
+      corps = `<div class="ligne-boutons">
+        <button id="bouton-installer">📲 Installer l'application</button>
+        <button id="bouton-masquer-installation" class="discret">plus tard</button>
+      </div>`;
+    } else if (ios) {
+      corps = `<p class="muet petit">Sur iPhone : touchez <strong>Partager</strong>
+        (carré avec une flèche) puis <strong>« Sur l'écran d'accueil »</strong>.
+        <button id="bouton-masquer-installation" class="discret">masquer</button></p>`;
+    } else {
+      corps = `<p class="muet petit">Dans le menu du navigateur (⋮), choisissez
+        <strong>« Installer l'application »</strong>.
+        <button id="bouton-masquer-installation" class="discret">masquer</button></p>`;
+    }
+    zone.innerHTML = `<div class="carte">
+      <h2>📲 Gardez l'application sous la main</h2>
+      <p class="muet petit">Installez « JE URBH » sur votre écran d'accueil pour
+      retrouver en un geste le programme, les ateliers et les questionnaires.</p>
+      ${corps}
+    </div>`;
+
+    const boutonInstaller = document.getElementById('bouton-installer');
+    if (boutonInstaller) {
+      boutonInstaller.addEventListener('click', async () => {
+        if (!promptInstallation) return;
+        promptInstallation.prompt();
+        await promptInstallation.userChoice;
+        promptInstallation = null;
+        majCarteInstallation();
+      });
+    }
+    const boutonMasquer = document.getElementById('bouton-masquer-installation');
+    if (boutonMasquer) {
+      boutonMasquer.addEventListener('click', () => {
+        try {
+          localStorage.setItem('urbh_installation_masquee', '1');
+        } catch (_) {
+          /* sans gravité */
+        }
+        majCarteInstallation();
+      });
+    }
+  }
 
   // Réutilise la session existante (participant déjà connu, ou administrateur
   // qui teste le portail) ; sinon crée une session anonyme liée à l'appareil.
