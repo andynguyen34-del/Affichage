@@ -7,3 +7,6 @@ data/
 .DS_Store
 Thumbs.db
 *.log
+
+# Zips de livraison generes en session (envoyes directement a l utilisateur)
+*.zip
