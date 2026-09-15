@@ -701,10 +701,29 @@
           </button>`,
         ).join('')}
       </div>
-      <div id="carte-installation"></div>`;
+      <div id="carte-installation"></div>
+      <div class="ligne-boutons" style="justify-content:center;margin-bottom:1rem">
+        <button id="bouton-quitter" class="secondaire">🚪 Quitter l'application</button>
+      </div>
+      <p id="note-quitter" class="muet petit" style="text-align:center" hidden>
+        Votre téléphone ne permet pas la fermeture automatique : fermez
+        l'application comme les autres (balayage vers le haut depuis la liste
+        des applications). Vous serez reconnu automatiquement au retour.
+      </p>`;
 
     majCarteInstallation();
     brancherNavigation();
+
+    document.getElementById('bouton-quitter').addEventListener('click', () => {
+      // Fermeture de la fenêtre quand la plateforme l'autorise (application
+      // installée sur Android notamment) ; sinon, mode d'emploi. La session
+      // reste conservée : aucun risque de perdre la reconnaissance.
+      window.close();
+      setTimeout(() => {
+        const note = document.getElementById('note-quitter');
+        if (note) note.hidden = false;
+      }, 400);
+    });
   }
 
   // --------------------------------------------------------------- programme
