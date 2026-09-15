@@ -18,11 +18,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
+set VERSION=inconnue
+for /f "tokens=2 delims==; " %%v in ('findstr /c:"window.APP_BUILD" public\js\firebase-config.js') do set VERSION=%%v
+
 echo.
 echo === Deploiement Questionnaires URBH ===
 echo     Dossier : %~dp0
+echo     VERSION A DEPLOYER : v%VERSION%
 echo     Cible   : projet questionnaires-urbh (hosting + regles Firestore)
 echo.
+echo     Si la version ci-dessus n'est pas la derniere livraison annoncee,
+echo     fermez cette fenetre : vous etes dans un ANCIEN dossier extrait.
+echo.
+pause
 
 call firebase deploy --only hosting,firestore --project questionnaires-urbh
 
@@ -33,9 +41,9 @@ if errorlevel 1 (
   echo         Autre erreur : envoyez une capture de ce message a Claude.
 ) else (
   echo.
-  echo [OK] Deploiement termine.
+  echo [OK] Deploiement termine : la v%VERSION% est en ligne.
   echo      Verification : ouvrez https://questionnaires-urbh.web.app/portail.html
-  echo      faites Ctrl+F5 et controlez le numero de version en bas de page.
+  echo      faites Ctrl+F5 et controlez que le bas de page affiche v%VERSION%.
 )
 
 echo.
