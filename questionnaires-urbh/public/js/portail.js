@@ -519,6 +519,7 @@
   }
 
   function retourMenu() {
+    if (arreterScanner) arreterScanner();
     standDemande = null;
     try {
       history.replaceState(null, '', location.pathname);
@@ -542,6 +543,7 @@
       programme: vueProgramme,
       plan: vuePlan,
       exposants: vueExposants,
+      visites: vueVisites,
       ateliers: vueAteliers,
       tombola: vueTombola,
       tirage: vueTirage,
@@ -550,7 +552,11 @@
     return (vues[vueCourante] || vueAccueil)();
   }
 
+  // Caméra du scanner de QR de stand : coupée dès qu'on change d'écran.
+  let arreterScanner = null;
+
   function aller(vue) {
+    if (arreterScanner) arreterScanner();
     vueCourante = vue;
     window.scrollTo(0, 0);
     vueMenu();
@@ -684,6 +690,7 @@
       { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
       { vue: 'plan', icone: '🗺️', libelle: 'Plan des stands' },
       { vue: 'exposants', icone: '🔍', libelle: "Recherche d'un fournisseur" },
+      { vue: 'visites', icone: '🏭', libelle: 'Visite des stands' },
       { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
       { vue: 'tombola', icone: '🎟️', libelle: 'Validation Tombola', pastille: pointageOuvert ? 'pointage ouvert' : '' },
       { vue: 'tirage', icone: '🎁', libelle: 'Tirage au sort', pastille: tirageOuvert ? 'ouvert' : '' },
@@ -911,6 +918,125 @@
       });
       champRecherche.focus();
     }
+  }
+
+  // --------------------------------------------------------- visite des stands
+
+  async function vueVisites() {
+    let visites = [];
+    try {
+      const snapMv = await db.collection('visites').where('participantId', '==', uid).get();
+      visites = snapMv.docs
+        .map((d) => d.data())
+        .filter((v) => v.journeeId === journeeId);
+      visites.sort((a, b) => String(b.viseLe || '').localeCompare(String(a.viseLe || '')));
+    } catch (_) {
+      visites = [];
+    }
+
+    // Scanner intégré quand le navigateur le permet (Chrome sur Android) ;
+    // sinon, l'appareil photo du téléphone fait la même chose via le QR.
+    const scannerDispo =
+      'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+
+    $app.innerHTML = `${barreRetour('🏭 Visite des stands')}
+        <p class="muet petit">Sur chaque stand, un QR code permet d'enregistrer
+        votre passage et, avec votre consentement, de laisser vos coordonnées
+        au fournisseur pour qu'il vous recontacte.</p>
+        ${
+          scannerDispo
+            ? `<div class="ligne-boutons">
+                <button id="bouton-scanner">📷 Scanner le QR du stand</button>
+              </div>
+              <div id="zone-scanner" hidden style="margin:0.6rem 0">
+                <video id="video-scanner" playsinline muted
+                  style="width:100%;border-radius:10px;border:1px solid var(--bord)"></video>
+                <div class="ligne-boutons">
+                  <button id="bouton-stop-scanner" class="secondaire">Arrêter le scanner</button>
+                </div>
+              </div>
+              <div id="erreur-scanner" class="erreur" hidden></div>
+              <p class="muet petit">L'appareil photo du téléphone fonctionne
+              aussi : visez le QR du stand, le portail s'ouvre directement.</p>`
+            : `<p class="muet petit">📷 Ouvrez l'<strong>appareil photo</strong> du
+                téléphone et visez le QR du stand : le portail s'ouvre sur la
+                confirmation du passage.</p>`
+        }
+        <h3>Mes passages${visites.length ? ` (${visites.length})` : ''}</h3>
+        ${
+          visites.length
+            ? `<ul class="liste">${visites
+                .map(
+                  (v) => `<li>
+                    <div>
+                      <span class="titre-item">${echapper(v.fournisseurNom || '')}</span>
+                      <div class="muet petit">${v.viseLe ? new Date(v.viseLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</div>
+                    </div>
+                  </li>`,
+                )
+                .join('')}</ul>`
+            : `<p class="muet">Aucun passage enregistré pour le moment.</p>`
+        }
+        <p class="muet petit">Retrouvez les exposants avec la
+          <button class="discret lien-vue" data-vue="exposants">recherche d'un fournisseur</button>
+          et le <button class="discret lien-vue" data-vue="plan">plan des stands</button>.</p>
+      </div>`;
+    brancherNavigation();
+
+    if (!scannerDispo) return;
+
+    let flux = null;
+    let boucle = null;
+    const arreter = () => {
+      if (boucle) clearInterval(boucle);
+      boucle = null;
+      if (flux) flux.getTracks().forEach((t) => t.stop());
+      flux = null;
+      const zone = document.getElementById('zone-scanner');
+      if (zone) zone.hidden = true;
+      arreterScanner = null;
+    };
+
+    document.getElementById('bouton-stop-scanner').addEventListener('click', arreter);
+    document.getElementById('bouton-scanner').addEventListener('click', async () => {
+      const erreur = document.getElementById('erreur-scanner');
+      erreur.hidden = true;
+      try {
+        flux = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+        arreterScanner = arreter;
+        const video = document.getElementById('video-scanner');
+        video.srcObject = flux;
+        await video.play();
+        document.getElementById('zone-scanner').hidden = false;
+        const detecteur = new BarcodeDetector({ formats: ['qr_code'] });
+        boucle = setInterval(async () => {
+          try {
+            const codes = await detecteur.detect(video);
+            if (!codes.length) return;
+            const brut = codes[0].rawValue || '';
+            let standId = null;
+            try {
+              standId = new URL(brut).searchParams.get('stand');
+            } catch (_) {
+              if (/^[A-Za-z0-9_-]+$/.test(brut)) standId = brut;
+            }
+            if (standId && /^[A-Za-z0-9_-]+$/.test(standId)) {
+              arreter();
+              vueStand(standId);
+            }
+          } catch (_) {
+            /* image pas encore prête : on réessaie */
+          }
+        }, 400);
+      } catch (_) {
+        arreter();
+        erreur.textContent =
+          "L'accès à la caméra a été refusé ou est indisponible — utilisez l'appareil photo du téléphone sur le QR du stand.";
+        erreur.hidden = false;
+      }
+    });
   }
 
   // ---------------------------------------------------------------- ateliers
