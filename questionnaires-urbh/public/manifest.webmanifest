@@ -1,0 +1,26 @@
+{
+  "name": "Journées d'études URBH",
+  "short_name": "JE URBH",
+  "description": "Portail des participants aux journées d'études de l'URBH : tirage au sort, ateliers, questionnaires.",
+  "lang": "fr",
+  "start_url": "/portail.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1d4e89",
+  "background_color": "#f4f6f9",
+  "icons": [
+    {
+      "src": "/icons/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

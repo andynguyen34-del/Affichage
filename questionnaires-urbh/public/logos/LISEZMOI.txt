@@ -1,0 +1,3 @@
+Logos des fournisseurs : un fichier par stand, nomme stand-<numero>.png
+(ex. stand-63.png, stand-74bis.png). Ils apparaissent automatiquement
+dans la liste des exposants du portail.

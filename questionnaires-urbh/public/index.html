@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Questionnaires URBH — Administration</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="appbar">
+    <div>
+      <h1>URBH — Questionnaires de satisfaction</h1>
+      <div class="sous-titre">Journées d'études · démarche qualité</div>
+    </div>
+    <div class="droite pas-impression">
+      <span id="version-app" class="petit" style="opacity:0.7"></span>
+      <span id="utilisateur-courant" class="petit"></span>
+      <button id="bouton-deconnexion" class="secondaire" hidden>Se déconnecter</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <div class="carte">Chargement…</div>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <!-- Servi par Firebase Hosting : initialise l'application avec la
+       configuration du projet, sans rien recopier. Absent (404) hors
+       hébergement Firebase : sans gravité, firebase-config.js prend le relais. -->
+  <script src="/__/firebase/init.js"></script>
+  <script src="js/modeles.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
