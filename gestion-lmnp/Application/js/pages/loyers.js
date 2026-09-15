@@ -946,26 +946,23 @@ function carteGerance(donnees, bien, annee, contexte) {
   const totaux = totauxAnnee(lignes);
   const bailleur = donnees.parametres.bailleurs?.[0];
   const colonnes = [
-    { titre: 'Mois', valeur: (l) => h('div', {}, [h('div', { texte: l.libelle }), l.releve ? null : h('div', { class: 'legende', texte: `versement attendu le ${date(l.attenduLe)}` })]) },
-    { titre: 'Loyer encaissé', nombre: true, valeur: (l) => (l.releve ? montant(l.releve.loyer || 0) : '—') },
+    { titre: 'Mois', valeur: (l) => h('div', {}, [h('div', { texte: l.libelle }), h('div', { class: 'legende', texte: l.releve?.verseLe ? `versé le ${date(l.releve.verseLe)}` : `attendu le ${date(l.attenduLe)}` })]) },
+    { titre: 'Loyer', nombre: true, valeur: (l) => (l.releve ? montant(l.releve.loyer || 0) : '—') },
     { titre: 'Honoraires', nombre: true, valeur: (l) => (l.releve ? montant(l.releve.honoraires || 0) : '—') },
-    { titre: 'Autres retenues', nombre: true, valeur: (l) => (l.releve && Number(l.releve.autres) > 0 ? h('span', { title: l.releve.natureAutres || '' }, [montant(l.releve.autres), l.releve.natureAutres ? h('div', { class: 'legende', texte: l.releve.natureAutres }) : null]) : (l.releve ? '—' : '—')) },
+    { titre: 'Retenues', nombre: true, valeur: (l) => (l.releve && Number(l.releve.autres) > 0 ? h('span', { title: l.releve.natureAutres || '' }, [montant(l.releve.autres), l.releve.natureAutres ? h('div', { class: 'legende', texte: l.releve.natureAutres }) : null]) : '—') },
     { titre: 'Net versé', nombre: true, valeur: (l) => (l.releve ? h('strong', { texte: montant(l.releve.net || 0) }) : '—') },
-    { titre: 'Versé le', valeur: (l) => (l.releve?.verseLe ? date(l.releve.verseLe) : '—') },
-    { titre: 'Relevé', valeur: (l) => {
-      if (!l.releve) return h('span', { class: 'legende', texte: '—' });
-      const document_ = documents.find((d) => d.id === l.releve.documentId);
-      return document_
-        ? bouton(`📄 ${document_.nomFichier}`, () => api.ouvrirFichier('partage', document_.chemin).catch(signalerErreur), { petit: true, titre: 'Ouvrir le relevé de l’agence' })
-        : bouton('Joindre le PDF', () => joindreReleve(bien, l, l.releve).catch(signalerErreur), { petit: true, titre: 'Joindre le relevé de gérance envoyé par l’agence' });
-    } },
     { titre: 'État', valeur: (l) => badge(LIBELLES_ETAT_MOIS[l.etat].texte, LIBELLES_ETAT_MOIS[l.etat].ton) },
-    { titre: '', actions: true, valeur: (l) => h('div', { class: 'groupe-boutons' }, [
-      l.releve
-        ? bouton('Modifier', () => saisirReleve(bien, l, l.releve).catch(signalerErreur), { petit: true })
-        : bouton('Relevé reçu', () => saisirReleve(bien, l).catch(signalerErreur), { petit: true, type: l.etat === 'manquant' ? 'primaire' : undefined, titre: 'Enregistrer le relevé de gérance de ce mois' }),
-      l.releve ? bouton('✕', () => retirerReleve(bien, l).catch(signalerErreur), { petit: true, type: 'danger', titre: 'Retirer le relevé' }) : null,
-    ]) },
+    { titre: '', actions: true, valeur: (l) => {
+      const document_ = l.releve ? documents.find((d) => d.id === l.releve.documentId) : null;
+      return h('div', { class: 'groupe-boutons' }, [
+        l.releve
+          ? bouton('Modifier', () => saisirReleve(bien, l, l.releve).catch(signalerErreur), { petit: true })
+          : bouton('Relevé reçu', () => saisirReleve(bien, l).catch(signalerErreur), { petit: true, type: l.etat === 'manquant' ? 'primaire' : undefined, titre: 'Enregistrer le relevé de gérance de ce mois' }),
+        l.releve && document_ ? bouton('📄', () => api.ouvrirFichier('partage', document_.chemin).catch(signalerErreur), { petit: true, titre: `Ouvrir le relevé de l’agence (${document_.nomFichier})` }) : null,
+        l.releve && !document_ ? bouton('Joindre le PDF', () => joindreReleve(bien, l, l.releve).catch(signalerErreur), { petit: true, titre: 'Joindre le relevé de gérance envoyé par l’agence' }) : null,
+        l.releve ? bouton('✕', () => retirerReleve(bien, l).catch(signalerErreur), { petit: true, type: 'danger', titre: 'Retirer le relevé' }) : null,
+      ]);
+    } },
   ];
   const carteElement = carte({
     titre: bien.nom,
@@ -986,7 +983,7 @@ function carteGerance(donnees, bien, annee, contexte) {
       ]),
       tableau({
         colonnes, lignes, cle: (l) => `${l.annee}-${l.mois}`, messageVide: 'Aucun mois : vérifiez la date « géré depuis » de la fiche.',
-        pied: ligneTotal(colonnes, [h('strong', { texte: `Total ${annee}` }), montant(totaux.loyers), montant(totaux.honoraires), montant(totaux.autres), h('strong', { texte: montant(totaux.net) }), '', '', badge(`${totaux.recus} / ${totaux.attendus} relevés`, totaux.manquants.length ? 'alerte' : (totaux.recus === totaux.attendus ? 'succes' : 'attente')), '']),
+        pied: ligneTotal(colonnes, [h('strong', { texte: `Total ${annee}` }), montant(totaux.loyers), montant(totaux.honoraires), montant(totaux.autres), h('strong', { texte: montant(totaux.net) }), badge(`${totaux.recus} / ${totaux.attendus} relevés`, totaux.manquants.length ? 'alerte' : (totaux.recus === totaux.attendus ? 'succes' : 'attente')), '']),
       }),
     ],
   });
