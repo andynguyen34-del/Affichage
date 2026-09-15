@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestion LMNP</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<!-- Application installable (écran d'accueil, ouverture sans barre de navigateur). -->
+<link rel="manifest" id="lien-manifeste" href="/manifest.webmanifest">
+<meta name="theme-color" id="meta-theme" content="#1d6a5a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" id="meta-titre-apple" content="LMNP">
+<link rel="apple-touch-icon" id="lien-icone-apple" href="/icones/icone-180.png">
+<script>
+// Deux applications installables, une par entrée : le manifeste (nom, icône,
+// couleur, page d'ouverture) est choisi avant que le navigateur ne le lise.
+(function () {
+  var coloc = /\/colocataires?\/?$/.test(location.pathname);
+  try { coloc = coloc || (!/\/proprietaires?\/?$/.test(location.pathname) && localStorage.getItem('lmnp-espace') === 'colocataire'); } catch (e) {}
+  if (coloc) {
+    document.getElementById('lien-manifeste').href = '/manifest-colocataire.webmanifest';
+    document.getElementById('meta-theme').content = '#2f5fa8';
+    document.getElementById('meta-titre-apple').content = 'ANIKA';
+    document.getElementById('lien-icone-apple').href = '/icones/icone-colocataire-180.png';
+  }
+})();
+</script>
+</head>
+<body>
+
+<div id="chargement" class="chargement">
+  <div class="chargement-boite">
+    <div class="chargement-titre">Gestion LMNP</div>
+    <div class="chargement-texte">Lecture du dossier partagé…</div>
+  </div>
+</div>
+
+<div id="connexion" class="chargement" hidden>
+  <div class="connexion-boite">
+    <div class="chargement-titre" id="connexion-titre">🏠 Gestion LMNP</div>
+    <p id="connexion-sous-titre" class="connexion-sous-titre" hidden></p>
+    <div id="connexion-espaces" class="espaces" role="tablist" aria-label="Choisir son espace" hidden>
+      <button type="button" data-espace="proprietaire" role="tab">🏠 Propriétaires</button>
+      <button type="button" data-espace="colocataire" role="tab">👥 Colocataires</button>
+    </div>
+    <p id="connexion-message" class="connexion-message"></p>
+    <button id="bouton-connexion" class="bouton bouton-primaire bouton-connexion" type="button"></button>
+    <button id="bouton-connexion-autre" class="bouton-lien bouton-connexion-autre" type="button" hidden>Choisir un autre dossier…</button>
+    <form id="connexion-formulaire" class="connexion-formulaire" hidden>
+      <input id="connexion-email" type="email" autocomplete="username" placeholder="Adresse e-mail" required>
+      <input id="connexion-mdp" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+      <button class="bouton bouton-primaire bouton-connexion" type="submit">Se connecter</button>
+      <button id="connexion-reinitialiser" class="bouton-lien" type="button" style="margin-top:.5rem">
+        Première connexion ou mot de passe oublié ?</button>
+    </form>
+    <p id="connexion-erreur" class="connexion-erreur" hidden></p>
+    <div id="connexion-installation" class="installation" hidden>
+      <img id="installation-icone" class="installation-icone" alt="" width="44" height="44">
+      <button id="bouton-installer-connexion" class="bouton bouton-primaire bouton-petit" type="button">📲 Installer l’icône sur cet appareil</button>
+      <p id="installation-consigne" class="legende"></p>
+    </div>
+    <p class="connexion-note" id="connexion-note">Accès réservé : seuls les comptes créés par le bailleur peuvent se connecter. Données hébergées en Europe, sur un espace privé.</p>
+    <p class="connexion-version" id="connexion-version"></p>
+  </div>
+</div>
+
+<div class="application" id="application" hidden>
+
+  <aside class="barre-laterale">
+    <div class="marque">
+      <span class="marque-icone">🏠</span>
+      <span class="marque-texte">Gestion LMNP</span>
+    </div>
+    <nav id="navigation" class="navigation"></nav>
+    <div class="barre-pied">
+      <div class="dossier" id="dossier-actuel" title=""></div>
+      <button class="bouton-lien" id="bouton-quitter" type="button">Quitter l'application</button>
+    </div>
+  </aside>
+
+  <div class="colonne-principale">
+    <header class="entete">
+      <div class="entete-gauche">
+        <h1 id="titre-page">Tableau de bord</h1>
+        <p id="sous-titre-page" class="sous-titre"></p>
+      </div>
+      <div class="entete-droite">
+        <label class="selecteur-exercice selecteur-logement" id="bloc-logement" hidden title="Le logement affiché dans toutes les pages (mémorisé sur cet appareil)">
+          <span>Logement</span>
+          <select id="selecteur-logement"></select>
+        </label>
+        <label class="selecteur-exercice">
+          <span>Exercice</span>
+          <select id="selecteur-annee"></select>
+        </label>
+        <button class="bouton bouton-discret" id="bouton-rafraichir" type="button" title="Relire les fichiers du dossier partagé">↻ Actualiser</button>
+        <button class="bouton bouton-discret" id="bouton-plein-ecran" type="button" title="Plein écran" hidden>⛶</button>
+        <div class="synchro" id="synchro"><span class="pastille"></span><span class="synchro-texte">À jour</span></div>
+      </div>
+    </header>
+
+    <div class="alertes" id="alertes"></div>
+    <main class="contenu" id="contenu"></main>
+  </div>
+</div>
+
+<div class="fond-modale" id="fond-modale" hidden></div>
+<div class="notifications" id="notifications"></div>
+<div id="zone-impression" class="zone-impression"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

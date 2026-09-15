@@ -1,0 +1,89 @@
+# Déploiement de Gestion LMNP (projet Firebase gestion-lmnp-anika) depuis GitHub :
+# plus de zip ni de PC. Se lance à la main (Actions → « Déployer LMNP » → Run
+# workflow, sur la branche voulue) ou tout seul à chaque mise à jour de main
+# qui touche gestion-lmnp/.
+#
+# Réglage unique, côté GitHub (Settings → Secrets and variables → Actions) :
+#   secret   FIREBASE_SERVICE_ACCOUNT : clé JSON d'un compte de service du projet
+#            (rôles Éditeur + Utilisateur du compte de service + Administrateur Firebase)
+#   variable GMAIL_COMPTE             : adresse Gmail qui expédie les e-mails
+#   variable COURRIEL_EXPEDITEUR      : expéditeur affiché, ex. Andy Nguyen <adresse@gmail.com>
+# Le mot de passe d'application Gmail reste dans le Secret Manager du projet
+# (GMAIL_APP_PASSWORD) : il ne passe ni par GitHub ni par ce fichier.
+name: Déployer LMNP
+
+on:
+  workflow_dispatch:
+    inputs:
+      cible:
+        description: "Quoi déployer"
+        type: choice
+        default: tout
+        options:
+          - tout
+          - hosting-seul
+  push:
+    branches: [main]
+    paths: ['gestion-lmnp/**', '.github/workflows/deployer-lmnp.yml']
+
+concurrency:
+  group: deploiement-lmnp
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    name: Construire et déployer
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Vérifier le réglage
+        env:
+          CLE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          COMPTE: ${{ vars.GMAIL_COMPTE }}
+        run: |
+          if [ -z "$CLE" ]; then echo "::error::Secret FIREBASE_SERVICE_ACCOUNT absent — voir LISEZ-MOI, section « Déploiement depuis GitHub »."; exit 1; fi
+          if [ -z "$COMPTE" ]; then echo "::error::Variable GMAIL_COMPTE absente — Settings → Secrets and variables → Actions → Variables."; exit 1; fi
+          echo "Réglage présent."
+
+      - name: Construire l'application
+        working-directory: gestion-lmnp/Application
+        run: |
+          npm install --no-audit --no-fund
+          node construire-en-ligne.mjs
+          node construire-fonctions.mjs
+
+      - name: Bibliothèques de la fonction
+        working-directory: gestion-lmnp/en-ligne/functions-appel-loyer
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Paramètres de la fonction
+        working-directory: gestion-lmnp/en-ligne/functions-appel-loyer
+        env:
+          COMPTE: ${{ vars.GMAIL_COMPTE }}
+          EXPEDITEUR: ${{ vars.COURRIEL_EXPEDITEUR }}
+        run: |
+          printf 'GMAIL_COMPTE=%s\n' "$COMPTE" > .env.gestion-lmnp-anika
+          if [ -n "$EXPEDITEUR" ]; then printf 'COURRIEL_EXPEDITEUR="%s"\n' "$EXPEDITEUR" >> .env.gestion-lmnp-anika; fi
+
+      - name: Déployer sur gestion-lmnp-anika
+        working-directory: gestion-lmnp/en-ligne
+        env:
+          CLE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/cle-firebase.json
+          CIBLE: ${{ inputs.cible || 'tout' }}
+        run: |
+          printf '%s' "$CLE" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          if [ "$CIBLE" = "hosting-seul" ]; then SEUL="--only hosting"; else SEUL=""; fi
+          npx -y firebase-tools@13 deploy --project gestion-lmnp-anika --non-interactive $SEUL
+          rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
+
+      - name: Résumé
+        run: |
+          echo "### Déployé sur https://gestion-lmnp-anika.web.app" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version : $(grep -o "VERSION_APP = '[^']*'" gestion-lmnp/Application/js/version.js)" >> "$GITHUB_STEP_SUMMARY"

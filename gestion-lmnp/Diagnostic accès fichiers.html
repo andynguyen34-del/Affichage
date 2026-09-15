@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnostic — accès aux fichiers</title>
+<style>
+  :root { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; padding: 24px; background: #f4f6f8; color: #1a2733; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  .sous { color: #5a6b7b; margin: 0 0 20px; font-size: .95rem; }
+  button { font-size: 1.05rem; padding: 12px 22px; border: 0; border-radius: 8px;
+    background: #1f6f54; color: #fff; cursor: pointer; }
+  button:disabled { background: #9bb3aa; cursor: default; }
+  #journal { margin-top: 22px; background: #0f1c26; color: #e7edf2; border-radius: 10px;
+    padding: 18px 20px; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: .95rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 120px; }
+  .ok { color: #7ee0b0; }
+  .ko { color: #ff9b8f; }
+  .info { color: #9cc6ff; }
+  .etape { color: #ffd479; }
+  .verdict { margin-top: 18px; font-size: 1.05rem; font-weight: 600; padding: 14px 18px; border-radius: 8px; }
+  .verdict.bon { background: #d8f3e6; color: #14603f; }
+  .verdict.mauvais { background: #ffe0da; color: #8a2b1c; }
+</style>
+</head>
+<body>
+  <h1>🔎 Diagnostic — accès aux fichiers</h1>
+  <p class="sous">Ce test vérifie si votre Chrome/Edge autorise une page locale à lire et écrire
+    dans un dossier. Cliquez, choisissez votre dossier <strong>Dossier partagé</strong>, puis
+    envoyez-moi une capture de l'écran ci-dessous.</p>
+  <button id="lancer" type="button">Lancer le test</button>
+  <div id="verdict"></div>
+  <div id="journal">En attente…</div>
+
+<script>
+const journal = document.getElementById('journal');
+const zoneVerdict = document.getElementById('verdict');
+let premier = true;
+function ligne(texte, classe) {
+  if (premier) { journal.textContent = ''; premier = false; }
+  const span = document.createElement('span');
+  if (classe) span.className = classe;
+  span.textContent = texte + '\n';
+  journal.appendChild(span);
+}
+function verdict(texte, bon) {
+  zoneVerdict.className = 'verdict ' + (bon ? 'bon' : 'mauvais');
+  zoneVerdict.textContent = texte;
+}
+function detail(e) {
+  return (e && e.name ? '[' + e.name + '] ' : '') + (e && e.message ? e.message : String(e));
+}
+
+document.getElementById('lancer').addEventListener('click', async () => {
+  const bouton = document.getElementById('lancer');
+  bouton.disabled = true;
+  premier = true; zoneVerdict.textContent = ''; zoneVerdict.className = '';
+
+  // Étape 0 — l'API existe-t-elle ?
+  ligne('Navigateur : ' + navigator.userAgent, 'info');
+  if (typeof window.showDirectoryPicker !== 'function') {
+    ligne('✗ showDirectoryPicker absent : ce navigateur ne gère pas l\'accès aux fichiers.', 'ko');
+    verdict('Bloqué : utilisez Google Chrome ou Microsoft Edge (pas Firefox).', false);
+    bouton.disabled = false;
+    return;
+  }
+  ligne('✓ Étape 0 : l\'API d\'accès aux fichiers existe.', 'ok');
+
+  // Étape 1 — ouvrir le sélecteur de dossier
+  let dossier;
+  ligne('› Étape 1 : ouverture du sélecteur de dossier…', 'etape');
+  try {
+    dossier = await window.showDirectoryPicker({ id: 'diagnostic-lmnp', mode: 'readwrite' });
+    ligne('✓ Étape 1 : dossier choisi = « ' + dossier.name + ' ».', 'ok');
+  } catch (e) {
+    ligne('✗ Étape 1 échouée : ' + detail(e), 'ko');
+    if (e && e.name === 'AbortError') {
+      verdict('Le sélecteur a été fermé sans choix, OU votre ordinateur bloque l\'accès aux fichiers pour les pages locales. Réessayez ; si le refus revient même en choisissant le Bureau, c\'est un blocage de sécurité.', false);
+    } else {
+      verdict('Le sélecteur n\'a pas pu s\'ouvrir : ' + detail(e), false);
+    }
+    bouton.disabled = false;
+    return;
+  }
+
+  // Étape 2 — autorisation en lecture/écriture
+  ligne('› Étape 2 : demande d\'autorisation en écriture…', 'etape');
+  try {
+    let etat = await dossier.queryPermission({ mode: 'readwrite' });
+    ligne('   état initial : ' + etat, 'info');
+    if (etat !== 'granted') {
+      etat = await dossier.requestPermission({ mode: 'readwrite' });
+      ligne('   après demande : ' + etat, 'info');
+    }
+    if (etat !== 'granted') {
+      ligne('✗ Étape 2 : autorisation refusée (état = ' + etat + ').', 'ko');
+      verdict('Chrome n\'a pas accordé l\'écriture. Si aucune fenêtre « Modifier les fichiers ? » n\'est apparue, c\'est une règle de sécurité de votre poste qui bloque.', false);
+      bouton.disabled = false;
+      return;
+    }
+    ligne('✓ Étape 2 : autorisation en écriture accordée.', 'ok');
+  } catch (e) {
+    ligne('✗ Étape 2 échouée : ' + detail(e), 'ko');
+    verdict('L\'autorisation a échoué : ' + detail(e) + '. Un [SecurityError] ou [NotAllowedError] signale un blocage par une règle de votre ordinateur.', false);
+    bouton.disabled = false;
+    return;
+  }
+
+  // Étape 3 — écrire, relire, supprimer un fichier de test
+  ligne('› Étape 3 : écriture d\'un fichier de test « _test_lmnp.txt »…', 'etape');
+  try {
+    const message = 'test ' + new Date().toISOString();
+    const handle = await dossier.getFileHandle('_test_lmnp.txt', { create: true });
+    const flux = await handle.createWritable();
+    await flux.write(message);
+    await flux.close();
+    ligne('   écrit.', 'info');
+    const relu = await (await handle.getFile()).text();
+    ligne('   relu  : « ' + relu + ' »', 'info');
+    if (relu !== message) throw new Error('Le contenu relu ne correspond pas.');
+    await dossier.removeEntry('_test_lmnp.txt');
+    ligne('   fichier de test supprimé.', 'info');
+    ligne('✓ Étape 3 : écriture, lecture et suppression réussies.', 'ok');
+  } catch (e) {
+    ligne('✗ Étape 3 échouée : ' + detail(e), 'ko');
+    verdict('Le dossier a été ouvert mais l\'écriture est refusée : ' + detail(e) + '. Souvent : dossier « disponible en ligne uniquement » (nuage) → clic droit → Toujours conserver sur cet appareil ; ou blocage de sécurité.', false);
+    bouton.disabled = false;
+    return;
+  }
+
+  verdict('✅ Tout fonctionne : ce dossier est utilisable par l\'application. Le problème venait d\'ailleurs (dossier mémorisé, mauvais dossier…). Dites-le moi.', true);
+  bouton.disabled = false;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+Rangez ici les pièces du dossier locatif :
+
+    baux signés, états des lieux d'entrée et de sortie,
+    diagnostics, attestations d'assurance, courriers,
+    acte notarié, tableau d'amortissement de la banque.
+
+Vous pouvez déposer les fichiers directement depuis l'explorateur Windows :
+ils apparaissent dans la page « Documents » de l'application.
+
+Les factures de dépense, elles, vont dans le dossier « Factures » : elles y
+sont lues et intégrées en comptabilité automatiquement.
