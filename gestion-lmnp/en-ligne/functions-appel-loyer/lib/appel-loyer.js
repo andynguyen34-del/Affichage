@@ -164,7 +164,7 @@ var APPEL_PAR_DEFAUT = {
 };
 var cleMois = (annee, mois) => `${annee}-${String(mois).padStart(2, "0")}`;
 var cleEnvoi = (bienId, annee, mois) => `${bienId || ""}:${cleMois(annee, mois)}`;
-var sansAppel = (bien) => bien?.typeLocation === "courte" || bien?.typeLocation === "gracieux";
+var sansAppel = (bien) => ["courte", "gracieux", "agence"].includes(bien?.typeLocation);
 function reglageAppelDe(parametres = {}, bien = null) {
   return { ...APPEL_PAR_DEFAUT, ...parametres?.appelLoyer || {}, ...bien?.appelLoyer || {} };
 }

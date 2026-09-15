@@ -34,7 +34,8 @@ bibliothèques déjà installées sont conservées) et double-cliquer
 `DEPLOYER.cmd`. Les fichiers VERIFIER.cmd / INSTALLER.cmd et le zip « complet »
 disparaissent. Le zip se fabrique avec `en-ligne/livraison/emballer.sh NN`.
 
-**En préparation pour la prochaine version (livrée au « go »).**
+**Nouveau en v58 — logement géré par une agence.** À déployer : hébergement
+seulement.
 - Type de location « Géré par une agence » : fiche du logement avec
   l'agence (nom, courriel, téléphone), le taux d'honoraires, le loyer
   mensuel, le jour de versement, le locataire en simple texte, la date de
