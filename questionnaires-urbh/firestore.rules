@@ -30,6 +30,22 @@ service cloud.firestore {
                .data.tirage.ouvert == true;
     }
 
+    function portailPointageOuvert(journeeId, moment) {
+      return get(/databases/$(database)/documents/portails/$(journeeId))
+               .data.pointages[moment] == true;
+    }
+
+    // Les inscriptions aux ateliers ne sont possibles que pendant l'Assemblée
+    // Générale, dont la période est paramétrée par l'administrateur sur le
+    // portail (champ « ag » : début / fin). Période absente = fermé.
+    function agEnCours(journeeId) {
+      return get(/databases/$(database)/documents/portails/$(journeeId))
+               .data.ag.debut <= request.time
+        && request.time <=
+           get(/databases/$(database)/documents/portails/$(journeeId))
+               .data.ag.fin;
+    }
+
     // Liste des administrateurs : à créer une fois depuis la console Firebase
     // (document config/admins, champ « emails » = tableau d'adresses).
     // Modifiable uniquement depuis la console, jamais depuis l'application.
@@ -139,8 +155,9 @@ service cloud.firestore {
 
     // Vœu d'inscription à un atelier. Identifiant imposé
     // « <atelierId>_<uid> » : une inscription par personne et par atelier,
-    // uniquement quand les inscriptions de l'atelier sont ouvertes.
-    // Le participant peut se désinscrire tant qu'elles le sont.
+    // uniquement pendant l'Assemblée Générale (période paramétrée par
+    // l'administrateur) et tant que le tirage n'a pas eu lieu.
+    // Le participant peut se désinscrire dans les mêmes conditions.
     match /voeux/{voeuId} {
       allow create: if connecte()
         && voeuId == request.resource.data.atelierId + '_' + request.auth.uid
@@ -149,14 +166,39 @@ service cloud.firestore {
              ['atelierId', 'journeeId', 'participantId', 'type', 'nom',
               'prenom', 'organisme', 'mobile', 'numeroInscription', 'creeLe'])
         && get(/databases/$(database)/documents/ateliers/$(request.resource.data.atelierId))
-             .data.statut == 'inscriptions_ouvertes';
+             .data.statut != 'tire'
+        && agEnCours(request.resource.data.journeeId);
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow delete: if isAdmin()
         || (connecte()
             && resource.data.participantId == request.auth.uid
             && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
-                 .data.statut == 'inscriptions_ouvertes');
+                 .data.statut != 'tire'
+            && agEnCours(resource.data.journeeId));
       allow list: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Pointage de présence à un moment clé de la journée (émargement) :
+    // « ouverture » (première conférence), « ag » (Assemblée Générale),
+    // « tombola » (présence en salle au moment du tirage). Identifiant imposé
+    // « <journeeId>_<moment>_<uid> » : un pointage par personne et par
+    // moment, uniquement quand l'administrateur a ouvert ce pointage.
+    // Ces points conditionnent la participation à la tombola de clôture.
+    match /pointages/{pointageId} {
+      allow create: if connecte()
+        && pointageId == request.resource.data.journeeId + '_'
+             + request.resource.data.moment + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['journeeId', 'moment', 'participantId', 'type', 'nom',
+              'prenom', 'organisme', 'mobile', 'numeroInscription',
+              'pointeLe'])
+        && request.resource.data.moment in ['ouverture', 'ag', 'tombola']
+        && portailPointageOuvert(request.resource.data.journeeId,
+             request.resource.data.moment);
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
       allow update: if isAdmin(); // anonymisation
     }
 

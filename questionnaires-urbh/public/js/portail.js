@@ -67,6 +67,37 @@
   let profil = null;
   let standDemande = null; // arrivée par le QR d'un stand (?stand=<id>)
 
+  // Moments de pointage (émargement) de la journée : ils conditionnent la
+  // participation à la tombola de clôture.
+  const MOMENTS_POINTAGE = [
+    { cle: 'ouverture', libelle: "Ouverture des journées — première conférence" },
+    { cle: 'ag', libelle: 'Assemblée Générale' },
+    { cle: 'tombola', libelle: 'Présence en salle au moment du tirage' },
+  ];
+
+  // Mode simulation (?simu=1, phase de développement) : un sélecteur ◀ ▶
+  // décale l'heure prise en compte par l'écran pour simuler l'évolution de
+  // la journée (avant / pendant / après l'AG). L'affichage seul est simulé :
+  // les enregistrements restent contrôlés par l'heure réelle du serveur.
+  let modeSimu = false;
+  let decalageSimu = 0; // millisecondes ajoutées à l'heure réelle
+
+  function maintenant() {
+    return new Date(Date.now() + decalageSimu);
+  }
+
+  // Période de l'Assemblée Générale (paramétrée par l'administrateur) :
+  // c'est elle qui ouvre et ferme les inscriptions aux ateliers.
+  function periodeAG() {
+    const ag = portail && portail.ag;
+    if (!ag || !ag.debut || !ag.fin) return null;
+    try {
+      return { debut: ag.debut.toDate(), fin: ag.fin.toDate() };
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ------------------------------------------------------------- inscription
 
   function vueInscription(erreur) {
@@ -329,6 +360,84 @@
     }
   }
 
+  // ------------------------------------------- notifications des ateliers
+  // Meilleur effort sans serveur : tant que l'application est ouverte sur le
+  // téléphone (même en arrière-plan récent), elle prévient du résultat du
+  // tirage au sort des ateliers et rappelle 10 minutes avant le début de
+  // l'atelier, avec le numéro de la salle.
+
+  const rappelsProgrammes = new Set();
+  let ecouteAteliers = false;
+
+  function notifier(titre, corps, cle) {
+    try {
+      if (cle && localStorage.getItem(cle)) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      if (cle) localStorage.setItem(cle, '1');
+      const options = { body: corps, icon: 'icons/icone-192.png', badge: 'icons/icone-192.png' };
+      navigator.serviceWorker
+        .getRegistration()
+        .then((reg) => {
+          if (reg && reg.showNotification) reg.showNotification(titre, options);
+          else new Notification(titre, options);
+        })
+        .catch(() => new Notification(titre, options));
+    } catch (_) {
+      /* notifications indisponibles : le menu affiche de toute façon le résultat */
+    }
+  }
+
+  function programmerRappel(a) {
+    if (!a.debutLe || rappelsProgrammes.has(a.id)) return;
+    let debut;
+    try {
+      debut = a.debutLe.toDate();
+    } catch (_) {
+      return;
+    }
+    const delai = debut.getTime() - 10 * 60000 - Date.now();
+    if (delai <= 0 || delai > 48 * 3600000) return;
+    rappelsProgrammes.add(a.id);
+    setTimeout(
+      () =>
+        notifier(
+          '⏰ Votre atelier commence dans 10 minutes',
+          `${a.nom} — salle ${a.salle}${a.horaire ? ' (' + a.horaire + ')' : ''}`,
+          'urbh_rappel_' + a.id,
+        ),
+      delai,
+    );
+  }
+
+  function surveillerAteliers() {
+    if (ecouteAteliers || !journeeId) return;
+    ecouteAteliers = true;
+    try {
+      db.collection('ateliers')
+        .where('journeeId', '==', journeeId)
+        .onSnapshot(
+          (snap) => {
+            snap.docs.forEach((d) => {
+              const a = { id: d.id, ...d.data() };
+              if (a.statut !== 'tire') return;
+              if (!(a.retenus || []).some((r) => r.participantId === uid)) return;
+              notifier(
+                '🎉 Tirage au sort des ateliers',
+                `Vous êtes retenu : ${a.nom} — salle ${a.salle}${a.horaire ? ', ' + a.horaire : ''}.`,
+                'urbh_notif_tirage_' + a.id,
+              );
+              programmerRappel(a);
+            });
+          },
+          () => {
+            /* écoute interrompue : sans gravité */
+          },
+        );
+    } catch (_) {
+      ecouteAteliers = false;
+    }
+  }
+
   function retourMenu() {
     standDemande = null;
     try {
@@ -385,6 +494,14 @@
       ateliers.filter((a) => mesVoeux[a.id]).map((a) => a.horaire || ''),
     );
 
+    // Les inscriptions aux ateliers ne sont ouvertes que pendant l'Assemblée
+    // Générale ; une fois l'AG terminée, l'écran d'inscription est masqué.
+    const ag = periodeAG();
+    const pendantAG = !!ag && maintenant() >= ag.debut && maintenant() <= ag.fin;
+    const apresAG = !!ag && maintenant() > ag.fin;
+    const fmtHeure = (d) =>
+      d.toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+
     function htmlAtelier(a) {
       const inscrit = mesVoeux[a.id];
       let etat = '';
@@ -402,7 +519,7 @@
         } else {
           etat = `<div class="muet petit">Tirage au sort effectué.</div>`;
         }
-      } else if (a.statut === 'inscriptions_ouvertes') {
+      } else if (pendantAG) {
         if (inscrit) {
           etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera les inscrits.</div>`;
           action = `<button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Me désinscrire</button>`;
@@ -411,10 +528,14 @@
         } else {
           action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
         }
+      } else if (apresAG) {
+        // Après l'AG : seuls les inscrits gardent un état visible en
+        // attendant le tirage ; les autres ateliers sont masqués.
+        if (!inscrit) return '';
+        etat = `<div class="muet petit">Inscriptions closes — le tirage au sort aura lieu prochainement.</div>`;
       } else {
-        etat = inscrit
-          ? `<div class="muet petit">Inscriptions closes — le tirage au sort aura lieu prochainement.</div>`
-          : `<div class="muet petit">Les inscriptions ne sont pas ouvertes.</div>`;
+        etat = `<div class="muet petit">Les inscriptions se feront pendant l'Assemblée
+          Générale${ag ? ` (${echapper(fmtHeure(ag.debut))})` : ''}.</div>`;
       }
 
       return `<div class="q-item">
@@ -496,6 +617,44 @@
       );
     }
 
+    // Tombola de clôture : lots offerts par les fournisseurs, gagnants et
+    // points de présence (pointages) du participant.
+    const tombolaInfo = portail.tombola || {};
+    const lotsTombola = tombolaInfo.lots || [];
+    const gagnantsTombola = tombolaInfo.gagnants || [];
+    const pointagesOuverts = portail.pointages || {};
+    const mesPointages = {};
+    await Promise.all(
+      MOMENTS_POINTAGE.map(async (m) => {
+        try {
+          const d = await db
+            .collection('pointages')
+            .doc(journeeId + '_' + m.cle + '_' + uid)
+            .get();
+          mesPointages[m.cle] = d.exists ? d.data() : null;
+        } catch (_) {
+          mesPointages[m.cle] = null;
+        }
+      }),
+    );
+
+    function htmlPoint(m) {
+      const p = mesPointages[m.cle];
+      if (p) {
+        const quand = p.pointeLe
+          ? ' — pointé le ' +
+            new Date(p.pointeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+          : '';
+        return `<li>✅ <strong>${echapper(m.libelle)}</strong><span class="muet petit">${echapper(quand)}</span></li>`;
+      }
+      if (pointagesOuverts[m.cle]) {
+        return `<li>🟢 <strong>${echapper(m.libelle)}</strong>
+          <div class="ligne-boutons"><button class="bouton-pointage" data-moment="${attr(m.cle)}">📍 Je pointe ma présence</button></div></li>`;
+      }
+      return `<li>⬜ <strong>${echapper(m.libelle)}</strong>
+        <span class="muet petit"> — le pointage sera ouvert sur place, le moment venu.</span></li>`;
+    }
+
     // Demande d'anonymisation éventuelle du participant.
     let demandeAnonymisation = null;
     try {
@@ -554,14 +713,74 @@
         <div id="erreur-tirage" class="erreur" hidden></div>
       </div>
 
+      <div class="carte">
+        <h2>🎟️ Tombola de clôture</h2>
+        ${
+          lotsTombola.length
+            ? `<ul class="verbatims">${lotsTombola
+                .map((lot, i) => {
+                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
+                  return `<li>🎁 <strong>${echapper(lot.libelle)}</strong>${
+                    lot.fournisseurNom ? ` <span class="muet petit">— offert par ${echapper(lot.fournisseurNom)}</span>` : ''
+                  }${
+                    g
+                      ? `<br>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}${g.numeroInscription ? ' (carte n° ' + echapper(g.numeroInscription) + ')' : ''}${g.organisme ? ' — ' + echapper(g.organisme) : ''}`
+                      : ''
+                  }</li>`;
+                })
+                .join('')}</ul>`
+            : `<p class="muet petit">Trois lots offerts par les fournisseurs seront
+                tirés au sort à la clôture des journées.</p>`
+        }
+        <p class="muet petit"><strong>Pour participer :</strong> la tombola est
+        réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La
+        <strong>présence dans la salle lors du tirage au sort</strong> est
+        requise, et la <strong>validation des points de présence</strong> est
+        nécessaire : présence à l'Assemblée Générale et pointage à l'ouverture
+        des journées sur la première conférence.</p>
+        ${
+          profil.type === 'exposant'
+            ? `<p class="muet petit">Vous êtes enregistré comme exposant
+                fournisseur : vos pointages servent d'émargement, mais la
+                tombola est réservée aux visiteurs blanchisseurs.</p>`
+            : ''
+        }
+        <h3 style="margin-bottom:0.3rem">Mes points de présence</h3>
+        <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}</ul>
+        ${
+          profil.type !== 'exposant' &&
+          mesPointages.ouverture &&
+          mesPointages.ag &&
+          mesPointages.tombola
+            ? `<div class="info">✅ Tous vos points sont validés : vous participez
+                à la tombola. Bonne chance !</div>`
+            : ''
+        }
+        <div id="erreur-pointage" class="erreur" hidden></div>
+      </div>
+
       ${
-        ateliers.length
+        ateliers.length && ateliers.map(htmlAtelier).join('').trim()
           ? `<div class="carte">
               <h2>🛠️ Ateliers</h2>
-              <p class="muet petit">Les places étant limitées, les inscriptions
+              <p class="muet petit">Les inscriptions sont ouvertes
+              <strong>pendant l'Assemblée Générale</strong>${
+                ag ? ` (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})` : ''
+              }. Les places étant limitées, elles
               sont départagées par tirage au sort, en donnant leur chance à
               toutes les blanchisseries et à chacun : on ne peut être retenu
               dans plusieurs ateliers que s'il reste des places.</p>
+              ${
+                'Notification' in window && Notification.permission === 'default'
+                  ? `<div class="ligne-boutons">
+                      <button id="bouton-notifs" class="secondaire">🔔 Activer les notifications</button>
+                    </div>
+                    <p class="muet petit">Soyez prévenu du résultat du tirage au
+                    sort et recevez un rappel 10 minutes avant le début de votre
+                    atelier, avec le numéro de la salle (tant que l'application
+                    reste ouverte sur votre téléphone).</p>`
+                  : ''
+              }
               <div id="erreur-atelier" class="erreur" hidden></div>
               ${ateliers.map(htmlAtelier).join('')}
             </div>`
@@ -695,6 +914,18 @@
       }
     }
 
+    const boutonNotifs = document.getElementById('bouton-notifs');
+    if (boutonNotifs) {
+      boutonNotifs.addEventListener('click', async () => {
+        try {
+          await Notification.requestPermission();
+        } catch (_) {
+          /* refusée ou indisponible */
+        }
+        vueMenu();
+      });
+    }
+
     document.querySelectorAll('.bouton-voeu-atelier').forEach((b) =>
       b.addEventListener('click', async () => {
         b.disabled = true;
@@ -738,6 +969,37 @@
       }),
     );
 
+    document.querySelectorAll('.bouton-pointage').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await db
+            .collection('pointages')
+            .doc(journeeId + '_' + b.dataset.moment + '_' + uid)
+            .set({
+              journeeId,
+              moment: b.dataset.moment,
+              participantId: uid,
+              type: profil.type,
+              nom: profil.nom,
+              prenom: profil.prenom,
+              organisme: profil.organisme || '',
+              mobile: profil.mobile || '',
+              numeroInscription: profil.numeroInscription || '',
+              pointeLe: new Date().toISOString(),
+            });
+          vueMenu();
+        } catch (e) {
+          const erreur = document.getElementById('erreur-pointage');
+          erreur.textContent =
+            "Le pointage n'a pas pu être enregistré (pointage fermé ou connexion instable). Réessayez." +
+            detailErreur(e);
+          erreur.hidden = false;
+          b.disabled = false;
+        }
+      }),
+    );
+
     const boutonTirage = document.getElementById('bouton-tirage');
     if (boutonTirage) {
       boutonTirage.addEventListener('click', async () => {
@@ -776,8 +1038,58 @@
   // sinon menu de choix.
   async function apresProfil() {
     await enregistrerInscription();
+    surveillerAteliers();
     if (standDemande) vueStand(standDemande);
     else vueMenu();
+  }
+
+  // Barre de simulation (?simu=1) : ◀ ▶ fait défiler les phases de la
+  // journée par rapport à la période d'AG paramétrée. Réservée à la mise au
+  // point : seul l'affichage est décalé, pas l'heure des enregistrements.
+  const PHASES_SIMU = ['⏱️ Temps réel', "Avant l'AG", "Pendant l'AG", "Après l'AG"];
+  let phaseSimu = 0;
+
+  function appliquerPhaseSimu() {
+    const ag = periodeAG();
+    let cible = null;
+    if (ag) {
+      if (phaseSimu === 1) cible = ag.debut.getTime() - 30 * 60000;
+      if (phaseSimu === 2) cible = (ag.debut.getTime() + ag.fin.getTime()) / 2;
+      if (phaseSimu === 3) cible = ag.fin.getTime() + 30 * 60000;
+    }
+    decalageSimu = cible == null ? 0 : cible - Date.now();
+    const zone = document.getElementById('simu-phase');
+    if (zone) {
+      zone.textContent =
+        PHASES_SIMU[phaseSimu] +
+        (phaseSimu && !ag ? " (période d'AG non paramétrée)" : '');
+    }
+    if (profil && !standDemande) vueMenu();
+  }
+
+  function installerBarreSimu() {
+    if (document.getElementById('barre-simu')) return;
+    const barre = document.createElement('div');
+    barre.id = 'barre-simu';
+    barre.style.cssText =
+      'position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;' +
+      'justify-content:center;gap:0.6rem;padding:0.45rem 0.6rem;background:#1d4e89;color:#fff;' +
+      'font-size:0.85rem;box-shadow:0 -2px 8px rgba(0,0,0,0.25)';
+    barre.innerHTML = `
+      <span>🧪 Simulation</span>
+      <button id="simu-prec" style="font:inherit;padding:0.15rem 0.7rem;border-radius:6px;border:none;cursor:pointer">◀</button>
+      <strong id="simu-phase" style="min-width:11rem;text-align:center">${PHASES_SIMU[0]}</strong>
+      <button id="simu-suiv" style="font:inherit;padding:0.15rem 0.7rem;border-radius:6px;border:none;cursor:pointer">▶</button>`;
+    document.body.appendChild(barre);
+    document.body.style.paddingBottom = '3.2rem';
+    document.getElementById('simu-prec').addEventListener('click', () => {
+      phaseSimu = (phaseSimu + PHASES_SIMU.length - 1) % PHASES_SIMU.length;
+      appliquerPhaseSimu();
+    });
+    document.getElementById('simu-suiv').addEventListener('click', () => {
+      phaseSimu = (phaseSimu + 1) % PHASES_SIMU.length;
+      appliquerPhaseSimu();
+    });
   }
 
   async function demarrer() {
@@ -785,6 +1097,7 @@
     const demande = params.get('e');
     const stand = params.get('stand');
     if (stand && /^[A-Za-z0-9_-]+$/.test(stand)) standDemande = stand;
+    modeSimu = params.get('simu') === '1';
 
     try {
       if (demande && /^[A-Za-z0-9_-]+$/.test(demande)) {
@@ -820,6 +1133,8 @@
     $sousTitre.textContent = [portail.titre, portail.date, portail.lieu]
       .filter(Boolean)
       .join(' — ');
+
+    if (modeSimu) installerBarreSimu();
 
     try {
       const doc = await db.collection('participants').doc(uid).get();

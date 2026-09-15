@@ -23,9 +23,21 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    directement sur le **menu de choix** :
    - 🎁 **participer au tirage au sort** (une seule participation par
      personne, garantie côté serveur) ;
+   - 🎟️ **la tombola de clôture** : trois lots offerts par trois
+     fournisseurs. Conditions affichées au participant : réservée aux
+     visiteurs blanchisseurs adhérents, **présence dans la salle lors du
+     tirage** requise, et **validation des points de présence** — présence à
+     l'Assemblée Générale et pointage à l'ouverture des journées sur la
+     première conférence. Le participant valide chaque point d'un geste
+     (« 📍 Je pointe ») quand l'administration ouvre le pointage, sur place ;
    - 🛠️ **s'inscrire aux ateliers** à places limitées (salles B, C, D…) —
      une inscription par atelier et par personne, un seul atelier par
-     créneau ; l'affectation se fait ensuite par tirage au sort équitable ;
+     créneau, **uniquement pendant l'Assemblée Générale** (période paramétrée
+     par l'administration ; l'écran d'inscription disparaît ensuite) ;
+     l'affectation se fait ensuite par tirage au sort équitable ; le résultat
+     est **notifié sur le téléphone**, avec un **rappel 10 minutes avant le
+     début de l'atelier** indiquant le numéro de salle (notifications à
+     activer par le participant ; remises tant que l'application est ouverte) ;
    - 📝 **répondre aux questionnaires** ouverts qui le concernent (une seule
      réponse par personne et par questionnaire, garantie côté serveur). Les
      gagnants du tirage s'affichent sur le portail une fois le tirage fait.
@@ -57,11 +69,31 @@ traçage des connexions (première connexion, dernier accès, nombre d'accès) e
 plusieurs gagnants au hasard, annulation possible ; les gagnants s'affichent
 sur le portail des participants.
 
+**Tombola de clôture et pointages de présence.** Trois moments de pointage
+(émargement) sont ouverts et fermés depuis l'administration : **ouverture des
+journées (première conférence)**, **Assemblée Générale**, **présence en salle
+au moment du tirage**. L'administration enregistre les **lots** (libellé +
+fournisseur offrant), suit le nombre de participants **éligibles** (visiteurs
+blanchisseurs ayant validé les trois points) et **tire chaque lot** — une même
+personne ne peut gagner qu'un seul lot ; un gagnant s'annule d'un clic. La
+**feuille des pointages (CSV)** sert d'émargement (utile aussi au dossier
+qualité). Les gagnants s'affichent sur le portail.
+
+**Période d'AG = fenêtre d'inscription aux ateliers.** L'administration
+paramètre le début et la fin de l'Assemblée Générale : les inscriptions aux
+ateliers ne sont possibles que pendant cette période (contrôlée aussi par les
+règles de sécurité côté serveur) ; une fois l'AG terminée, l'écran
+d'inscription disparaît du portail. Un lien **« 🧪 Portail en simulation »**
+(paramètre `?simu=1`) affiche un sélecteur ◀ ▶ qui simule l'évolution de la
+journée (avant / pendant / après l'AG) pour vérifier les écrans pendant la
+phase de mise au point — seul l'affichage est simulé, les enregistrements
+restent contrôlés par l'heure réelle.
+
 **Ateliers à inscription.** Pour les ateliers à places limitées (salles B, C
 et D des journées d'études), l'administration crée les ateliers (un bouton
-pré-remplit les 6 ateliers types : 3 salles × 2 créneaux), ouvre les
-inscriptions, puis lance le **tirage au sort équitable**, atelier par
-atelier : sont retenues en priorité 1) les personnes n'ayant encore gagné
+pré-remplit les 6 ateliers types : 3 salles × 2 créneaux, avec leur début
+précis pour le rappel sur téléphone), puis lance le **tirage au sort
+équitable**, atelier par atelier : sont retenues en priorité 1) les personnes n'ayant encore gagné
 aucun atelier de la journée et dont la blanchisserie n'est pas déjà
 représentée dans cet atelier, 2) puis les autres personnes sans atelier, 3)
 et seulement s'il reste des places, celles déjà retenues ailleurs (une
@@ -183,9 +215,13 @@ Tant qu'aucune journée n'est active, le portail affiche « À très bientôt ! 
 
 ## Utilisation le jour J
 
-1. Marquer la journée **active** (si ce n'est pas déjà fait).
+1. Marquer la journée **active** (si ce n'est pas déjà fait) et vérifier la
+   **période d'AG** (fenêtre d'inscription aux ateliers).
 2. **Ouvrir les participations au tirage** ; les participants s'inscrivent en
-   scannant le flyer.
+   scannant le flyer. Ouvrir le **pointage « ouverture »** au début de la
+   première conférence, le **pointage « AG »** pendant l'Assemblée Générale,
+   puis les refermer ; à la clôture, ouvrir le **pointage « présence en
+   salle »** juste avant de **tirer les lots de la tombola**.
 3. En fin de journée, **ouvrir le questionnaire** de satisfaction (créé à
    l'avance depuis le modèle « à chaud ») : il apparaît aussitôt dans le menu
    des participants.
@@ -255,11 +291,22 @@ questionnaires-urbh/
 ```
 
 Collections Firestore : `journees` (administration), `portails` (vitrine
-publique d'une journée : titre, état du tirage, gagnants — aucune donnée
-personnelle), `participants` (profil rattaché à l'appareil), `inscriptions`
-(présence à une journée + traçage des connexions), `tirage` (participations),
-`questionnaires` (questions incluses dans le document), `reponses` (une par
-participant et par questionnaire).
+publique d'une journée : titre, état du tirage, gagnants, lots et gagnants de
+la tombola, période d'AG, état des pointages — aucune donnée personnelle),
+`participants` (profil rattaché à l'appareil), `inscriptions` (présence à une
+journée + traçage des connexions), `tirage` (participations), `pointages`
+(émargement aux moments clés : ouverture, AG, présence en salle — un document
+par personne et par moment, uniquement quand le pointage est ouvert),
+`ateliers` et `voeux` (inscriptions pendant l'AG seulement), `fournisseurs`
+et `visites` (passages sur les stands), `questionnaires` (questions incluses
+dans le document), `reponses` (une par participant et par questionnaire).
+
+**Notifications des ateliers** : sans serveur d'envoi (plan gratuit), les
+notifications (résultat du tirage, rappel 10 minutes avant l'atelier avec la
+salle) sont remises par l'application elle-même tant qu'elle est ouverte sur
+le téléphone. Des notifications « push » reçues application fermée
+demanderaient le plan Blaze (Cloud Functions + Firebase Cloud Messaging) —
+possible dans un second temps.
 
 Choix techniques : JavaScript natif sans étape de build (comme les autres
 applications de ce dépôt), SDK Firebase « compat » et bibliothèque QR chargés

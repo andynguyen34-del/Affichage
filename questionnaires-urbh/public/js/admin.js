@@ -81,6 +81,23 @@
     return `${location.origin}${location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')}/repondre.html?id=${questionnaireId}`;
   }
 
+  // Moments de pointage (émargement) : ils conditionnent la participation à
+  // la tombola de clôture — mêmes clés que sur le portail participants.
+  const MOMENTS_POINTAGE = [
+    { cle: 'ouverture', libelle: "Ouverture des journées — première conférence" },
+    { cle: 'ag', libelle: 'Assemblée Générale' },
+    { cle: 'tombola', libelle: 'Présence en salle au moment du tirage' },
+  ];
+
+  // Valeur d'un champ <input type="datetime-local"> pour un Timestamp Firestore.
+  function versDatetimeLocal(ts) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   // ------------------------------------------------------------------ écrans fixes
 
   function vueConfigManquante() {
@@ -167,24 +184,27 @@
     const numero = docProfil.exists ? docProfil.data().numeroInscription || '' : '';
 
     const maj = [];
-    for (const col of ['inscriptions', 'tirage', 'voeux', 'visites']) {
+    for (const col of ['inscriptions', 'tirage', 'voeux', 'visites', 'pointages']) {
       const snap = await db.collection(col).where('participantId', '==', uidCible).get();
       snap.docs.forEach((d) => maj.push({ ref: d.ref, donnees: vide }));
     }
-    // Gagnants annoncés sur les portails.
+    // Gagnants annoncés sur les portails (tirage au sort et tombola).
     const snapPo = await db.collection('portails').get();
     snapPo.docs.forEach((d) => {
       const gagnants = (d.data().tirage || {}).gagnants || [];
+      const gagnantsTombola = (d.data().tombola || {}).gagnants || [];
+      const donnees = {};
       if (gagnants.some((g) => g.participantId === uidCible)) {
-        maj.push({
-          ref: d.ref,
-          donnees: {
-            'tirage.gagnants': gagnants.map((g) =>
-              g.participantId === uidCible ? { ...g, ...vide } : g,
-            ),
-          },
-        });
+        donnees['tirage.gagnants'] = gagnants.map((g) =>
+          g.participantId === uidCible ? { ...g, ...vide } : g,
+        );
       }
+      if (gagnantsTombola.some((g) => g.participantId === uidCible)) {
+        donnees['tombola.gagnants'] = gagnantsTombola.map((g) =>
+          g.participantId === uidCible ? { ...g, ...vide } : g,
+        );
+      }
+      if (Object.keys(donnees).length) maj.push({ ref: d.ref, donnees });
     });
     // Retenus et listes d'attente des ateliers.
     const snapAt = await db.collection('ateliers').get();
@@ -379,6 +399,8 @@
         lieu,
         actif: false,
         tirage: { ouvert: false, gagnants: [] },
+        tombola: { lots: [], gagnants: [] },
+        pointages: { ouverture: false, ag: false, tombola: false },
       });
       location.hash = '#/journee/' + doc.id;
     });
@@ -593,12 +615,27 @@
         lieu: journee.lieu || '',
         actif: false,
         tirage: { ouvert: false, gagnants: [] },
+        tombola: { lots: [], gagnants: [] },
+        pointages: { ouverture: false, ag: false, tombola: false },
+      });
+      portailDoc = await refPortail.get();
+    }
+    // Complète à la volée les portails créés avant la tombola / les pointages.
+    if (!portailDoc.data().pointages || !portailDoc.data().tombola) {
+      await refPortail.update({
+        pointages: portailDoc.data().pointages || { ouverture: false, ag: false, tombola: false },
+        tombola: portailDoc.data().tombola || { lots: [], gagnants: [] },
       });
       portailDoc = await refPortail.get();
     }
     const portail = portailDoc.data();
     const tirageInfo = portail.tirage || { ouvert: false, gagnants: [] };
     const gagnants = tirageInfo.gagnants || [];
+    const tombolaInfo = portail.tombola || { lots: [], gagnants: [] };
+    const lotsTombola = tombolaInfo.lots || [];
+    const gagnantsTombola = tombolaInfo.gagnants || [];
+    const pointagesOuverts = portail.pointages || {};
+    const agInfo = portail.ag || null;
 
     const snapI = await db
       .collection('inscriptions')
@@ -644,6 +681,24 @@
     visitesJ.forEach((v) => {
       (visitesParFournisseur[v.fournisseurId] = visitesParFournisseur[v.fournisseurId] || []).push(v);
     });
+
+    // Pointages de présence (émargement) et éligibilité à la tombola :
+    // visiteurs blanchisseurs ayant validé les trois points (ouverture, AG,
+    // présence en salle au moment du tirage).
+    const snapPt = await db.collection('pointages').where('journeeId', '==', journeeId).get();
+    const pointagesJ = snapPt.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const parMoment = { ouverture: new Set(), ag: new Set(), tombola: new Set() };
+    pointagesJ.forEach((p) => {
+      if (parMoment[p.moment]) parMoment[p.moment].add(p.participantId);
+    });
+    const candidatsTombola = pointagesJ.filter(
+      (p) =>
+        p.moment === 'tombola' &&
+        p.type === 'visiteur' &&
+        p.nom !== 'Anonymisé' &&
+        parMoment.ouverture.has(p.participantId) &&
+        parMoment.ag.has(p.participantId),
+    );
 
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
@@ -713,6 +768,7 @@
               <button id="bouton-copier-portail" class="secondaire">Copier l'adresse du flyer</button>
               <button id="bouton-telecharger-qr" class="secondaire">Télécharger le QR pour impression (PNG)</button>
               <a class="btn secondaire" href="${attr(urlDirecte)}" target="_blank" rel="noopener">Voir le portail</a>
+              <a class="btn secondaire" href="${attr(urlDirecte + '&simu=1')}" target="_blank" rel="noopener">🧪 Portail en simulation (◀ ▶ avant / pendant / après l'AG)</a>
             </div>
             <p class="muet petit">PNG 2048 × 2048, correction d'erreur élevée :
             adapté à l'impression sur flyer. Prévoir une marge blanche autour.</p>
@@ -791,15 +847,124 @@
       </div>
 
       <div class="carte">
+        <h2>🎟️ Tombola de clôture</h2>
+        <p class="muet petit">Trois lots offerts par trois fournisseurs, tirés
+        au sort à la clôture. <strong>Conditions de participation</strong>
+        (affichées aux participants) : être visiteur blanchisseur adhérent,
+        être <strong>présent dans la salle lors du tirage</strong>, et avoir
+        <strong>validé ses points de présence</strong> — présence à
+        l'Assemblée Générale et pointage à l'ouverture des journées sur la
+        première conférence. Ouvrez chaque pointage au moment voulu (le
+        pointage « présence en salle » juste avant le tirage) ; le tirage ne
+        retient que les visiteurs ayant les trois points.</p>
+        <h3>Pointages de présence</h3>
+        <ul class="liste">${MOMENTS_POINTAGE.map(
+          (m) => `<li>
+            <div>
+              <span class="titre-item">${echapper(m.libelle)}</span>
+              <span class="badge ${pointagesOuverts[m.cle] ? 'ouvert' : 'brouillon'}">${
+                pointagesOuverts[m.cle] ? 'pointage ouvert' : 'pointage fermé'
+              }</span>
+              <div class="muet petit">${parMoment[m.cle] ? parMoment[m.cle].size : 0} pointage(s)</div>
+            </div>
+            <div class="pousse">
+              <button class="bouton-basculer-pointage ${pointagesOuverts[m.cle] ? 'danger' : ''}"
+                data-moment="${attr(m.cle)}">
+                ${pointagesOuverts[m.cle] ? 'Fermer' : 'Ouvrir'} le pointage
+              </button>
+            </div>
+          </li>`,
+        ).join('')}</ul>
+        <div class="ligne-boutons">
+          <button id="bouton-csv-pointages" class="secondaire" ${pointagesJ.length ? '' : 'disabled'}>
+            Feuille des pointages (CSV)
+          </button>
+        </div>
+        <h3>Lots et tirage</h3>
+        <p class="muet petit"><strong>${candidatsTombola.length}</strong>
+        participant(s) éligible(s) actuellement (visiteurs blanchisseurs, trois
+        points validés). Une même personne ne peut gagner qu'un seul lot.</p>
+        ${
+          lotsTombola.length
+            ? `<ul class="liste">${lotsTombola
+                .map((lot, i) => {
+                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
+                  return `<li>
+                    <div>
+                      🎁 <span class="titre-item">${echapper(lot.libelle)}</span>
+                      ${lot.fournisseurNom ? `<span class="muet petit"> — offert par ${echapper(lot.fournisseurNom)}</span>` : ''}
+                      ${
+                        g
+                          ? `<div>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}
+                              <span class="muet petit">${g.numeroInscription ? 'carte n° ' + echapper(g.numeroInscription) + ' — ' : ''}${echapper(g.organisme || '')}
+                              ${g.mobile ? ' — 📱 ' + echapper(g.mobile) : ''}</span></div>`
+                          : ''
+                      }
+                    </div>
+                    <div class="pousse">
+                      ${
+                        g
+                          ? `<button class="discret bouton-annuler-gagnant-tombola" data-index="${i}">Annuler le gagnant</button>`
+                          : `<button class="bouton-tirer-lot" data-index="${i}"
+                              ${candidatsTombola.length ? '' : 'disabled title="Aucun participant éligible"'}>🎲 Tirer ce lot</button>
+                            <button class="discret bouton-supprimer-lot" data-index="${i}">Supprimer</button>`
+                      }
+                    </div>
+                  </li>`;
+                })
+                .join('')}</ul>`
+            : `<p class="muet">Aucun lot enregistré pour le moment.</p>`
+        }
+        <form id="form-lot" class="ligne-boutons" style="align-items:flex-end">
+          <label class="champ" style="margin:0;flex:1;min-width:180px">Lot
+            <input id="lot-libelle" required placeholder="Ex. : un séjour thalasso"></label>
+          <label class="champ" style="margin:0;flex:1;min-width:180px">Offert par (fournisseur)
+            <input id="lot-fournisseur" list="liste-fournisseurs-lots" placeholder="Ex. : GIRBAU">
+            <datalist id="liste-fournisseurs-lots">
+              ${fournisseursJ.map((f) => `<option value="${attr(f.nom)}"></option>`).join('')}
+            </datalist></label>
+          <button type="submit">Ajouter le lot</button>
+        </form>
+      </div>
+
+      <div class="carte">
         <h2>🛠️ Ateliers (inscription + tirage au sort)</h2>
-        <p class="muet petit">Les inscriptions se font sur le portail. Le tirage
-        au sort de chaque atelier retient en priorité : 1) les personnes qui
-        n'ont encore gagné aucun atelier ET dont la blanchisserie n'est pas
-        déjà représentée ici, 2) puis les autres personnes sans atelier, 3) et
-        seulement s'il reste des places, celles déjà retenues dans un autre
-        atelier (signalées ⚠️). Les autres sont en liste d'attente dans le même
-        ordre de priorité. Tirez les ateliers un par un pour garder la main sur
-        les places restantes.</p>
+        <p class="muet petit">Les inscriptions se font sur le portail,
+        <strong>uniquement pendant l'Assemblée Générale</strong> (période
+        ci-dessous) : une fois l'AG terminée, l'écran d'inscription disparaît
+        du portail. Le tirage au sort de chaque atelier retient en priorité :
+        1) les personnes qui n'ont encore gagné aucun atelier ET dont la
+        blanchisserie n'est pas déjà représentée ici, 2) puis les autres
+        personnes sans atelier, 3) et seulement s'il reste des places, celles
+        déjà retenues dans un autre atelier (signalées ⚠️). Les autres sont en
+        liste d'attente dans le même ordre de priorité. Tirez les ateliers un
+        par un pour garder la main sur les places restantes.</p>
+        <h3>Période d'inscription = durée de l'AG</h3>
+        ${
+          agInfo && agInfo.debut && agInfo.fin
+            ? `<p class="muet petit">AG paramétrée du
+                <strong>${fmtHorodatage(agInfo.debut)}</strong> au
+                <strong>${fmtHorodatage(agInfo.fin)}</strong> —
+                inscriptions ${
+                  new Date() < agInfo.debut.toDate()
+                    ? 'pas encore ouvertes'
+                    : new Date() > agInfo.fin.toDate()
+                      ? 'closes (AG terminée)'
+                      : '<strong>ouvertes (AG en cours)</strong>'
+                }.</p>`
+            : `<p class="muet petit">⚠️ Période d'AG non paramétrée : les
+                inscriptions aux ateliers restent fermées sur le portail.</p>`
+        }
+        <form id="form-ag" class="ligne-boutons" style="align-items:flex-end">
+          <label class="champ" style="margin:0">Début de l'AG
+            <input id="ag-debut" type="datetime-local" required
+              value="${attr(versDatetimeLocal(agInfo && agInfo.debut))}"></label>
+          <label class="champ" style="margin:0">Fin de l'AG
+            <input id="ag-fin" type="datetime-local" required
+              value="${attr(versDatetimeLocal(agInfo && agInfo.fin))}"></label>
+          <button type="submit">Enregistrer la période</button>
+        </form>
+        <h3>Ateliers</h3>
         ${
           ateliers.length
             ? ateliers
@@ -808,11 +973,20 @@
                   const organismes = new Set(
                     voeux.map((v) => (v.organisme || '').trim().toLowerCase()).filter(Boolean),
                   );
+                  const agOuverte =
+                    agInfo &&
+                    agInfo.debut &&
+                    agInfo.fin &&
+                    new Date() >= agInfo.debut.toDate() &&
+                    new Date() <= agInfo.fin.toDate();
                   const badges = {
-                    ferme: '<span class="badge brouillon">Inscriptions fermées</span>',
-                    inscriptions_ouvertes: '<span class="badge ouvert">Inscriptions ouvertes</span>',
                     tire: '<span class="badge ferme">Tirage effectué</span>',
                   };
+                  badges[a.statut] =
+                    badges[a.statut] ||
+                    (agOuverte
+                      ? '<span class="badge ouvert">Inscriptions ouvertes (AG en cours)</span>'
+                      : '<span class="badge brouillon">Inscriptions pendant l\'AG</span>');
                   return `<div class="q-item">
                     <div class="q-entete">
                       <span class="q-type">Salle ${echapper(a.salle)}</span>
@@ -826,13 +1000,6 @@
                     ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
                     <div class="muet petit">${voeux.length} inscrit(s), ${organismes.size} établissement(s) distinct(s)</div>
                     <div class="ligne-boutons">
-                      ${
-                        a.statut === 'inscriptions_ouvertes'
-                          ? `<button class="secondaire bouton-clore-atelier" data-id="${attr(a.id)}">Clore les inscriptions</button>`
-                          : a.statut !== 'tire'
-                            ? `<button class="bouton-ouvrir-atelier" data-id="${attr(a.id)}">Ouvrir les inscriptions</button>`
-                            : ''
-                      }
                       ${
                         a.statut !== 'tire'
                           ? `<button class="bouton-tirer-atelier" data-id="${attr(a.id)}" ${voeux.length ? '' : 'disabled title="Aucun inscrit"'}>🎲 Tirer au sort</button>`
@@ -882,6 +1049,9 @@
             <input id="at-salle" required placeholder="B" style="max-width:8rem"></label>
           <label class="champ">Créneau *
             <input id="at-horaire" required placeholder="Jeudi 15h00 – 16h00"></label>
+          <label class="champ">Début précis (date et heure — sert au rappel envoyé
+            10 minutes avant sur les téléphones)
+            <input id="at-debut" type="datetime-local"></label>
           <label class="champ">Nombre de places *
             <input id="at-capacite" type="number" min="1" step="1" value="20" required style="max-width:8rem"></label>
           <label class="champ">Intervenants / description
@@ -1170,7 +1340,7 @@
                 .join(sep),
             );
           });
-        const blob = new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const blob = new Blob(['\uFEFF' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'mises-a-jour-annuaire.csv';
@@ -1220,6 +1390,131 @@
       }),
     );
 
+    // --- tombola de clôture : pointages, lots, tirage
+
+    document.querySelectorAll('.bouton-basculer-pointage').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const cle = b.dataset.moment;
+        await refPortail.update({ ['pointages.' + cle]: !pointagesOuverts[cle] });
+        router();
+      }),
+    );
+
+    const boutonCsvPointages = document.getElementById('bouton-csv-pointages');
+    if (boutonCsvPointages) {
+      boutonCsvPointages.addEventListener('click', () => {
+        const libelles = {};
+        MOMENTS_POINTAGE.forEach((m) => {
+          libelles[m.cle] = m.libelle;
+        });
+        const sep = ';';
+        const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lignes = [
+          ['Moment', 'N° inscription', 'Prénom', 'Nom', 'Établissement', 'Profil', 'Mobile', 'Pointé le']
+            .map(cellule)
+            .join(sep),
+        ];
+        const tries = [...pointagesJ].sort(
+          (a, b) =>
+            String(a.moment).localeCompare(String(b.moment)) ||
+            String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'),
+        );
+        tries.forEach((p) =>
+          lignes.push(
+            [
+              libelles[p.moment] || p.moment,
+              p.numeroInscription || '',
+              p.prenom || '',
+              p.nom || '',
+              p.organisme || '',
+              p.type === 'exposant' ? 'Exposant' : 'Visiteur',
+              p.mobile || '',
+              p.pointeLe ? new Date(p.pointeLe).toLocaleString('fr-FR') : '',
+            ]
+              .map(cellule)
+              .join(sep),
+          ),
+        );
+        const blob = new Blob(['\uFEFF' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'pointages-presence.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    }
+
+    document.getElementById('form-lot').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const libelle = document.getElementById('lot-libelle').value.trim();
+      if (!libelle) return;
+      await refPortail.update({
+        'tombola.lots': [
+          ...lotsTombola,
+          { libelle, fournisseurNom: document.getElementById('lot-fournisseur').value.trim() },
+        ],
+      });
+      router();
+    });
+
+    document.querySelectorAll('.bouton-supprimer-lot').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        if (!confirm('Supprimer ce lot ?')) return;
+        // Les gagnants des lots suivants glissent d'un rang avec leur lot.
+        await refPortail.update({
+          'tombola.lots': lotsTombola.filter((_, idx) => idx !== i),
+          'tombola.gagnants': gagnantsTombola
+            .filter((g) => g.lotIndex !== i)
+            .map((g) => (g.lotIndex > i ? { ...g, lotIndex: g.lotIndex - 1 } : g)),
+        });
+        router();
+      }),
+    );
+
+    document.querySelectorAll('.bouton-tirer-lot').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        const lot = lotsTombola[i];
+        if (!lot) return;
+        const dejaGagnantsT = new Set(gagnantsTombola.map((g) => g.participantId));
+        const restants = candidatsTombola.filter((c) => !dejaGagnantsT.has(c.participantId));
+        if (!restants.length) {
+          alert('Aucun participant éligible restant (présence en salle + AG + ouverture, visiteurs uniquement).');
+          return;
+        }
+        const elu = restants[Math.floor(Math.random() * restants.length)];
+        await refPortail.update({
+          'tombola.gagnants': [
+            ...gagnantsTombola,
+            {
+              lotIndex: i,
+              lotLibelle: lot.libelle,
+              fournisseurNom: lot.fournisseurNom || '',
+              participantId: elu.participantId,
+              prenom: elu.prenom || '',
+              nom: elu.nom || '',
+              organisme: elu.organisme || '',
+              mobile: elu.mobile || '',
+              numeroInscription: elu.numeroInscription || '',
+            },
+          ],
+        });
+        router();
+      }),
+    );
+
+    document.querySelectorAll('.bouton-annuler-gagnant-tombola').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        if (!confirm('Annuler le gagnant de ce lot ? Il redevient éligible.')) return;
+        await refPortail.update({
+          'tombola.gagnants': gagnantsTombola.filter((g) => g.lotIndex !== i),
+        });
+        router();
+      }),
+    );
+
     // --- ateliers
 
     async function creerAtelier(donnees) {
@@ -1253,9 +1548,32 @@
             intervenants: 'Mickael Gilbrin, Frédéric Jourdan, Catherine Diallo',
           },
         ];
-        for (const horaire of ['Jeudi 15h00 – 16h00', 'Jeudi 16h00 – 17h00']) {
+        // Le jeudi des journées (s'il existe) donne le début précis des
+        // créneaux, utilisé pour le rappel 10 minutes avant sur les téléphones.
+        let jeudi = null;
+        if (journee.date) {
+          const debutJ = new Date(journee.date + 'T00:00:00');
+          const finJ = new Date((journee.dateFin || journee.date) + 'T00:00:00');
+          for (let d = new Date(debutJ); d <= finJ; d.setDate(d.getDate() + 1)) {
+            if (d.getDay() === 4) {
+              jeudi = new Date(d);
+              break;
+            }
+          }
+        }
+        const creneaux = [
+          { horaire: 'Jeudi 15h00 – 16h00', heure: 15 },
+          { horaire: 'Jeudi 16h00 – 17h00', heure: 16 },
+        ];
+        for (const c of creneaux) {
+          let debutLe = null;
+          if (jeudi) {
+            const d = new Date(jeudi);
+            d.setHours(c.heure, 0, 0, 0);
+            debutLe = firebase.firestore.Timestamp.fromDate(d);
+          }
           for (const t of types) {
-            await creerAtelier({ ...t, horaire, capacite: 20 });
+            await creerAtelier({ ...t, horaire: c.horaire, debutLe, capacite: 20 });
           }
         }
         router();
@@ -1264,28 +1582,40 @@
 
     document.getElementById('form-atelier').addEventListener('submit', async (evt) => {
       evt.preventDefault();
+      const debutBrut = document.getElementById('at-debut').value;
+      const debut = debutBrut ? new Date(debutBrut) : null;
       await creerAtelier({
         nom: document.getElementById('at-nom').value.trim(),
         salle: document.getElementById('at-salle').value.trim(),
         horaire: document.getElementById('at-horaire').value.trim(),
+        debutLe:
+          debut && !Number.isNaN(debut.getTime())
+            ? firebase.firestore.Timestamp.fromDate(debut)
+            : null,
         capacite: Math.max(1, Number(document.getElementById('at-capacite').value) || 20),
         intervenants: document.getElementById('at-intervenants').value.trim(),
       });
       router();
     });
 
-    document.querySelectorAll('.bouton-ouvrir-atelier').forEach((b) =>
-      b.addEventListener('click', async () => {
-        await db.collection('ateliers').doc(b.dataset.id).update({ statut: 'inscriptions_ouvertes' });
-        router();
-      }),
-    );
-    document.querySelectorAll('.bouton-clore-atelier').forEach((b) =>
-      b.addEventListener('click', async () => {
-        await db.collection('ateliers').doc(b.dataset.id).update({ statut: 'ferme' });
-        router();
-      }),
-    );
+    // Période de l'AG = fenêtre d'inscription aux ateliers (portail + règles).
+    document.getElementById('form-ag').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const debut = new Date(document.getElementById('ag-debut').value);
+      const fin = new Date(document.getElementById('ag-fin').value);
+      if (Number.isNaN(debut.getTime()) || Number.isNaN(fin.getTime())) return;
+      if (fin <= debut) {
+        alert("La fin de l'AG doit être après son début.");
+        return;
+      }
+      await refPortail.update({
+        ag: {
+          debut: firebase.firestore.Timestamp.fromDate(debut),
+          fin: firebase.firestore.Timestamp.fromDate(fin),
+        },
+      });
+      router();
+    });
 
     // Tirage au sort équitable, atelier par atelier, dans l'ordre aléatoire :
     //  1. priorité aux personnes non retenues dans un AUTRE atelier de la
@@ -1476,7 +1806,7 @@
             .join(sep),
         ),
       );
-      const blob = new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const blob = new Blob(['\uFEFF' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = fichier;
@@ -1586,6 +1916,7 @@
         ...snapV.docs.map((d) => d.ref),
         ...fournisseursJ.map((f) => db.collection('fournisseurs').doc(f.id)),
         ...visitesJ.map((v) => db.collection('visites').doc(v.id)),
+        ...pointagesJ.map((p) => db.collection('pointages').doc(p.id)),
         refPortail,
         db.collection('journees').doc(journeeId),
       ];
