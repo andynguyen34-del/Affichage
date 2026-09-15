@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Kiosque — Tirages URBH</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icone-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&display=swap">
+  <style>
+    /* Écran de projection : monde sombre volontairement unique (salle). */
+    :root {
+      --nuit: #0b1c33;
+      --nuit-2: #143a68;
+      --encre: #f2f6fc;
+      --or: #f0b23e;
+      --bleu-clair: #7fb3ff;
+      --voile: rgba(255, 255, 255, 0.07);
+      --bord: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+      color: var(--encre);
+      background: radial-gradient(120% 90% at 50% 0%, var(--nuit-2) 0%, var(--nuit) 62%);
+      overflow: hidden;
+      cursor: default;
+    }
+    .scene {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3vh 4vw;
+      text-align: center;
+    }
+    .entete .surtitre {
+      text-transform: uppercase;
+      letter-spacing: 0.35em;
+      font-size: clamp(0.7rem, 1.4vw, 1.1rem);
+      color: var(--bleu-clair);
+      font-weight: 600;
+    }
+    .entete h1 {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(1.4rem, 3.2vw, 2.6rem);
+      margin: 0.2rem 0 0;
+      letter-spacing: 0.02em;
+    }
+    .centre { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
+    .contexte {
+      text-transform: uppercase;
+      letter-spacing: 0.25em;
+      font-size: clamp(0.8rem, 1.6vw, 1.3rem);
+      color: var(--or);
+      font-weight: 700;
+      min-height: 1.6em;
+    }
+    .lot {
+      font-size: clamp(1rem, 2.2vw, 1.7rem);
+      color: var(--encre);
+      opacity: 0.85;
+      min-height: 1.5em;
+      margin-top: 0.4rem;
+    }
+    #nom {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(2.2rem, 9vw, 7.5rem);
+      line-height: 1.05;
+      margin: 2vh 0 1vh;
+      max-width: 94vw;
+      overflow-wrap: anywhere;
+      text-wrap: balance;
+    }
+    #nom.revele { animation: reveler 0.6s cubic-bezier(0.2, 1.4, 0.4, 1); color: var(--or); }
+    @keyframes reveler { 0% { transform: scale(0.6); opacity: 0.2; } 100% { transform: scale(1); opacity: 1; } }
+    #sous-nom { font-size: clamp(1rem, 2.4vw, 1.9rem); opacity: 0.9; min-height: 1.6em; }
+    .attente { animation: respirer 2.6s ease-in-out infinite; opacity: 0.7; }
+    @keyframes respirer { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
+    @media (prefers-reduced-motion: reduce) {
+      #nom.revele, .attente { animation: none; }
+    }
+    .palmares {
+      width: 100%;
+      display: flex;
+      gap: 0.6rem 1.4rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      font-size: clamp(0.8rem, 1.5vw, 1.15rem);
+    }
+    .palmares .gagnant {
+      background: var(--voile);
+      border: 1px solid var(--bord);
+      border-radius: 999px;
+      padding: 0.3em 1em;
+      white-space: nowrap;
+    }
+    .palmares .gagnant strong { color: var(--or); font-weight: 700; }
+    .aide {
+      position: fixed;
+      right: 1rem;
+      bottom: 0.6rem;
+      font-size: 0.75rem;
+      opacity: 0.4;
+    }
+    #confettis { position: fixed; inset: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="confettis"></canvas>
+  <div class="scene">
+    <div class="entete">
+      <div class="surtitre" id="surtitre">Journées d'études</div>
+      <h1 id="titre">URBH</h1>
+    </div>
+    <div class="centre">
+      <div class="contexte" id="contexte"></div>
+      <div class="lot" id="lot"></div>
+      <div id="nom" class="attente">En attente du prochain tirage…</div>
+      <div id="sous-nom"></div>
+    </div>
+    <div class="palmares" id="palmares"></div>
+  </div>
+  <div class="aide">double-clic : plein écran</div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="js/kiosque.js"></script>
+</body>
+</html>

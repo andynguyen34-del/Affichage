@@ -881,7 +881,14 @@
             ${participationsTirage.length > gagnants.length ? '' : 'disabled title="Aucun participant restant"'}>
             🎲 Tirer un gagnant
           </button>
+          <a class="btn secondaire" href="kiosque.html?e=${journeeId}" target="_blank" rel="noopener">
+            📽️ Écran de projection (kiosque)
+          </a>
         </div>
+        <p class="muet petit">Le kiosque se projette en salle (double-clic =
+        plein écran) : il annonce chaque gagnant en direct — suspense,
+        révélation, confettis — dès que vous tirez ici, tirage au sort comme
+        lots de la tombola.</p>
         ${
           gagnants.length
             ? `<h3>Gagnants (annoncés sur le portail)</h3>
@@ -938,6 +945,9 @@
           <button id="bouton-csv-pointages" class="secondaire" ${pointagesJ.length ? '' : 'disabled'}>
             Feuille des pointages (CSV)
           </button>
+          <a class="btn secondaire" href="kiosque.html?e=${journeeId}" target="_blank" rel="noopener">
+            📽️ Écran de projection (kiosque)
+          </a>
         </div>
         <h3>Lots et tirage</h3>
         <p class="muet petit"><strong>${candidatsTombola.length}</strong>
