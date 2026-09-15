@@ -922,11 +922,16 @@
           <a class="btn secondaire" href="kiosque.html?e=${journeeId}" target="_blank" rel="noopener">
             📽️ Écran de projection (kiosque)
           </a>
+          <a class="btn secondaire" href="kiosque.html?e=${journeeId}&amp;regie=1" target="_blank" rel="noopener">
+            🎛 Kiosque + régie (tirer depuis l'écran)
+          </a>
         </div>
         <p class="muet petit">Le kiosque se projette en salle (double-clic =
         plein écran) : il annonce chaque gagnant en direct — suspense,
         révélation, confettis — dès que vous tirez ici, tirage au sort comme
-        lots de la tombola.</p>
+        lots de la tombola. Avec la <strong>régie</strong> (pastille 🎛 en bas
+        à gauche de l'écran, connexion administrateur demandée), les tirages
+        se déclenchent directement depuis le kiosque, en amphithéâtre.</p>
         ${
           gagnants.length
             ? `<h3>Gagnants (annoncés sur le portail)</h3>
@@ -985,6 +990,9 @@
           </button>
           <a class="btn secondaire" href="kiosque.html?e=${journeeId}" target="_blank" rel="noopener">
             📽️ Écran de projection (kiosque)
+          </a>
+          <a class="btn secondaire" href="kiosque.html?e=${journeeId}&amp;regie=1" target="_blank" rel="noopener">
+            🎛 Kiosque + régie (tirer depuis l'écran)
           </a>
         </div>
         <h3>Membres du Conseil d'Administration (exclus de la tombola)</h3>
@@ -1096,10 +1104,16 @@
           <a class="btn secondaire" href="kiosque-ateliers.html?e=${journeeId}" target="_blank" rel="noopener">
             📽️ Écran des ateliers (kiosque)
           </a>
+          <a class="btn secondaire" href="kiosque-ateliers.html?e=${journeeId}&amp;regie=1" target="_blank" rel="noopener">
+            🎛 Kiosque + régie (tirer depuis l'écran)
+          </a>
         </div>
         <p class="muet petit">À projeter devant les salles : les listes des
         retenus et les listes d'attente s'affichent en direct, nom par nom,
-        dès que vous tirez un atelier au sort ci-dessous.</p>
+        dès que vous tirez un atelier au sort ci-dessous. Avec la
+        <strong>régie</strong> (pastille 🎛 en bas à gauche de l'écran,
+        connexion administrateur demandée), les tirages des ateliers se
+        déclenchent directement depuis le kiosque.</p>
         <h3>Ateliers</h3>
         ${
           ateliers.length
