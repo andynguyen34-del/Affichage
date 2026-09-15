@@ -12,6 +12,19 @@
 (function () {
   'use strict';
 
+  // Décor : l'affiche officielle des JE, en fond estompé, dès que le fichier
+  // affiche-2026.jpg est publié avec le site (rien sinon).
+  (function () {
+    const affiche = new Image();
+    affiche.onload = () => {
+      const decor = document.createElement('div');
+      decor.className = 'decor-affiche';
+      decor.style.backgroundImage = "url('affiche-2026.jpg')";
+      document.body.prepend(decor);
+    };
+    affiche.src = 'affiche-2026.jpg';
+  })();
+
   if (!firebase.apps.length) {
     if (!window.firebaseConfigEstRenseignee()) return;
     firebase.initializeApp(window.FIREBASE_CONFIG);

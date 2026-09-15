@@ -29,6 +29,16 @@
       overflow: hidden;
       cursor: default;
     }
+    .decor-affiche {
+      position: fixed;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      opacity: 0.16;
+      filter: blur(3px) saturate(1.15);
+      z-index: 0;
+    }
+    .scene { position: relative; z-index: 1; }
     .scene {
       height: 100%;
       display: flex;

@@ -441,3 +441,14 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
 .carte.repliee > :not(h2) { display: none !important; }
 .carte.repliee > h2 { margin-bottom: 0; }
 .repli-liste { display: block; margin: 0.1rem 0 0.3rem; padding-left: 0; }
+
+/* Logos des fournisseurs (public/logos/stand-<n°>.png quand ils existent) */
+.logo-expo {
+  width: 46px;
+  height: 34px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 6px;
+  flex-shrink: 0;
+}

@@ -821,11 +821,20 @@
           (f.stand || '').toLowerCase().includes(texte),
       );
       if (!retenus.length) return '<p class="muet petit">Aucun exposant trouvé.</p>';
+      // Logo du fournisseur s'il est publié avec le site : fichier
+      // public/logos/stand-<n°>.png (rien ne s'affiche sinon).
+      const cleStand = (f) =>
+        String(f.stand || '')
+          .split('/')[0]
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '');
       return (
         '<ul class="liste">' +
         retenus
           .map(
             (f) => `<li>
+              ${cleStand(f) ? `<img class="logo-expo" src="logos/stand-${attr(cleStand(f))}.png" alt="" onerror="this.remove()">` : ''}
               <div>
                 <span class="titre-item">${echapper(f.nom)}</span>
                 ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
