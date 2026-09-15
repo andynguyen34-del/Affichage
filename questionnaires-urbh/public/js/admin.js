@@ -271,9 +271,13 @@
         /* fiche déjà absente */
       }
     }
+    // La demande elle-même est anonymisée : le nom n'était nécessaire que
+    // pour la traiter — une fois l'effacement fait, il ne doit pas subsister.
     await db.collection('demandesAnonymisation').doc(uidCible).update({
       statut: 'traitee',
       traiteLe: new Date().toISOString(),
+      nom: 'Anonymisé',
+      prenom: '',
     });
   }
 
@@ -281,6 +285,22 @@
     const journees = await chargerJournees();
     const snapDa = await db.collection('demandesAnonymisation').get();
     const demandes = snapDa.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Rattrapage : les demandes traitées par une ancienne version gardaient
+    // le nom du demandeur — on les anonymise ici au passage.
+    for (const d of demandes) {
+      if (d.statut === 'traitee' && d.nom && d.nom !== 'Anonymisé') {
+        try {
+          await db
+            .collection('demandesAnonymisation')
+            .doc(d.id)
+            .update({ nom: 'Anonymisé', prenom: '' });
+          d.nom = 'Anonymisé';
+          d.prenom = '';
+        } catch (_) {
+          /* règles en retard : sans gravité, retenté à la prochaine ouverture */
+        }
+      }
+    }
     demandes.sort((a, b) => String(b.demandeLe || '').localeCompare(String(a.demandeLe || '')));
     const demandesEnAttente = demandes.filter((d) => d.statut === 'en_attente');
     const snapAnnuaire = await db.collection('annuaire').get();
