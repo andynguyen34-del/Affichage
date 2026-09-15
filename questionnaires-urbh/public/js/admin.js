@@ -691,13 +691,26 @@
     pointagesJ.forEach((p) => {
       if (parMoment[p.moment]) parMoment[p.moment].add(p.participantId);
     });
+    // Condition supplémentaire de la tombola : avoir répondu à tous les
+    // questionnaires ouverts qui concernent les visiteurs.
+    const questionnairesTombola = questionnaires.filter(
+      (q) => q.statut === 'ouvert' && (!q.audience || q.audience === 'tous' || q.audience === 'visiteur'),
+    );
+    const repondantsParQuestionnaire = {};
+    for (const q of questionnairesTombola) {
+      const snapR = await db.collection('reponses').where('questionnaireId', '==', q.id).get();
+      repondantsParQuestionnaire[q.id] = new Set(snapR.docs.map((d) => d.data().participantId));
+    }
+    const aRepondu = (participantId) =>
+      questionnairesTombola.every((q) => repondantsParQuestionnaire[q.id].has(participantId));
     const candidatsTombola = pointagesJ.filter(
       (p) =>
         p.moment === 'tombola' &&
         p.type === 'visiteur' &&
         p.nom !== 'Anonymisé' &&
         parMoment.ouverture.has(p.participantId) &&
-        parMoment.ag.has(p.participantId),
+        parMoment.ag.has(p.participantId) &&
+        aRepondu(p.participantId),
     );
 
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
@@ -892,12 +905,14 @@
         <p class="muet petit">Trois lots offerts par l'URBH, remis par les
         représentants de trois fournisseurs, tirés au sort à la clôture. <strong>Conditions de participation</strong>
         (affichées aux participants) : être visiteur blanchisseur adhérent,
-        être <strong>présent dans la salle lors du tirage</strong>, et avoir
+        être <strong>présent dans la salle lors du tirage</strong>, avoir
         <strong>validé ses points de présence</strong> — présence à
         l'Assemblée Générale et pointage à l'ouverture des journées sur la
-        première conférence. Ouvrez chaque pointage au moment voulu (le
-        pointage « présence en salle » juste avant le tirage) ; le tirage ne
-        retient que les visiteurs ayant les trois points.</p>
+        première conférence — et avoir <strong>répondu aux questionnaires
+        ouverts</strong> concernant les visiteurs. Ouvrez chaque pointage au
+        moment voulu (le pointage « présence en salle » juste avant le
+        tirage) ; le tirage ne retient que les visiteurs remplissant toutes
+        ces conditions.</p>
         <h3>Pointages de présence</h3>
         <ul class="liste">${MOMENTS_POINTAGE.map(
           (m) => `<li>
@@ -923,8 +938,9 @@
         </div>
         <h3>Lots et tirage</h3>
         <p class="muet petit"><strong>${candidatsTombola.length}</strong>
-        participant(s) éligible(s) actuellement (visiteurs blanchisseurs, trois
-        points validés). Une même personne ne peut gagner qu'un seul lot.</p>
+        participant(s) éligible(s) actuellement (visiteurs blanchisseurs,
+        trois points validés, questionnaires répondus${questionnairesTombola.length ? ` — ${questionnairesTombola.length} questionnaire(s) ouvert(s) pris en compte` : ' — aucun questionnaire ouvert pour le moment'}).
+        Une même personne ne peut gagner qu'un seul lot.</p>
         ${
           lotsTombola.length
             ? `<ul class="liste">${lotsTombola
@@ -1208,7 +1224,16 @@
           </label>
           <div class="ligne-boutons">
             <button type="submit">Créer le questionnaire</button>
+            <button type="button" id="bouton-seed-questionnaires" class="secondaire">
+              Créer les 5 questionnaires officiels des 41es JE
+            </button>
           </div>
+          <p class="muet petit">« Les 5 officiels » : évaluation stagiaires
+          (visiteurs), évaluation partenaires techniques (exposants) et les
+          3 ateliers (IA, Maintenance, RABC — visiteurs). Créés en
+          <strong>brouillon</strong> : ouvrez chacun au moment voulu pour le
+          faire apparaître sur le portail ; ceux qui existent déjà ne sont
+          pas dupliqués.</p>
         </form>
       </div>
 
@@ -2204,6 +2229,41 @@
         creeLe: firebase.firestore.FieldValue.serverTimestamp(),
       });
       location.hash = '#/questionnaire/' + doc2.id;
+    });
+
+    document.getElementById('bouton-seed-questionnaires').addEventListener('click', async () => {
+      const OFFICIELS = [
+        ['stagiaires', 'visiteur'],
+        ['partenaires', 'exposant'],
+        ['atelier_ia', 'visiteur'],
+        ['atelier_maintenance', 'visiteur'],
+        ['atelier_rabc', 'visiteur'],
+      ];
+      let crees = 0;
+      for (const [cle, audience] of OFFICIELS) {
+        const modele = MODELES[cle];
+        if (!modele) continue;
+        // Pas de doublon : un questionnaire issu du même modèle existe déjà ?
+        if (questionnaires.some((q) => q.titre && q.titre.startsWith(modele.titre))) continue;
+        await db.collection('questionnaires').add({
+          journeeId,
+          journeeTitre: journee.titre,
+          journeeDate: fmtPeriode(journee),
+          journeeLieu: journee.lieu || '',
+          titre: modele.titre + ' — ' + journee.titre,
+          statut: 'brouillon',
+          audience,
+          questions: JSON.parse(JSON.stringify(modele.questions)),
+          creeLe: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        crees += 1;
+      }
+      alert(
+        crees
+          ? `${crees} questionnaire(s) créé(s) en brouillon — ouvrez chacun au moment voulu.`
+          : 'Les 5 questionnaires officiels existent déjà pour cette journée.',
+      );
+      router();
     });
 
     // --- actions d'amélioration

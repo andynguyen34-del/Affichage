@@ -146,6 +146,10 @@ ul.liste .titre-item { font-weight: 600; }
 ul.liste .pousse { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; }
 ul.liste a { color: var(--bleu); text-decoration: none; }
 ul.liste a:hover { text-decoration: underline; }
+/* Les liens habillés en bouton gardent leur texte blanc sur fond bleu. */
+ul.liste a.btn { color: #fff; }
+ul.liste a.btn:hover { text-decoration: none; }
+ul.liste a.btn.secondaire { color: var(--bleu); }
 
 /* Fil d'Ariane */
 .fil { font-size: 0.88rem; margin-bottom: 0.8rem; }

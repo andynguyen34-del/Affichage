@@ -26,7 +26,7 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    minute) et grands boutons d'accès aux outils, le tout tenant sur un seul
    écran de téléphone : 📅 Programme pédagogique, 🗺️ Plan & recherche des
    stands, 🏭 Visite des stands (avec scanner de QR intégré), 🛠️ Inscription
-   Atelier, 🎟️ Validation Tombola, 🎁 Tirage au sort, 📝 Questionnaires,
+   Atelier, 🎟️ Tombola & tirage au sort, 📝 Questionnaires,
    plus le bouton 🚪 Quitter l'application.
    Le bloc « 🔐 Mes données » (consentement, demande d'anonymisation) se
    trouve dans l'écran « modifier » du bandeau. Chaque outil s'ouvre dans
@@ -36,9 +36,11 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    - 🎟️ **la tombola de clôture** : trois lots offerts par l'URBH, remis
      par les représentants des fournisseurs. Conditions affichées au participant : réservée aux
      visiteurs blanchisseurs adhérents, **présence dans la salle lors du
-     tirage** requise, et **validation des points de présence** — présence à
+     tirage** requise, **validation des points de présence** — présence à
      l'Assemblée Générale et pointage à l'ouverture des journées sur la
-     première conférence. Le participant valide chaque point d'un geste
+     première conférence — et **avoir répondu aux questionnaires de
+     satisfaction** proposés. L'écran regroupe aussi l'inscription au
+     **tirage au sort** de la journée. Le participant valide chaque point d'un geste
      (« 📍 Je pointe ») quand l'administration ouvre le pointage, sur place ;
    - 🛠️ **s'inscrire aux ateliers** à places limitées (salles B, C, D…) —
      une inscription par atelier et par personne, un seul atelier par
@@ -90,7 +92,8 @@ journées (première conférence)**, **Assemblée Générale**, **présence en s
 au moment du tirage**. L'administration enregistre les **lots** (libellé +
 fournisseur remettant — les lots sont offerts par l'URBH et remis par les
 représentants des fournisseurs), suit le nombre de participants **éligibles** (visiteurs
-blanchisseurs ayant validé les trois points) et **tire chaque lot** — une même
+blanchisseurs ayant validé les trois points et répondu aux questionnaires
+ouverts les concernant) et **tire chaque lot** — une même
 personne ne peut gagner qu'un seul lot ; un gagnant s'annule d'un clic. La
 **feuille des pointages (CSV)** sert d'émargement (utile aussi au dossier
 qualité). Les gagnants s'affichent sur le portail.

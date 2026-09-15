@@ -548,7 +548,7 @@
       visites: vueVisites,
       ateliers: vueAteliers,
       tombola: vueTombola,
-      tirage: vueTirage,
+      tirage: vueTombola, // le tirage au sort a rejoint l'écran Tombola
       questionnaires: vueQuestionnaires,
     };
     return (vues[vueCourante] || vueAccueil)();
@@ -693,8 +693,12 @@
       { vue: 'plan', icone: '🗺️', libelle: 'Plan & recherche des stands' },
       { vue: 'visites', icone: '🏭', libelle: 'Visite des stands' },
       { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
-      { vue: 'tombola', icone: '🎟️', libelle: 'Validation Tombola', pastille: pointageOuvert ? 'pointage ouvert' : '' },
-      { vue: 'tirage', icone: '🎁', libelle: 'Tirage au sort', pastille: tirageOuvert ? 'ouvert' : '' },
+      {
+        vue: 'tombola',
+        icone: '🎟️',
+        libelle: 'Tombola & tirage au sort',
+        pastille: tirageOuvert ? 'tirage ouvert' : pointageOuvert ? 'pointage ouvert' : '',
+      },
       { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
     ];
 
@@ -1199,6 +1203,16 @@
     const lotsTombola = tombolaInfo.lots || [];
     const gagnantsTombola = tombolaInfo.gagnants || [];
     const pointagesOuverts = portail.pointages || {};
+    // Tirage au sort de la journée, présenté sur le même écran.
+    const tirageOuvert = !!(portail.tirage && portail.tirage.ouvert);
+    const gagnantsTirage = (portail.tirage && portail.tirage.gagnants) || [];
+    let participeTirage = false;
+    try {
+      const doc = await db.collection('tirage').doc(journeeId + '_' + uid).get();
+      participeTirage = doc.exists;
+    } catch (_) {
+      /* pas encore de participation */
+    }
     const mesPointages = {};
     await Promise.all(
       MOMENTS_POINTAGE.map(async (m) => {
@@ -1213,6 +1227,35 @@
         }
       }),
     );
+
+    // Condition supplémentaire : avoir répondu aux questionnaires de
+    // satisfaction ouverts qui concernent le participant.
+    let questionnairesAttendus = [];
+    try {
+      const snapQ = await db
+        .collection('questionnaires')
+        .where('journeeId', '==', journeeId)
+        .where('statut', '==', 'ouvert')
+        .get();
+      questionnairesAttendus = snapQ.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+    } catch (_) {
+      questionnairesAttendus = [];
+    }
+    let nbRepondus = 0;
+    await Promise.all(
+      questionnairesAttendus.map(async (q) => {
+        try {
+          const doc = await db.collection('reponses').doc(q.id + '_' + uid).get();
+          if (doc.exists) nbRepondus += 1;
+        } catch (_) {
+          /* pas encore de réponse */
+        }
+      }),
+    );
+    const questionnairesOk =
+      questionnairesAttendus.length > 0 && nbRepondus === questionnairesAttendus.length;
 
     function htmlPoint(m) {
       const p = mesPointages[m.cle];
@@ -1231,7 +1274,7 @@
         <span class="muet petit"> — le pointage sera ouvert sur place, le moment venu.</span></li>`;
     }
 
-    $app.innerHTML = `${barreRetour('🎟️ Validation Tombola')}
+    $app.innerHTML = `${barreRetour('🎟️ Tombola & tirage au sort')}
         ${
           lotsTombola.length
             ? `<ul class="verbatims">${lotsTombola
@@ -1253,9 +1296,10 @@
         <p class="muet petit"><strong>Pour participer :</strong> la tombola est
         réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La
         <strong>présence dans la salle lors du tirage au sort</strong> est
-        requise, et la <strong>validation des points de présence</strong> est
-        nécessaire : présence à l'Assemblée Générale et pointage à l'ouverture
-        des journées sur la première conférence.</p>
+        requise, la <strong>validation des points de présence</strong> est
+        nécessaire — présence à l'Assemblée Générale et pointage à l'ouverture
+        des journées sur la première conférence — et il faut avoir
+        <strong>répondu aux questionnaires de satisfaction</strong> proposés.</p>
         ${
           profil.type === 'exposant'
             ? `<p class="muet petit">Vous êtes enregistré comme exposant
@@ -1264,17 +1308,56 @@
             : ''
         }
         <h3 style="margin-bottom:0.3rem">Mes points de présence</h3>
-        <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}</ul>
+        <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}
+          ${
+            questionnairesAttendus.length
+              ? questionnairesOk
+                ? `<li>✅ <strong>Questionnaire${questionnairesAttendus.length > 1 ? 's' : ''} de satisfaction</strong>
+                    <span class="muet petit"> — répondu${questionnairesAttendus.length > 1 ? `s (${nbRepondus}/${questionnairesAttendus.length})` : ''}</span></li>`
+                : `<li>🟠 <strong>Questionnaire${questionnairesAttendus.length > 1 ? 's' : ''} de satisfaction</strong>
+                    <span class="muet petit"> — ${nbRepondus}/${questionnairesAttendus.length} répondu(s)</span>
+                    <div class="ligne-boutons"><button class="lien-vue" data-vue="questionnaires">📝 Répondre maintenant</button></div></li>`
+              : `<li>⬜ <strong>Questionnaire de satisfaction</strong>
+                  <span class="muet petit"> — il sera proposé en fin de journées.</span></li>`
+          }
+        </ul>
         ${
           profil.type !== 'exposant' &&
           mesPointages.ouverture &&
           mesPointages.ag &&
-          mesPointages.tombola
-            ? `<div class="info">✅ Tous vos points sont validés : vous participez
-                à la tombola. Bonne chance !</div>`
+          mesPointages.tombola &&
+          questionnairesOk
+            ? `<div class="info">✅ Tous vos points sont validés et vos questionnaires
+                sont remplis : vous participez à la tombola. Bonne chance !</div>`
             : ''
         }
         <div id="erreur-pointage" class="erreur" hidden></div>
+        <h3>🎁 Tirage au sort de la journée</h3>
+        ${
+          gagnantsTirage.length
+            ? `<p><strong>Résultats du tirage :</strong></p>
+              <ul class="verbatims">${gagnantsTirage
+                .map(
+                  (gg) =>
+                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.numeroInscription ? ' (carte n° ' + echapper(gg.numeroInscription) + ')' : ''}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
+                )
+                .join('')}</ul>`
+            : ''
+        }
+        ${
+          participeTirage
+            ? `<div class="info">✅ Votre participation au tirage est enregistrée. Bonne chance !</div>`
+            : tirageOuvert
+              ? `<p class="muet petit">Tentez votre chance : une seule participation par personne.</p>
+                <div class="ligne-boutons">
+                  <button id="bouton-tirage">🎁 Je m'inscris au tirage au sort</button>
+                </div>`
+              : gagnantsTirage.length
+                ? ''
+                : `<p class="muet petit">Les inscriptions au tirage ne sont pas encore
+                    ouvertes — repassez par ici pendant la journée !</p>`
+        }
+        <div id="erreur-tirage" class="erreur" hidden></div>
       </div>`;
     brancherNavigation();
 
@@ -1308,55 +1391,6 @@
         }
       }),
     );
-  }
-
-  // --------------------------------------------------------------- tirage
-
-  async function vueTirage() {
-    try {
-      const doc = await db.collection('portails').doc(journeeId).get();
-      if (doc.exists) portail = doc.data();
-    } catch (_) {
-      /* on garde la version connue */
-    }
-    const tirageOuvert = !!(portail.tirage && portail.tirage.ouvert);
-    const gagnants = (portail.tirage && portail.tirage.gagnants) || [];
-
-    let participeTirage = false;
-    try {
-      const doc = await db.collection('tirage').doc(journeeId + '_' + uid).get();
-      participeTirage = doc.exists;
-    } catch (_) {
-      /* pas encore de participation */
-    }
-
-    $app.innerHTML = `${barreRetour('🎁 Tirage au sort')}
-        ${
-          gagnants.length
-            ? `<p><strong>Résultats du tirage :</strong></p>
-              <ul class="verbatims">${gagnants
-                .map(
-                  (gg) =>
-                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.numeroInscription ? ' (carte n° ' + echapper(gg.numeroInscription) + ')' : ''}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
-                )
-                .join('')}</ul>`
-            : ''
-        }
-        ${
-          participeTirage
-            ? `<div class="info">✅ Votre participation au tirage est enregistrée. Bonne chance !</div>`
-            : tirageOuvert
-              ? `<p>Tentez votre chance : une seule participation par personne.</p>
-                <div class="ligne-boutons">
-                  <button id="bouton-tirage" class="btn-menu">🎁 Je participe au tirage au sort</button>
-                </div>`
-              : gagnants.length
-                ? ''
-                : `<p class="muet">Les participations ne sont pas encore ouvertes — repassez par ici pendant la journée !</p>`
-        }
-        <div id="erreur-tirage" class="erreur" hidden></div>
-      </div>`;
-    brancherNavigation();
 
     const boutonTirage = document.getElementById('bouton-tirage');
     if (boutonTirage) {
