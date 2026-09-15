@@ -53,3 +53,17 @@ Si le terminal n'est pas connecté : `firebase login` d'abord
 | --- | --- |
 | https://questionnaires-urbh.web.app/ | Administration (connexion) |
 | https://questionnaires-urbh.web.app/portail.html | Portail participants (QR des flyers) |
+
+## SMS automatiques (plan Blaze) — mise en service une seule fois
+
+1. Console Firebase → projet `questionnaires-urbh` → en bas à gauche,
+   **passer au plan Blaze** (carte bancaire ; usage attendu : quelques euros).
+2. Créer un compte **Brevo** (brevo.com), activer le **SMS transactionnel**
+   (expéditeur « URBH ») et créditer quelques euros de SMS, puis copier une
+   **clé API v3** (Paramètres → Clés API).
+3. Dans ce dossier, en terminal : `firebase functions:secrets:set BREVO_API_KEY`
+   puis coller la clé (elle est stockée chiffrée chez Google, jamais dans les fichiers).
+4. Double-clic sur **`DEPLOYER-FONCTIONS.bat`**.
+
+Ensuite, chaque désistement d'atelier envoie automatiquement le SMS à la
+personne promue. `DEPLOYER.bat` reste inchangé pour les pages et les règles.

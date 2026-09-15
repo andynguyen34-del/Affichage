@@ -912,10 +912,13 @@
       visites = [];
     }
 
-    // Scanner intégré quand le navigateur le permet (Chrome sur Android) ;
-    // sinon, l'appareil photo du téléphone fait la même chose via le QR.
+    // Scanner intégré : décodage par la bibliothèque jsQR (fonctionne sur
+    // Android ET iPhone), avec l'API native BarcodeDetector en secours si la
+    // bibliothèque n'a pas pu se charger. Il faut au minimum une caméra.
     const scannerDispo =
-      'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+      navigator.mediaDevices &&
+      navigator.mediaDevices.getUserMedia &&
+      (window.jsQR || 'BarcodeDetector' in window);
 
     $app.innerHTML = `${barreRetour('🏭 Visite des stands')}
         <p class="muet petit">Sur chaque stand, un QR code permet d'enregistrer
@@ -974,6 +977,33 @@
       arreterScanner = null;
     };
 
+    // Décode l'image de la caméra : jsQR sur une copie réduite de l'image
+    // (rapide et fiable partout), sinon BarcodeDetector natif en secours.
+    const tampon = document.createElement('canvas');
+    const ctxTampon = tampon.getContext('2d', { willReadFrequently: true });
+    let detecteurNatif = null;
+
+    async function decoderImage(video) {
+      if (window.jsQR) {
+        const largeur = 640;
+        const echelle = largeur / (video.videoWidth || largeur);
+        tampon.width = largeur;
+        tampon.height = Math.max(1, Math.round((video.videoHeight || largeur) * echelle));
+        ctxTampon.drawImage(video, 0, 0, tampon.width, tampon.height);
+        const image = ctxTampon.getImageData(0, 0, tampon.width, tampon.height);
+        const code = window.jsQR(image.data, image.width, image.height, {
+          inversionAttempts: 'dontInvert',
+        });
+        return code ? code.data : null;
+      }
+      if ('BarcodeDetector' in window) {
+        if (!detecteurNatif) detecteurNatif = new BarcodeDetector({ formats: ['qr_code'] });
+        const codes = await detecteurNatif.detect(video);
+        return codes.length ? codes[0].rawValue || null : null;
+      }
+      return null;
+    }
+
     document.getElementById('bouton-stop-scanner').addEventListener('click', arreter);
     document.getElementById('bouton-scanner').addEventListener('click', async () => {
       const erreur = document.getElementById('erreur-scanner');
@@ -987,12 +1017,11 @@
         video.srcObject = flux;
         await video.play();
         document.getElementById('zone-scanner').hidden = false;
-        const detecteur = new BarcodeDetector({ formats: ['qr_code'] });
         boucle = setInterval(async () => {
           try {
-            const codes = await detecteur.detect(video);
-            if (!codes.length) return;
-            const brut = codes[0].rawValue || '';
+            if (video.readyState < 2) return;
+            const brut = await decoderImage(video);
+            if (!brut) return;
             let standId = null;
             try {
               standId = new URL(brut).searchParams.get('stand');
@@ -1006,7 +1035,7 @@
           } catch (_) {
             /* image pas encore prête : on réessaie */
           }
-        }, 400);
+        }, 350);
       } catch (_) {
         arreter();
         erreur.textContent =
