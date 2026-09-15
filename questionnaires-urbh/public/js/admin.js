@@ -777,6 +777,47 @@
       </div>
 
       <div class="carte">
+        <h2>📅 Programme pédagogique (affiché sur le portail)</h2>
+        <p class="muet petit">Le portail affiche ce programme aux participants,
+        avec en tête d'écran l'information « en ce moment / à suivre » mise à
+        jour en temps réel.</p>
+        ${
+          (portail.programme || []).length
+            ? `<ul class="liste">${(portail.programme || [])
+                .map(
+                  (e, i) => `<li>
+                    <div>
+                      <span class="titre-item">${echapper(e.titre || '')}</span>
+                      <div class="muet petit">${fmtHorodatage(e.debut)}${e.fin ? ' → ' + fmtHorodatage(e.fin) : ''}${e.lieu ? ' — 📍 ' + echapper(e.lieu) : ''}</div>
+                    </div>
+                    <div class="pousse">
+                      <button class="discret bouton-supprimer-evenement" data-index="${i}">Supprimer</button>
+                    </div>
+                  </li>`,
+                )
+                .join('')}</ul>`
+            : `<p class="muet">Aucun événement au programme.</p>
+              <div class="ligne-boutons">
+                <button id="bouton-seed-programme" class="secondaire">
+                  Créer le programme des 41es JE (Nantes 2026)
+                </button>
+              </div>`
+        }
+        <h3>Ajouter un événement</h3>
+        <form id="form-evenement" class="ligne-boutons" style="align-items:flex-end">
+          <label class="champ" style="margin:0">Début
+            <input id="ev-debut" type="datetime-local" required></label>
+          <label class="champ" style="margin:0">Fin
+            <input id="ev-fin" type="datetime-local"></label>
+          <label class="champ" style="margin:0;flex:1;min-width:200px">Titre *
+            <input id="ev-titre" required placeholder="Ex. : Conférence — Les économies d'eau"></label>
+          <label class="champ" style="margin:0">Lieu
+            <input id="ev-lieu" placeholder="Ex. : Amphithéâtre"></label>
+          <button type="submit">Ajouter</button>
+        </form>
+      </div>
+
+      <div class="carte">
         <h2>Inscrits (${inscriptions.length})</h2>
         <div class="tuiles">
           <div class="tuile"><div class="valeur">${nbVisiteurs}</div>
@@ -1265,6 +1306,94 @@
         conteneur.remove();
       }, 150);
     });
+
+    // --- programme pédagogique (affiché sur le portail)
+
+    const programmeJ = portail.programme || [];
+
+    async function enregistrerProgramme(nouveau) {
+      nouveau.sort((a, b) => a.debut.toMillis() - b.debut.toMillis());
+      await refPortail.update({ programme: nouveau });
+      router();
+    }
+
+    document.getElementById('form-evenement').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const debut = new Date(document.getElementById('ev-debut').value);
+      if (Number.isNaN(debut.getTime())) return;
+      const finBrut = document.getElementById('ev-fin').value;
+      const fin = finBrut ? new Date(finBrut) : null;
+      await enregistrerProgramme([
+        ...programmeJ,
+        {
+          debut: firebase.firestore.Timestamp.fromDate(debut),
+          fin: fin && !Number.isNaN(fin.getTime()) ? firebase.firestore.Timestamp.fromDate(fin) : null,
+          titre: document.getElementById('ev-titre').value.trim(),
+          lieu: document.getElementById('ev-lieu').value.trim(),
+        },
+      ]);
+    });
+
+    document.querySelectorAll('.bouton-supprimer-evenement').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        if (!confirm('Supprimer cet événement du programme ?')) return;
+        await enregistrerProgramme(programmeJ.filter((_, idx) => idx !== i));
+      }),
+    );
+
+    const boutonSeedProgramme = document.getElementById('bouton-seed-programme');
+    if (boutonSeedProgramme) {
+      boutonSeedProgramme.addEventListener('click', async () => {
+        // Programme officiel des 41es JE (Nantes, 7-9 octobre 2026), repris
+        // du fichier d'organisation. Format : [jour, début, fin, titre, lieu].
+        const AMPHI = 'Amphithéâtre';
+        const HALL = 'Hall des stands';
+        const SEED = [
+          ['2026-10-07', '14:00', '18:00', 'Accueil des participants', 'Entrée du palais des congrès'],
+          ['2026-10-07', '16:30', '18:00', 'Réunion des présidents des comités régionaux', ''],
+          ['2026-10-07', '18:00', '18:30', 'Accueil des nouveaux adhérents', ''],
+          ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture — nocturne des stands", HALL],
+          ['2026-10-07', '20:30', '23:00', 'Dîner', HALL],
+          ['2026-10-08', '07:45', '08:00', 'Accueil café — ouverture des stands', AMPHI],
+          ['2026-10-08', '08:00', '08:45', 'Assemblée Générale', AMPHI],
+          ['2026-10-08', '08:45', '09:00', "Discours d'ouverture", AMPHI],
+          ['2026-10-08', '09:00', '09:35', 'Présentation des nouveaux partenaires techniques', AMPHI],
+          ['2026-10-08', '09:35', '10:50', 'Conférence — Les rénovations en blanchisserie hospitalière', AMPHI],
+          ['2026-10-08', '10:50', '11:15', 'Pause / Visite des stands', HALL],
+          ['2026-10-08', '11:15', '12:00', 'Conférence — Maintenance industrielle : anticiper, maîtriser', AMPHI],
+          ['2026-10-08', '12:00', '13:30', 'Repas', HALL],
+          ['2026-10-08', '13:30', '14:00', "Conférence — L'intelligence artificielle et retours d'expérience", AMPHI],
+          ['2026-10-08', '14:00', '14:30', 'Conférence — La chaleur dans les blanchisseries', AMPHI],
+          ['2026-10-08', '14:30', '15:00', "Conférence — Les économies d'eau (retour d'expérience de Colmar)", AMPHI],
+          ['2026-10-08', '15:00', '16:00', 'Ateliers URBH — 1er créneau (IA · Maintenance · RABC)', 'Salles B, C, D'],
+          ['2026-10-08', '15:15', '15:45', 'Ateliers partenaires techniques', 'Salles E, F et amphithéâtre'],
+          ['2026-10-08', '16:00', '17:00', 'Ateliers URBH — 2e créneau (IA · Maintenance · RABC)', 'Salles B, C, D'],
+          ['2026-10-08', '16:15', '16:45', 'Ateliers partenaires techniques', 'Salles B, E, F'],
+          ['2026-10-08', '17:00', '17:30', 'Ateliers partenaires techniques', 'Salles C, D, E et amphithéâtre'],
+          ['2026-10-08', '17:30', '18:00', 'Pause / Visite des stands', HALL],
+          ['2026-10-08', '18:00', '18:15', 'Fermeture des stands', HALL],
+          ['2026-10-09', '08:30', '10:00', 'Accueil café — ouverture des stands', HALL],
+          ['2026-10-09', '10:00', '10:20', 'Restitution des ateliers URBH', AMPHI],
+          ['2026-10-09', '10:20', '10:40', 'La parole aux comités de région', AMPHI],
+          ['2026-10-09', '10:40', '11:10', 'Conférence — Six Sigma : améliorer durablement', AMPHI],
+          ['2026-10-09', '11:10', '11:30', 'Boîte à astuces — la table miroir de tri', AMPHI],
+          ['2026-10-09', '11:30', '11:50', 'Remise des trophées certifications RABC', AMPHI],
+          ['2026-10-09', '11:50', '12:00', "Remise du don à l'association Make-A-Wish", AMPHI],
+          ['2026-10-09', '12:00', '12:15', 'Tombola', AMPHI],
+          ['2026-10-09', '12:15', '12:30', 'Discours de clôture — relais à Biarritz', AMPHI],
+          ['2026-10-09', '12:30', '14:00', 'Repas et fin des journées d’études', 'Salle R0'],
+        ];
+        await enregistrerProgramme(
+          SEED.map(([jour, hDebut, hFin, titre, lieu]) => ({
+            debut: firebase.firestore.Timestamp.fromDate(new Date(`${jour}T${hDebut}:00`)),
+            fin: firebase.firestore.Timestamp.fromDate(new Date(`${jour}T${hFin}:00`)),
+            titre,
+            lieu,
+          })),
+        );
+      });
+    }
 
     // --- inscrits
 

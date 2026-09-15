@@ -20,7 +20,15 @@ sans serveur à maintenir : un site statique et une base de données gérée.
    **mobile** (pour l'envoi de résultats par SMS) et e-mail facultatif.
 3. Son téléphone est ensuite **reconnu automatiquement** (session anonyme
    Firebase conservée par l'appareil) : aux visites suivantes il retombe
-   directement sur le **menu de choix** :
+   sur l'**écran d'accueil plein écran** — bandeau « Bonjour » avec
+   l'information **« réunions en temps réel »** (ce qui se déroule en ce
+   moment ou le prochain rendez-vous du programme, mise à jour chaque
+   minute) et grands boutons d'accès aux outils : 📅 Programme pédagogique,
+   🗺️ Plan des stands, 🔍 Recherche d'un fournisseur, 🛠️ Inscription
+   Atelier, 🎟️ Validation Tombola, 🎁 Tirage au sort, 📝 Questionnaires.
+   Le bloc « 🔐 Mes données » (consentement, demande d'anonymisation) se
+   trouve dans l'écran « modifier » du bandeau. Chaque outil s'ouvre dans
+   son propre écran :
    - 🎁 **participer au tirage au sort** (une seule participation par
      personne, garantie côté serveur) ;
    - 🎟️ **la tombola de clôture** : trois lots offerts par trois
@@ -47,6 +55,11 @@ sans serveur à maintenir : un site statique et une base de données gérée.
 **Journées d'études.** Titre, date, lieu, participants attendus (pour le taux
 de réponse demandé en audit). Une journée se marque « **active** » : c'est
 elle que présente le QR code du flyer.
+
+**Programme pédagogique.** Saisi (ou pré-rempli d'un clic pour les 41es JE
+de Nantes) dans la page de la journée : chaque événement porte un début, une
+fin, un titre et un lieu. Le portail l'affiche par jour avec le fil « en ce
+moment / à suivre » du bandeau d'accueil, mis à jour en temps réel.
 
 **QR code pour impression.** La page de chaque journée fournit l'adresse
 stable du portail, un aperçu du QR et un bouton **« Télécharger le QR pour

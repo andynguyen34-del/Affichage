@@ -145,6 +145,7 @@
             <span class="muet petit">(facultatif — modifiable à tout moment)</span></label>
           <div class="ligne-boutons">
             <button type="submit" id="p-valider">Je valide mes informations</button>
+            ${profil ? '<button type="button" id="p-annuler" class="secondaire">Annuler</button>' : ''}
           </div>
           <p class="muet petit">✔️ En validant, vous confirmez l'exactitude de
           ces informations : elles serviront à <strong>mettre à jour l'annuaire
@@ -153,7 +154,12 @@
           à vous envoyer certains résultats par SMS. Hors consentement
           ci-dessus, ces informations restent internes à l'URBH.</p>
         </form>
-      </div>`;
+      </div>
+      <div id="zone-mes-donnees"></div>`;
+
+    const boutonAnnuler = document.getElementById('p-annuler');
+    if (boutonAnnuler) boutonAnnuler.addEventListener('click', () => vueMenu());
+    if (profil) chargerMesDonnees();
 
     // Reconnaissance dans l'annuaire des inscrits : la saisie du numéro de la
     // carte pré-remplit l'identité (et le profil visiteur / exposant).
@@ -221,6 +227,80 @@
         );
       }
     });
+  }
+
+  // Bloc « 🔐 Mes données » de l'écran de modification du profil : état du
+  // consentement de partage et demande d'anonymisation (droit à l'effacement).
+  async function chargerMesDonnees() {
+    const zone = document.getElementById('zone-mes-donnees');
+    if (!zone || !profil) return;
+
+    let demandeAnonymisation = null;
+    try {
+      const dm = await db.collection('demandesAnonymisation').doc(uid).get();
+      if (dm.exists) demandeAnonymisation = dm.data();
+    } catch (_) {
+      demandeAnonymisation = null;
+    }
+
+    zone.innerHTML = `
+      <div class="carte">
+        <h2>🔐 Mes données</h2>
+        <p class="muet petit">
+          Partage de mes coordonnées avec les fournisseurs visités :
+          <strong>${profil.consentementPartage ? 'accepté' : 'refusé'}</strong>
+          (case 🤝 du formulaire ci-dessus). Mes informations validées servent
+          à mettre à jour l'annuaire de l'association.
+        </p>
+        ${
+          demandeAnonymisation
+            ? demandeAnonymisation.statut === 'traitee'
+              ? `<div class="info">✅ Votre demande d'anonymisation a été traitée
+                  le ${echapper(new Date(demandeAnonymisation.traiteLe || Date.now()).toLocaleDateString('fr-FR'))} :
+                  vos données personnelles ont été supprimées de l'application.</div>`
+              : `<div class="info">⏳ Votre demande d'anonymisation est enregistrée
+                  (${echapper(new Date(demandeAnonymisation.demandeLe).toLocaleDateString('fr-FR'))}).
+                  Une confirmation s'affichera ici dès son traitement par l'URBH.</div>`
+            : `<p class="muet petit">À l'issue des journées d'études, vous pouvez
+                demander la suppression de vos données personnelles (droit à
+                l'effacement) : vos réponses aux questionnaires seront conservées
+                de façon anonyme, tout le reste sera effacé.</p>
+              <div class="ligne-boutons">
+                <button id="bouton-anonymisation" class="danger">🗑️ Demander l'anonymisation de mes données</button>
+              </div>
+              <div id="erreur-anonymisation" class="erreur" hidden></div>`
+        }
+      </div>`;
+
+    const boutonAnonymisation = document.getElementById('bouton-anonymisation');
+    if (boutonAnonymisation) {
+      boutonAnonymisation.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Demander la suppression de vos données personnelles ? ' +
+              'Vous ne pourrez plus participer au tirage ni être recontacté par les fournisseurs.',
+          )
+        ) {
+          return;
+        }
+        boutonAnonymisation.disabled = true;
+        try {
+          await db.collection('demandesAnonymisation').doc(uid).set({
+            participantId: uid,
+            nom: profil.nom || '',
+            prenom: profil.prenom || '',
+            demandeLe: new Date().toISOString(),
+            statut: 'en_attente',
+          });
+          chargerMesDonnees();
+        } catch (e) {
+          const erreur = document.getElementById('erreur-anonymisation');
+          erreur.textContent = "La demande n'a pas pu être enregistrée." + detailErreur(e);
+          erreur.hidden = false;
+          boutonAnonymisation.disabled = false;
+        }
+      });
+    }
   }
 
   // Enregistre (ou met à jour) la présence à la journée, en traçant chaque
@@ -448,24 +528,375 @@
     vueMenu();
   }
 
-  // -------------------------------------------------------------------- menu
+  // ------------------------------------------------------------------ écrans
+  // L'écran d'accueil présente en plein écran les grands boutons d'accès aux
+  // outils ; chaque outil s'ouvre ensuite dans son propre écran, avec un
+  // retour à l'accueil. vueMenu() réaffiche l'écran courant : les actions
+  // (pointage, inscription atelier…) l'appellent pour se rafraîchir en place.
 
-  async function vueMenu() {
-    // État personnel : déjà inscrit au tirage ? questionnaires déjà remplis ?
-    const tirageOuvert = !!(portail.tirage && portail.tirage.ouvert);
-    const gagnants = (portail.tirage && portail.tirage.gagnants) || [];
+  let vueCourante = 'accueil';
 
-    let participeTirage = false;
-    if (tirageOuvert || gagnants.length) {
+  function vueMenu() {
+    const vues = {
+      accueil: vueAccueil,
+      programme: vueProgramme,
+      plan: vuePlan,
+      exposants: vueExposants,
+      ateliers: vueAteliers,
+      tombola: vueTombola,
+      tirage: vueTirage,
+      questionnaires: vueQuestionnaires,
+    };
+    return (vues[vueCourante] || vueAccueil)();
+  }
+
+  function aller(vue) {
+    vueCourante = vue;
+    window.scrollTo(0, 0);
+    vueMenu();
+  }
+
+  // Bandeau de retour affiché en tête de chaque écran outil.
+  function barreRetour(titre) {
+    return `<div class="carte carte-outil">
+      <button class="retour-accueil discret">← Accueil</button>
+      <h2>${titre}</h2>`;
+  }
+
+  function brancherNavigation() {
+    document.querySelectorAll('.retour-accueil').forEach((b) =>
+      b.addEventListener('click', () => aller('accueil')),
+    );
+    document.querySelectorAll('.bouton-outil, .lien-vue').forEach((b) =>
+      b.addEventListener('click', () => aller(b.dataset.vue)),
+    );
+    const boutonProfil = document.getElementById('bouton-profil');
+    if (boutonProfil) {
+      boutonProfil.addEventListener('click', () => {
+        vueInscription();
+        // Pré-remplit avec le profil existant.
+        document.querySelector(`input[name="p-type"][value="${attr(profil.type)}"]`).checked = true;
+        document.getElementById('p-prenom').value = profil.prenom || '';
+        document.getElementById('p-nom').value = profil.nom || '';
+        document.getElementById('p-organisme').value = profil.organisme || '';
+        document.getElementById('p-numero').value = profil.numeroInscription || '';
+        document.getElementById('p-mobile').value = profil.mobile || '';
+        document.getElementById('p-email').value = profil.email || '';
+        document.getElementById('p-handicap').checked = !!profil.accompagnementHandicap;
+        document.getElementById('p-consentement').checked = !!profil.consentementPartage;
+      });
+    }
+  }
+
+  // ----------------------------------------------- programme & temps réel
+
+  // Programme pédagogique publié par l'administration sur la vitrine de la
+  // journée (portails/<id>.programme) : liste d'événements datés.
+  function programmeTrie() {
+    const brut = (portail && portail.programme) || [];
+    const evenements = [];
+    brut.forEach((e) => {
       try {
-        const doc = await db.collection('tirage').doc(journeeId + '_' + uid).get();
-        participeTirage = doc.exists;
+        evenements.push({
+          debut: e.debut.toDate(),
+          fin: e.fin ? e.fin.toDate() : null,
+          titre: e.titre || '',
+          lieu: e.lieu || '',
+        });
       } catch (_) {
-        /* pas encore de participation */
+        /* entrée mal formée : ignorée */
       }
+    });
+    evenements.sort((a, b) => a.debut - b.debut);
+    return evenements;
+  }
+
+  const fmtHeureCourte = (d) =>
+    d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const fmtJour = (d) => {
+    const t = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
+
+  // Information « réunions en temps réel » du bandeau d'accueil : ce qui se
+  // déroule en ce moment, sinon le prochain rendez-vous du programme.
+  function infoReunion() {
+    const prog = programmeTrie();
+    if (!prog.length) return '';
+    const t = maintenant();
+    const enCours = prog.filter((e) => e.debut <= t && e.fin && t < e.fin);
+    if (enCours.length) {
+      const visibles = enCours.slice(0, 2);
+      const texte = visibles
+        .map((e) => `<strong>${echapper(e.titre)}</strong>${e.lieu ? ' — ' + echapper(e.lieu) : ''}`)
+        .join(' · ');
+      const reste = enCours.length - visibles.length;
+      const fin = enCours[0].fin;
+      return `🔴 En ce moment : ${texte}${reste > 0 ? ` (+${reste})` : ''}
+        <span class="muet petit">jusqu'à ${echapper(fmtHeureCourte(fin))}</span>`;
+    }
+    const suivant = prog.find((e) => e.debut > t);
+    if (suivant) {
+      const memeJour = suivant.debut.toDateString() === t.toDateString();
+      const quand = memeJour
+        ? `à ${fmtHeureCourte(suivant.debut)}`
+        : `${fmtJour(suivant.debut)} à ${fmtHeureCourte(suivant.debut)}`;
+      return `🕒 À suivre ${echapper(quand)} : <strong>${echapper(suivant.titre)}</strong>${
+        suivant.lieu ? ' — ' + echapper(suivant.lieu) : ''
+      }`;
+    }
+    return '🏁 Les journées d’études sont terminées — merci de votre participation !';
+  }
+
+  // Le bandeau se rafraîchit tout seul tant que l'accueil est affiché.
+  setInterval(() => {
+    const zone = document.getElementById('info-reunion');
+    if (zone && profil) zone.innerHTML = infoReunion();
+  }, 60000);
+
+  function enTeteBonjour() {
+    const info = infoReunion();
+    return `<div class="carte carte-bonjour">
+        <h2>Bonjour ${echapper(profil.prenom)} !</h2>
+        <p class="muet">${profil.type === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur'}${
+          profil.organisme ? ' — ' + echapper(profil.organisme) : ''
+        }
+          <button id="bouton-profil" class="discret">modifier</button></p>
+        ${info ? `<div id="info-reunion" class="info-reunion">${info}</div>` : ''}
+      </div>`;
+  }
+
+  // ----------------------------------------------------------------- accueil
+
+  async function vueAccueil() {
+    // Rafraîchit la vitrine : état du tirage, des pointages, programme.
+    try {
+      const doc = await db.collection('portails').doc(journeeId).get();
+      if (doc.exists) portail = doc.data();
+    } catch (_) {
+      /* on garde la version connue */
+    }
+    const tirageOuvert = !!(portail.tirage && portail.tirage.ouvert);
+    const pointagesOuverts = portail.pointages || {};
+    const pointageOuvert = MOMENTS_POINTAGE.some((m) => pointagesOuverts[m.cle]);
+
+    const OUTILS = [
+      { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
+      { vue: 'plan', icone: '🗺️', libelle: 'Plan des stands' },
+      { vue: 'exposants', icone: '🔍', libelle: "Recherche d'un fournisseur" },
+      { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
+      { vue: 'tombola', icone: '🎟️', libelle: 'Validation Tombola', pastille: pointageOuvert ? 'pointage ouvert' : '' },
+      { vue: 'tirage', icone: '🎁', libelle: 'Tirage au sort', pastille: tirageOuvert ? 'ouvert' : '' },
+      { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
+    ];
+
+    $app.innerHTML = `
+      ${enTeteBonjour()}
+      <div class="grille-outils">
+        ${OUTILS.map(
+          (o) => `<button class="bouton-outil" data-vue="${attr(o.vue)}">
+            <span class="outil-icone">${o.icone}</span>
+            <span class="outil-libelle">${echapper(o.libelle)}</span>
+            ${o.pastille ? `<span class="badge ouvert">${echapper(o.pastille)}</span>` : ''}
+          </button>`,
+        ).join('')}
+      </div>
+      <div id="carte-installation"></div>`;
+
+    majCarteInstallation();
+    brancherNavigation();
+  }
+
+  // --------------------------------------------------------------- programme
+
+  async function vueProgramme() {
+    try {
+      const doc = await db.collection('portails').doc(journeeId).get();
+      if (doc.exists) portail = doc.data();
+    } catch (_) {
+      /* on garde la version connue */
+    }
+    const prog = programmeTrie();
+    const t = maintenant();
+
+    let corps;
+    if (!prog.length) {
+      corps = `<p class="muet">Le programme sera publié ici très prochainement.</p>`;
+    } else {
+      const parJour = new Map();
+      prog.forEach((e) => {
+        const cle = fmtJour(e.debut);
+        if (!parJour.has(cle)) parJour.set(cle, []);
+        parJour.get(cle).push(e);
+      });
+      corps = [...parJour.entries()]
+        .map(
+          ([jour, evenements]) => `<h3>${echapper(jour)}</h3>
+            ${evenements
+              .map((e) => {
+                const enCours = e.debut <= t && e.fin && t < e.fin;
+                const passe = e.fin ? t >= e.fin : t > e.debut;
+                return `<div class="prog-ligne ${enCours ? 'prog-en-cours' : passe ? 'prog-passe' : ''}">
+                  <div class="prog-heure">${echapper(fmtHeureCourte(e.debut))}${e.fin ? '<br><span class="muet petit">' + echapper(fmtHeureCourte(e.fin)) + '</span>' : ''}</div>
+                  <div>
+                    <div>${enCours ? '🔴 ' : ''}<strong>${echapper(e.titre)}</strong></div>
+                    ${e.lieu ? `<div class="muet petit">📍 ${echapper(e.lieu)}</div>` : ''}
+                  </div>
+                </div>`;
+              })
+              .join('')}`,
+        )
+        .join('');
     }
 
-    // Ateliers soumis à inscription puis tirage au sort.
+    $app.innerHTML = `${barreRetour('📅 Programme pédagogique')}
+        ${corps}
+      </div>`;
+    brancherNavigation();
+  }
+
+  // ----------------------------------------------------------- plan des stands
+
+  async function vuePlan() {
+    let nouveaux = [];
+    try {
+      const snapF = await db.collection('fournisseurs').where('journeeId', '==', journeeId).get();
+      nouveaux = snapF.docs
+        .map((d) => d.data())
+        .filter((f) => f.nouveau)
+        .sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+    } catch (_) {
+      nouveaux = [];
+    }
+
+    $app.innerHTML = `${barreRetour('🗺️ Plan des stands')}
+        <div id="zone-plan-expo">
+          <a href="plan-exposition.png" target="_blank" rel="noopener">
+            <img id="img-plan-expo" src="plan-exposition.png" alt="Plan de l'exposition"
+              style="width:100%;border:1px solid var(--bord);border-radius:8px"></a>
+          <p class="muet petit" style="margin:0.2rem 0 0">Touchez le plan pour
+          l'agrandir (zoom possible une fois ouvert).</p>
+        </div>
+        <p id="plan-absent" class="muet" hidden>Le plan de l'exposition sera
+        affiché ici très prochainement.</p>
+        ${
+          nouveaux.length
+            ? `<div class="info" style="margin-top:0.8rem">🆕 <strong>Nouveaux exposants à découvrir :</strong>
+                ${nouveaux
+                  .map((f) => `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`)
+                  .join(' · ')}</div>`
+            : ''
+        }
+      </div>`;
+    brancherNavigation();
+
+    const imgPlan = document.getElementById('img-plan-expo');
+    const zonePlan = document.getElementById('zone-plan-expo');
+    const planAbsent = document.getElementById('plan-absent');
+    const planEnEchec = () => {
+      zonePlan.hidden = true;
+      planAbsent.hidden = false;
+    };
+    if (!(imgPlan.complete && imgPlan.naturalWidth > 0)) {
+      imgPlan.addEventListener('error', planEnEchec);
+      if (imgPlan.complete) planEnEchec();
+    }
+  }
+
+  // ------------------------------------------------------ recherche exposants
+
+  async function vueExposants() {
+    let fournisseurs = [];
+    try {
+      const snapF = await db.collection('fournisseurs').where('journeeId', '==', journeeId).get();
+      fournisseurs = snapF.docs.map((d) => ({ id: d.id, ...d.data() }));
+      fournisseurs.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+    } catch (_) {
+      fournisseurs = [];
+    }
+    let standsVisites = new Set();
+    try {
+      const snapMv = await db.collection('visites').where('participantId', '==', uid).get();
+      standsVisites = new Set(
+        snapMv.docs
+          .map((d) => d.data())
+          .filter((v) => v.journeeId === journeeId)
+          .map((v) => v.fournisseurId),
+      );
+    } catch (_) {
+      standsVisites = new Set();
+    }
+    const nouveauxFournisseurs = fournisseurs.filter((f) => f.nouveau);
+
+    function htmlExposants(filtre) {
+      const texte = (filtre || '').trim().toLowerCase();
+      const retenus = fournisseurs.filter(
+        (f) =>
+          !texte ||
+          (f.nom || '').toLowerCase().includes(texte) ||
+          (f.description || '').toLowerCase().includes(texte) ||
+          (f.stand || '').toLowerCase().includes(texte),
+      );
+      if (!retenus.length) return '<p class="muet petit">Aucun exposant trouvé.</p>';
+      return (
+        '<ul class="liste">' +
+        retenus
+          .map(
+            (f) => `<li>
+              <div>
+                <span class="titre-item">${echapper(f.nom)}</span>
+                ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
+                ${f.nouveau ? '<span class="badge brouillon">🆕 nouveau</span>' : ''}
+                ${standsVisites.has(f.id) ? '<span class="badge ouvert">✓ visité</span>' : ''}
+                ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
+              </div>
+            </li>`,
+          )
+          .join('') +
+        '</ul>'
+      );
+    }
+
+    $app.innerHTML = `${barreRetour("🔍 Recherche d'un fournisseur")}
+        ${
+          fournisseurs.length
+            ? `${
+                standsVisites.size
+                  ? `<p class="muet petit">✓ Vous avez déjà visité ${standsVisites.size} stand${standsVisites.size > 1 ? 's' : ''}.</p>`
+                  : ''
+              }
+              <p class="muet petit">Scannez le QR code affiché sur un stand pour
+              enregistrer votre passage et laisser vos coordonnées au fournisseur.
+              Le <button class="discret lien-vue" data-vue="plan">plan des stands</button>
+              vous aide à les repérer.</p>
+              ${
+                nouveauxFournisseurs.length
+                  ? `<div class="info">🆕 <strong>Nouveaux exposants à découvrir :</strong>
+                      ${nouveauxFournisseurs
+                        .map((f) => `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`)
+                        .join(' · ')}</div>`
+                  : ''
+              }
+              <input id="recherche-exposant" placeholder="🔍 Rechercher un fournisseur, un stand…"
+                style="width:100%;font:inherit;padding:0.5rem 0.6rem;border:1px solid var(--bord);border-radius:8px;margin-bottom:0.6rem">
+              <div id="liste-exposants">${htmlExposants('')}</div>`
+            : `<p class="muet">La liste des exposants sera publiée ici très prochainement.</p>`
+        }
+      </div>`;
+    brancherNavigation();
+
+    const champRecherche = document.getElementById('recherche-exposant');
+    if (champRecherche) {
+      champRecherche.addEventListener('input', () => {
+        document.getElementById('liste-exposants').innerHTML = htmlExposants(champRecherche.value);
+      });
+      champRecherche.focus();
+    }
+  }
+
+  // ---------------------------------------------------------------- ateliers
+
+  async function vueAteliers() {
     let ateliers = [];
     try {
       const snapA = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
@@ -478,7 +909,6 @@
     } catch (_) {
       ateliers = [];
     }
-
     const mesVoeux = {};
     await Promise.all(
       ateliers.map(async (a) => {
@@ -494,8 +924,7 @@
       ateliers.filter((a) => mesVoeux[a.id]).map((a) => a.horaire || ''),
     );
 
-    // Les inscriptions aux ateliers ne sont ouvertes que pendant l'Assemblée
-    // Générale ; une fois l'AG terminée, l'écran d'inscription est masqué.
+    // Les inscriptions ne sont ouvertes que pendant l'Assemblée Générale.
     const ag = periodeAG();
     const pendantAG = !!ag && maintenant() >= ag.debut && maintenant() <= ag.fin;
     const apresAG = !!ag && maintenant() > ag.fin;
@@ -529,8 +958,8 @@
           action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
         }
       } else if (apresAG) {
-        // Après l'AG : seuls les inscrits gardent un état visible en
-        // attendant le tirage ; les autres ateliers sont masqués.
+        // Après l'AG, l'écran d'inscription disparaît : seuls restent le
+        // résultat du tirage et l'attente du tirage pour les inscrits.
         if (!inscrit) return '';
         etat = `<div class="muet petit">Inscriptions closes — le tirage au sort aura lieu prochainement.</div>`;
       } else {
@@ -550,224 +979,12 @@
       </div>`;
     }
 
-    let questionnaires = [];
-    try {
-      const snap = await db
-        .collection('questionnaires')
-        .where('journeeId', '==', journeeId)
-        .where('statut', '==', 'ouvert')
-        .get();
-      questionnaires = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
-    } catch (_) {
-      questionnaires = [];
-    }
-
-    // Exposants et passages sur les stands.
-    let fournisseurs = [];
-    try {
-      const snapF = await db
-        .collection('fournisseurs')
-        .where('journeeId', '==', journeeId)
-        .get();
-      fournisseurs = snapF.docs.map((d) => ({ id: d.id, ...d.data() }));
-      fournisseurs.sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
-    } catch (_) {
-      fournisseurs = [];
-    }
-    let standsVisites = new Set();
-    try {
-      const snapMv = await db
-        .collection('visites')
-        .where('participantId', '==', uid)
-        .get();
-      standsVisites = new Set(
-        snapMv.docs.map((d) => d.data()).filter((v) => v.journeeId === journeeId).map((v) => v.fournisseurId),
-      );
-    } catch (_) {
-      standsVisites = new Set();
-    }
-
-    function htmlExposants(filtre) {
-      const texte = (filtre || '').trim().toLowerCase();
-      const retenus = fournisseurs.filter(
-        (f) =>
-          !texte ||
-          (f.nom || '').toLowerCase().includes(texte) ||
-          (f.description || '').toLowerCase().includes(texte) ||
-          (f.stand || '').toLowerCase().includes(texte),
-      );
-      if (!retenus.length) return '<p class="muet petit">Aucun exposant trouvé.</p>';
-      return (
-        '<ul class="liste">' +
-        retenus
-          .map(
-            (f) => `<li>
-              <div>
-                <span class="titre-item">${echapper(f.nom)}</span>
-                ${f.stand ? `<span class="muet petit"> — Stand ${echapper(f.stand)}</span>` : ''}
-                ${f.nouveau ? '<span class="badge brouillon">🆕 nouveau</span>' : ''}
-                ${standsVisites.has(f.id) ? '<span class="badge ouvert">✓ visité</span>' : ''}
-                ${f.description ? `<div class="muet petit">${echapper(f.description)}</div>` : ''}
-              </div>
-            </li>`,
-          )
-          .join('') +
-        '</ul>'
-      );
-    }
-
-    // Nouveaux fournisseurs, mis en avant en tête de la carte Exposants.
-    const nouveauxFournisseurs = fournisseurs.filter((f) => f.nouveau);
-
-    // Tombola de clôture : lots offerts par les fournisseurs, gagnants et
-    // points de présence (pointages) du participant.
-    const tombolaInfo = portail.tombola || {};
-    const lotsTombola = tombolaInfo.lots || [];
-    const gagnantsTombola = tombolaInfo.gagnants || [];
-    const pointagesOuverts = portail.pointages || {};
-    const mesPointages = {};
-    await Promise.all(
-      MOMENTS_POINTAGE.map(async (m) => {
-        try {
-          const d = await db
-            .collection('pointages')
-            .doc(journeeId + '_' + m.cle + '_' + uid)
-            .get();
-          mesPointages[m.cle] = d.exists ? d.data() : null;
-        } catch (_) {
-          mesPointages[m.cle] = null;
-        }
-      }),
-    );
-
-    function htmlPoint(m) {
-      const p = mesPointages[m.cle];
-      if (p) {
-        const quand = p.pointeLe
-          ? ' — pointé le ' +
-            new Date(p.pointeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-          : '';
-        return `<li>✅ <strong>${echapper(m.libelle)}</strong><span class="muet petit">${echapper(quand)}</span></li>`;
-      }
-      if (pointagesOuverts[m.cle]) {
-        return `<li>🟢 <strong>${echapper(m.libelle)}</strong>
-          <div class="ligne-boutons"><button class="bouton-pointage" data-moment="${attr(m.cle)}">📍 Je pointe ma présence</button></div></li>`;
-      }
-      return `<li>⬜ <strong>${echapper(m.libelle)}</strong>
-        <span class="muet petit"> — le pointage sera ouvert sur place, le moment venu.</span></li>`;
-    }
-
-    // Demande d'anonymisation éventuelle du participant.
-    let demandeAnonymisation = null;
-    try {
-      const dm = await db.collection('demandesAnonymisation').doc(uid).get();
-      if (dm.exists) demandeAnonymisation = dm.data();
-    } catch (_) {
-      demandeAnonymisation = null;
-    }
-
-    const dejaRepondu = {};
-    await Promise.all(
-      questionnaires.map(async (q) => {
-        try {
-          const doc = await db.collection('reponses').doc(q.id + '_' + uid).get();
-          dejaRepondu[q.id] = doc.exists;
-        } catch (_) {
-          dejaRepondu[q.id] = false;
-        }
-      }),
-    );
-
-    $app.innerHTML = `
-      <div class="carte">
-        <h2>Bonjour ${echapper(profil.prenom)} !</h2>
-        <p class="muet">${profil.type === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur'}${
-          profil.organisme ? ' — ' + echapper(profil.organisme) : ''
-        }
-          <button id="bouton-profil" class="discret">modifier</button></p>
-      </div>
-
-      <div class="carte">
-        <h2>🎁 Tirage au sort</h2>
+    const blocs = ateliers.map(htmlAtelier).join('');
+    $app.innerHTML = `${barreRetour('🛠️ Inscription Atelier')}
         ${
-          gagnants.length
-            ? `<p><strong>Résultats du tirage :</strong></p>
-              <ul class="verbatims">${gagnants
-                .map(
-                  (gg) =>
-                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.numeroInscription ? ' (carte n° ' + echapper(gg.numeroInscription) + ')' : ''}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
-                )
-                .join('')}</ul>`
-            : ''
-        }
-        ${
-          participeTirage
-            ? `<div class="info">✅ Votre participation au tirage est enregistrée. Bonne chance !</div>`
-            : tirageOuvert
-              ? `<p>Tentez votre chance : une seule participation par personne.</p>
-                <div class="ligne-boutons">
-                  <button id="bouton-tirage" class="btn-menu">🎁 Je participe au tirage au sort</button>
-                </div>`
-              : gagnants.length
-                ? ''
-                : `<p class="muet">Les participations ne sont pas encore ouvertes — repassez par ici pendant la journée !</p>`
-        }
-        <div id="erreur-tirage" class="erreur" hidden></div>
-      </div>
-
-      <div class="carte">
-        <h2>🎟️ Tombola de clôture</h2>
-        ${
-          lotsTombola.length
-            ? `<ul class="verbatims">${lotsTombola
-                .map((lot, i) => {
-                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
-                  return `<li>🎁 <strong>${echapper(lot.libelle)}</strong>${
-                    lot.fournisseurNom ? ` <span class="muet petit">— offert par ${echapper(lot.fournisseurNom)}</span>` : ''
-                  }${
-                    g
-                      ? `<br>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}${g.numeroInscription ? ' (carte n° ' + echapper(g.numeroInscription) + ')' : ''}${g.organisme ? ' — ' + echapper(g.organisme) : ''}`
-                      : ''
-                  }</li>`;
-                })
-                .join('')}</ul>`
-            : `<p class="muet petit">Trois lots offerts par les fournisseurs seront
-                tirés au sort à la clôture des journées.</p>`
-        }
-        <p class="muet petit"><strong>Pour participer :</strong> la tombola est
-        réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La
-        <strong>présence dans la salle lors du tirage au sort</strong> est
-        requise, et la <strong>validation des points de présence</strong> est
-        nécessaire : présence à l'Assemblée Générale et pointage à l'ouverture
-        des journées sur la première conférence.</p>
-        ${
-          profil.type === 'exposant'
-            ? `<p class="muet petit">Vous êtes enregistré comme exposant
-                fournisseur : vos pointages servent d'émargement, mais la
-                tombola est réservée aux visiteurs blanchisseurs.</p>`
-            : ''
-        }
-        <h3 style="margin-bottom:0.3rem">Mes points de présence</h3>
-        <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}</ul>
-        ${
-          profil.type !== 'exposant' &&
-          mesPointages.ouverture &&
-          mesPointages.ag &&
-          mesPointages.tombola
-            ? `<div class="info">✅ Tous vos points sont validés : vous participez
-                à la tombola. Bonne chance !</div>`
-            : ''
-        }
-        <div id="erreur-pointage" class="erreur" hidden></div>
-      </div>
-
-      ${
-        ateliers.length && ateliers.map(htmlAtelier).join('').trim()
-          ? `<div class="carte">
-              <h2>🛠️ Ateliers</h2>
-              <p class="muet petit">Les inscriptions sont ouvertes
+          !ateliers.length
+            ? `<p class="muet">Les ateliers seront présentés ici très prochainement.</p>`
+            : `<p class="muet petit">Les inscriptions sont ouvertes
               <strong>pendant l'Assemblée Générale</strong>${
                 ag ? ` (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})` : ''
               }. Les places étant limitées, elles
@@ -786,161 +1003,15 @@
                   : ''
               }
               <div id="erreur-atelier" class="erreur" hidden></div>
-              ${ateliers.map(htmlAtelier).join('')}
-            </div>`
-          : ''
-      }
-
-      ${
-        fournisseurs.length
-          ? `<div class="carte">
-              <h2>🏭 Exposants${standsVisites.size ? ` <span class="badge ouvert">${standsVisites.size} stand${standsVisites.size > 1 ? 's' : ''} visité${standsVisites.size > 1 ? 's' : ''}</span>` : ''}</h2>
-              <p class="muet petit">Scannez le QR code affiché sur un stand pour
-              enregistrer votre passage et laisser vos coordonnées au fournisseur.</p>
               ${
-                nouveauxFournisseurs.length
-                  ? `<div class="info">🆕 <strong>Nouveaux exposants à découvrir :</strong>
-                      ${nouveauxFournisseurs
-                        .map(
-                          (f) =>
-                            `${echapper(f.nom)}${f.stand ? ' (stand ' + echapper(f.stand) + ')' : ''}`,
-                        )
-                        .join(' · ')}</div>`
-                  : ''
-              }
-              <div id="zone-plan-expo" hidden style="margin:0.6rem 0">
-                <a href="plan-exposition.png" target="_blank" rel="noopener">
-                  <img id="img-plan-expo" src="plan-exposition.png" alt="Plan de l'exposition"
-                    style="width:100%;border:1px solid var(--bord);border-radius:8px"></a>
-                <p class="muet petit" style="margin:0.2rem 0 0">🗺️ Plan de l'exposition —
-                touchez-le pour l'agrandir.</p>
-              </div>
-              <input id="recherche-exposant" placeholder="🔍 Rechercher un fournisseur, un stand…"
-                style="width:100%;font:inherit;padding:0.5rem 0.6rem;border:1px solid var(--bord);border-radius:8px;margin-bottom:0.6rem">
-              <div id="liste-exposants">${htmlExposants('')}</div>
-            </div>`
-          : ''
-      }
-
-      <div class="carte">
-        <h2>🔐 Mes données</h2>
-        <p class="muet petit">
-          Partage de mes coordonnées avec les fournisseurs visités :
-          <strong>${profil.consentementPartage ? 'accepté' : 'refusé'}</strong>
-          (modifiable via « modifier » en haut de page). Mes informations
-          validées servent à mettre à jour l'annuaire de l'association.
-        </p>
-        ${
-          demandeAnonymisation
-            ? demandeAnonymisation.statut === 'traitee'
-              ? `<div class="info">✅ Votre demande d'anonymisation a été traitée
-                  le ${echapper(new Date(demandeAnonymisation.traiteLe || Date.now()).toLocaleDateString('fr-FR'))} :
-                  vos données personnelles ont été supprimées de l'application.</div>`
-              : `<div class="info">⏳ Votre demande d'anonymisation est enregistrée
-                  (${echapper(new Date(demandeAnonymisation.demandeLe).toLocaleDateString('fr-FR'))}).
-                  Une confirmation s'affichera ici dès son traitement par l'URBH.</div>`
-            : `<p class="muet petit">À l'issue des journées d'études, vous pouvez
-                demander la suppression de vos données personnelles (droit à
-                l'effacement) : vos réponses aux questionnaires seront conservées
-                de façon anonyme, tout le reste sera effacé.</p>
-              <div class="ligne-boutons">
-                <button id="bouton-anonymisation" class="danger">🗑️ Demander l'anonymisation de mes données</button>
-              </div>
-              <div id="erreur-anonymisation" class="erreur" hidden></div>`
-        }
-      </div>
-
-      <div id="carte-installation"></div>
-
-      <div class="carte">
-        <h2>📝 Questionnaires</h2>
-        ${
-          questionnaires.length
-            ? `<ul class="liste">${questionnaires
-                .map(
-                  (q) => `
-                <li>
-                  <div class="titre-item">${echapper(q.titre)}</div>
-                  <div class="pousse">
-                    ${
-                      dejaRepondu[q.id]
-                        ? '<span class="badge ouvert">✓ répondu</span>'
-                        : `<a class="btn" href="repondre.html?id=${q.id}">Répondre</a>`
-                    }
-                  </div>
-                </li>`,
-                )
-                .join('')}</ul>`
-            : `<p class="muet">Aucun questionnaire ouvert pour le moment — repassez par ici, notamment en fin de journée pour le questionnaire de satisfaction.</p>`
+                blocs.trim()
+                  ? blocs
+                  : `<p class="muet">Les inscriptions sont closes (l'Assemblée Générale
+                      est terminée) — les résultats du tirage au sort s'afficheront ici.</p>`
+              }`
         }
       </div>`;
-
-    majCarteInstallation();
-
-    const boutonAnonymisation = document.getElementById('bouton-anonymisation');
-    if (boutonAnonymisation) {
-      boutonAnonymisation.addEventListener('click', async () => {
-        if (
-          !confirm(
-            'Demander la suppression de vos données personnelles ? ' +
-              'Vous ne pourrez plus participer au tirage ni être recontacté par les fournisseurs.',
-          )
-        ) {
-          return;
-        }
-        boutonAnonymisation.disabled = true;
-        try {
-          await db.collection('demandesAnonymisation').doc(uid).set({
-            participantId: uid,
-            nom: profil.nom || '',
-            prenom: profil.prenom || '',
-            demandeLe: new Date().toISOString(),
-            statut: 'en_attente',
-          });
-          vueMenu();
-        } catch (e) {
-          const erreur = document.getElementById('erreur-anonymisation');
-          erreur.textContent = "La demande n'a pas pu être enregistrée." + detailErreur(e);
-          erreur.hidden = false;
-          boutonAnonymisation.disabled = false;
-        }
-      });
-    }
-
-    // Le plan de l'exposition ne s'affiche que si l'image est bien publiée
-    // sur le site (fichier public/plan-exposition.png).
-    const imgPlan = document.getElementById('img-plan-expo');
-    if (imgPlan) {
-      const zonePlan = document.getElementById('zone-plan-expo');
-      if (imgPlan.complete && imgPlan.naturalWidth > 0) zonePlan.hidden = false;
-      else {
-        imgPlan.addEventListener('load', () => {
-          zonePlan.hidden = false;
-        });
-        imgPlan.addEventListener('error', () => zonePlan.remove());
-      }
-    }
-
-    const champRecherche = document.getElementById('recherche-exposant');
-    if (champRecherche) {
-      champRecherche.addEventListener('input', () => {
-        document.getElementById('liste-exposants').innerHTML = htmlExposants(champRecherche.value);
-      });
-    }
-
-    document.getElementById('bouton-profil').addEventListener('click', () => {
-      vueInscription();
-      // Pré-remplit avec le profil existant.
-      document.querySelector(`input[name="p-type"][value="${attr(profil.type)}"]`).checked = true;
-      document.getElementById('p-prenom').value = profil.prenom || '';
-      document.getElementById('p-nom').value = profil.nom || '';
-      document.getElementById('p-organisme').value = profil.organisme || '';
-      document.getElementById('p-numero').value = profil.numeroInscription || '';
-      document.getElementById('p-mobile').value = profil.mobile || '';
-      document.getElementById('p-email').value = profil.email || '';
-      document.getElementById('p-handicap').checked = !!profil.accompagnementHandicap;
-      document.getElementById('p-consentement').checked = !!profil.consentementPartage;
-    });
+    brancherNavigation();
 
     function erreurAtelier(texte) {
       const zone = document.getElementById('erreur-atelier');
@@ -1004,6 +1075,98 @@
         }
       }),
     );
+  }
+
+  // ----------------------------------------------------------------- tombola
+
+  async function vueTombola() {
+    try {
+      const doc = await db.collection('portails').doc(journeeId).get();
+      if (doc.exists) portail = doc.data();
+    } catch (_) {
+      /* on garde la version connue */
+    }
+    const tombolaInfo = portail.tombola || {};
+    const lotsTombola = tombolaInfo.lots || [];
+    const gagnantsTombola = tombolaInfo.gagnants || [];
+    const pointagesOuverts = portail.pointages || {};
+    const mesPointages = {};
+    await Promise.all(
+      MOMENTS_POINTAGE.map(async (m) => {
+        try {
+          const d = await db
+            .collection('pointages')
+            .doc(journeeId + '_' + m.cle + '_' + uid)
+            .get();
+          mesPointages[m.cle] = d.exists ? d.data() : null;
+        } catch (_) {
+          mesPointages[m.cle] = null;
+        }
+      }),
+    );
+
+    function htmlPoint(m) {
+      const p = mesPointages[m.cle];
+      if (p) {
+        const quand = p.pointeLe
+          ? ' — pointé le ' +
+            new Date(p.pointeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+          : '';
+        return `<li>✅ <strong>${echapper(m.libelle)}</strong><span class="muet petit">${echapper(quand)}</span></li>`;
+      }
+      if (pointagesOuverts[m.cle]) {
+        return `<li>🟢 <strong>${echapper(m.libelle)}</strong>
+          <div class="ligne-boutons"><button class="bouton-pointage" data-moment="${attr(m.cle)}">📍 Je pointe ma présence</button></div></li>`;
+      }
+      return `<li>⬜ <strong>${echapper(m.libelle)}</strong>
+        <span class="muet petit"> — le pointage sera ouvert sur place, le moment venu.</span></li>`;
+    }
+
+    $app.innerHTML = `${barreRetour('🎟️ Validation Tombola')}
+        ${
+          lotsTombola.length
+            ? `<ul class="verbatims">${lotsTombola
+                .map((lot, i) => {
+                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
+                  return `<li>🎁 <strong>${echapper(lot.libelle)}</strong>${
+                    lot.fournisseurNom ? ` <span class="muet petit">— offert par ${echapper(lot.fournisseurNom)}</span>` : ''
+                  }${
+                    g
+                      ? `<br>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}${g.numeroInscription ? ' (carte n° ' + echapper(g.numeroInscription) + ')' : ''}${g.organisme ? ' — ' + echapper(g.organisme) : ''}`
+                      : ''
+                  }</li>`;
+                })
+                .join('')}</ul>`
+            : `<p class="muet petit">Trois lots offerts par les fournisseurs seront
+                tirés au sort à la clôture des journées.</p>`
+        }
+        <p class="muet petit"><strong>Pour participer :</strong> la tombola est
+        réservée aux <strong>visiteurs blanchisseurs adhérents</strong>. La
+        <strong>présence dans la salle lors du tirage au sort</strong> est
+        requise, et la <strong>validation des points de présence</strong> est
+        nécessaire : présence à l'Assemblée Générale et pointage à l'ouverture
+        des journées sur la première conférence.</p>
+        ${
+          profil.type === 'exposant'
+            ? `<p class="muet petit">Vous êtes enregistré comme exposant
+                fournisseur : vos pointages servent d'émargement, mais la
+                tombola est réservée aux visiteurs blanchisseurs.</p>`
+            : ''
+        }
+        <h3 style="margin-bottom:0.3rem">Mes points de présence</h3>
+        <ul class="verbatims">${MOMENTS_POINTAGE.map(htmlPoint).join('')}</ul>
+        ${
+          profil.type !== 'exposant' &&
+          mesPointages.ouverture &&
+          mesPointages.ag &&
+          mesPointages.tombola
+            ? `<div class="info">✅ Tous vos points sont validés : vous participez
+                à la tombola. Bonne chance !</div>`
+            : ''
+        }
+        <div id="erreur-pointage" class="erreur" hidden></div>
+      </div>`;
+    brancherNavigation();
 
     document.querySelectorAll('.bouton-pointage').forEach((b) =>
       b.addEventListener('click', async () => {
@@ -1035,6 +1198,55 @@
         }
       }),
     );
+  }
+
+  // --------------------------------------------------------------- tirage
+
+  async function vueTirage() {
+    try {
+      const doc = await db.collection('portails').doc(journeeId).get();
+      if (doc.exists) portail = doc.data();
+    } catch (_) {
+      /* on garde la version connue */
+    }
+    const tirageOuvert = !!(portail.tirage && portail.tirage.ouvert);
+    const gagnants = (portail.tirage && portail.tirage.gagnants) || [];
+
+    let participeTirage = false;
+    try {
+      const doc = await db.collection('tirage').doc(journeeId + '_' + uid).get();
+      participeTirage = doc.exists;
+    } catch (_) {
+      /* pas encore de participation */
+    }
+
+    $app.innerHTML = `${barreRetour('🎁 Tirage au sort')}
+        ${
+          gagnants.length
+            ? `<p><strong>Résultats du tirage :</strong></p>
+              <ul class="verbatims">${gagnants
+                .map(
+                  (gg) =>
+                    `<li>🏆 ${echapper(gg.prenom)} ${echapper(gg.nom)}${gg.numeroInscription ? ' (carte n° ' + echapper(gg.numeroInscription) + ')' : ''}${gg.organisme ? ' — ' + echapper(gg.organisme) : ''}</li>`,
+                )
+                .join('')}</ul>`
+            : ''
+        }
+        ${
+          participeTirage
+            ? `<div class="info">✅ Votre participation au tirage est enregistrée. Bonne chance !</div>`
+            : tirageOuvert
+              ? `<p>Tentez votre chance : une seule participation par personne.</p>
+                <div class="ligne-boutons">
+                  <button id="bouton-tirage" class="btn-menu">🎁 Je participe au tirage au sort</button>
+                </div>`
+              : gagnants.length
+                ? ''
+                : `<p class="muet">Les participations ne sont pas encore ouvertes — repassez par ici pendant la journée !</p>`
+        }
+        <div id="erreur-tirage" class="erreur" hidden></div>
+      </div>`;
+    brancherNavigation();
 
     const boutonTirage = document.getElementById('bouton-tirage');
     if (boutonTirage) {
@@ -1066,6 +1278,58 @@
         }
       });
     }
+  }
+
+  // ---------------------------------------------------------- questionnaires
+
+  async function vueQuestionnaires() {
+    let questionnaires = [];
+    try {
+      const snap = await db
+        .collection('questionnaires')
+        .where('journeeId', '==', journeeId)
+        .where('statut', '==', 'ouvert')
+        .get();
+      questionnaires = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+    } catch (_) {
+      questionnaires = [];
+    }
+    const dejaRepondu = {};
+    await Promise.all(
+      questionnaires.map(async (q) => {
+        try {
+          const doc = await db.collection('reponses').doc(q.id + '_' + uid).get();
+          dejaRepondu[q.id] = doc.exists;
+        } catch (_) {
+          dejaRepondu[q.id] = false;
+        }
+      }),
+    );
+
+    $app.innerHTML = `${barreRetour('📝 Questionnaires')}
+        ${
+          questionnaires.length
+            ? `<ul class="liste">${questionnaires
+                .map(
+                  (q) => `
+                <li>
+                  <div class="titre-item">${echapper(q.titre)}</div>
+                  <div class="pousse">
+                    ${
+                      dejaRepondu[q.id]
+                        ? '<span class="badge ouvert">✓ répondu</span>'
+                        : `<a class="btn" href="repondre.html?id=${q.id}">Répondre</a>`
+                    }
+                  </div>
+                </li>`,
+                )
+                .join('')}</ul>`
+            : `<p class="muet">Aucun questionnaire ouvert pour le moment — repassez par ici, notamment en fin de journée pour le questionnaire de satisfaction.</p>`
+        }
+      </div>`;
+    brancherNavigation();
   }
 
   // --------------------------------------------------------------- démarrage

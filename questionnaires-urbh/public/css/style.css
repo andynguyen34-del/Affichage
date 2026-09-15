@@ -338,3 +338,67 @@ ul.liste a:hover { text-decoration: underline; }
   .stat-question { break-inside: avoid; }
   .barre-remplie, .barre-fond, .badge, .tuile { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---- Écran d'accueil du portail : grands boutons d'accès aux outils ---- */
+.info-reunion {
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--bleu-clair);
+  border: 1px solid var(--bord);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+.grille-outils {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+.bouton-outil {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 6.2rem;
+  padding: 0.8rem 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bleu-fonce);
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(20, 58, 104, 0.08);
+  cursor: pointer;
+  text-align: center;
+}
+.bouton-outil:active { background: var(--bleu-clair); }
+.outil-icone { font-size: 1.9rem; line-height: 1; }
+.outil-libelle { font-size: 0.92rem; line-height: 1.2; }
+.carte-outil .retour-accueil {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+/* Programme pédagogique */
+.prog-ligne {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--bord);
+}
+.prog-ligne:last-child { border-bottom: none; }
+.prog-heure {
+  min-width: 3.2rem;
+  font-weight: 600;
+  color: var(--bleu-fonce);
+  line-height: 1.2;
+}
+.prog-en-cours {
+  background: var(--bleu-clair);
+  border-radius: 8px;
+  border-bottom-color: transparent;
+}
+.prog-passe { opacity: 0.55; }
