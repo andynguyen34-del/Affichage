@@ -307,14 +307,20 @@
 
   // Enregistre (ou met à jour) la présence à la journée, en traçant chaque
   // passage sur le portail : dernier accès et nombre d'accès.
+  //
+  // La fiche est identifiée par le N° DE CARTE (et non par la session du
+  // navigateur) : la même personne qui revient depuis un autre appareil, ou
+  // après avoir purgé son téléphone, retrouve et met à jour SA fiche au lieu
+  // d'en créer une nouvelle — un numéro de carte = un seul inscrit.
   async function enregistrerInscription() {
-    const ref = db.collection('inscriptions').doc(journeeId + '_' + uid);
+    const numero = normaliserNumero(profil.numeroInscription);
+    const ref = db.collection('inscriptions').doc(journeeId + '_' + (numero || uid));
     let creeLe = new Date().toISOString();
     try {
       const existant = await ref.get();
       if (existant.exists && existant.data().creeLe) creeLe = existant.data().creeLe;
     } catch (_) {
-      /* première visite */
+      /* première visite, ou fiche créée depuis un autre appareil */
     }
     await ref.set({
       journeeId,
@@ -331,6 +337,14 @@
       dernierAccesLe: new Date().toISOString(),
       nbAcces: firebase.firestore.FieldValue.increment(1),
     });
+    // Ménage : les versions précédentes créaient une fiche PAR SESSION de
+    // navigateur (d'où des doublons au même nom) — on efface la nôtre.
+    if (numero) {
+      db.collection('inscriptions')
+        .doc(journeeId + '_' + uid)
+        .delete()
+        .catch(() => {});
+    }
   }
 
   // ------------------------------------------------------------------- stand

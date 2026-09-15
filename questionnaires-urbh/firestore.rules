@@ -102,10 +102,17 @@ service cloud.firestore {
     }
 
     // Présence d'un participant à une journée. Identifiant imposé
-    // « <journeeId>_<uid> » : une inscription par personne et par journée.
+    // « <journeeId>_<n° de carte> » : UNE inscription par carte et par
+    // journée, quel que soit l'appareil — la personne qui revient d'un autre
+    // téléphone reprend sa fiche (participantId mis à jour au passage).
+    // Repli « <journeeId>_<uid> » pour un profil sans numéro de carte.
     match /inscriptions/{inscriptionId} {
       allow create, update: if connecte()
-        && inscriptionId == request.resource.data.journeeId + '_' + request.auth.uid
+        && (inscriptionId
+              == request.resource.data.journeeId + '_'
+                 + request.resource.data.numeroInscription
+            || inscriptionId
+              == request.resource.data.journeeId + '_' + request.auth.uid)
         && request.resource.data.participantId == request.auth.uid
         && request.resource.data.keys().hasOnly(
              ['journeeId', 'participantId', 'type', 'nom', 'prenom',
@@ -115,7 +122,13 @@ service cloud.firestore {
         && request.resource.data.type in ['visiteur', 'exposant'];
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow update: if isAdmin(); // anonymisation
-      allow list, delete: if isAdmin();
+      allow list: if isAdmin();
+      // Le participant peut effacer sa propre fiche « par session » héritée
+      // des anciennes versions (ménage automatique des doublons).
+      allow delete: if isAdmin()
+        || (connecte()
+            && inscriptionId == resource.data.journeeId + '_' + request.auth.uid
+            && resource.data.participantId == request.auth.uid);
     }
 
     // Participation au tirage au sort. Identifiant imposé
