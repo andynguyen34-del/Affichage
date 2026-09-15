@@ -1,9 +1,17 @@
 # DÉPLOYER — Questionnaires URBH
 
-Fiche réflexe. Tout se lance **depuis ce dossier** (celui qui contient
-`firebase.json`), dans un terminal (cmd ou PowerShell).
+## Le plus simple : double-cliquer sur `DEPLOYER.bat`
 
-## La commande habituelle (fonctionne dans tous les cas)
+Le script se place tout seul dans le bon dossier, vérifie que l'outil
+Firebase est installé, lance le déploiement complet (pages + règles de
+sécurité) et affiche le résultat. C'est la méthode recommandée.
+
+La suite de cette fiche décrit la méthode manuelle et les vérifications.
+
+## La commande manuelle (équivalente au script)
+
+Tout se lance **depuis ce dossier** (celui qui contient `firebase.json`),
+dans un terminal (cmd ou PowerShell).
 
 ```
 firebase deploy --only hosting,firestore --project questionnaires-urbh
