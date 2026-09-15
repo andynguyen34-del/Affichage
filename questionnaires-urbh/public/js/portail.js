@@ -1293,10 +1293,13 @@
           lotsTombola.length
             ? `<ul class="verbatims">${lotsTombola
                 .map((lot, i) => {
-                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
+                  const g = gagnantsTombola.find((x) => x.lotIndex === i && !x.raye);
+                  const rayes = gagnantsTombola.filter((x) => x.lotIndex === i && x.raye);
                   return `<li>🎁 <strong>${echapper(lot.libelle)}</strong>${
                     lot.fournisseurNom ? ` <span class="muet petit">— remis par ${echapper(lot.fournisseurNom)}</span>` : ''
-                  }${
+                  }${rayes
+                    .map((r) => `<br><s class="muet">🚫 ${echapper(r.prenom)} ${echapper(r.nom)} — absent, rayé</s>`)
+                    .join('')}${
                     g
                       ? `<br>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}${g.numeroInscription ? ' (carte n° ' + echapper(g.numeroInscription) + ')' : ''}${g.organisme ? ' — ' + echapper(g.organisme) : ''}`
                       : ''

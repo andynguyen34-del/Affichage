@@ -976,11 +976,18 @@
           lotsTombola.length
             ? `<ul class="liste">${lotsTombola
                 .map((lot, i) => {
-                  const g = gagnantsTombola.find((x) => x.lotIndex === i);
+                  const g = gagnantsTombola.find((x) => x.lotIndex === i && !x.raye);
+                  const rayes = gagnantsTombola.filter((x) => x.lotIndex === i && x.raye);
                   return `<li>
                     <div>
                       🎁 <span class="titre-item">${echapper(lot.libelle)}</span>
                       ${lot.fournisseurNom ? `<span class="muet petit"> — remis par ${echapper(lot.fournisseurNom)}</span>` : ''}
+                      ${rayes
+                        .map(
+                          (r) =>
+                            `<div class="muet petit"><s>🚫 ${echapper(r.prenom)} ${echapper(r.nom)}</s> — absent de la salle, rayé</div>`,
+                        )
+                        .join('')}
                       ${
                         g
                           ? `<div>🏆 ${echapper(g.prenom)} ${echapper(g.nom)}
@@ -992,7 +999,8 @@
                     <div class="pousse">
                       ${
                         g
-                          ? `<button class="discret bouton-annuler-gagnant-tombola" data-index="${i}">Annuler le gagnant</button>`
+                          ? `<button class="danger bouton-rayer-gagnant" data-index="${i}">🚫 Absent — rayer et retirer</button>
+                            <button class="discret bouton-annuler-gagnant-tombola" data-index="${i}">Annuler le gagnant</button>`
                           : `<button class="bouton-tirer-lot" data-index="${i}"
                               ${candidatsTombola.length ? '' : 'disabled title="Aucun participant éligible"'}>🎲 Tirer ce lot</button>
                             <button class="discret bouton-supprimer-lot" data-index="${i}">Supprimer</button>`
@@ -1741,12 +1749,55 @@
       }),
     );
 
+    // Gagnant absent de la salle : rayé en direct (il reste affiché barré au
+    // kiosque, ne peut plus être retiré) et remplacé aussitôt par un nouveau
+    // tirage parmi les éligibles restants — le kiosque enchaîne l'annonce.
+    document.querySelectorAll('.bouton-rayer-gagnant').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const i = Number(b.dataset.index);
+        const actif = gagnantsTombola.find((g) => g.lotIndex === i && !g.raye);
+        const lot = lotsTombola[i];
+        if (!actif || !lot) return;
+        if (
+          !confirm(
+            `Rayer ${actif.prenom} ${actif.nom} (absent de la salle) et tirer immédiatement un remplaçant ?`,
+          )
+        ) {
+          return;
+        }
+        const nouveaux = gagnantsTombola.map((g) => (g === actif ? { ...g, raye: true } : g));
+        const dejaGagnantsT = new Set(nouveaux.map((g) => g.participantId));
+        const restants = candidatsTombola.filter((c) => !dejaGagnantsT.has(c.participantId));
+        if (restants.length) {
+          const elu = restants[Math.floor(Math.random() * restants.length)];
+          nouveaux.push({
+            lotIndex: i,
+            lotLibelle: lot.libelle,
+            fournisseurNom: lot.fournisseurNom || '',
+            participantId: elu.participantId,
+            prenom: elu.prenom || '',
+            nom: elu.nom || '',
+            organisme: elu.organisme || '',
+            mobile: elu.mobile || '',
+            numeroInscription: elu.numeroInscription || '',
+          });
+        } else {
+          alert('Gagnant rayé — plus aucun participant éligible pour le remplacer : retirez ce lot plus tard.');
+        }
+        await refPortail.update({ 'tombola.gagnants': nouveaux });
+        router();
+      }),
+    );
+
     document.querySelectorAll('.bouton-annuler-gagnant-tombola').forEach((b) =>
       b.addEventListener('click', async () => {
         const i = Number(b.dataset.index);
-        if (!confirm('Annuler le gagnant de ce lot ? Il redevient éligible.')) return;
+        const actif = gagnantsTombola.find((g) => g.lotIndex === i && !g.raye);
+        if (!actif) return;
+        if (!confirm('Annuler ce gagnant (erreur de manipulation) ? Il redevient éligible.')) return;
+        // On ne retire que le gagnant actif : les rayés restent dans l'historique.
         await refPortail.update({
-          'tombola.gagnants': gagnantsTombola.filter((g) => g.lotIndex !== i),
+          'tombola.gagnants': gagnantsTombola.filter((g) => g !== actif),
         });
         router();
       }),

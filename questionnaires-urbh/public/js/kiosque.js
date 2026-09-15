@@ -132,7 +132,11 @@
     annonceEnCours = true;
     const g = annonce.gagnant;
     $('contexte').textContent =
-      annonce.type === 'tombola' ? '🎟️ Tombola — tirage du lot' : '🎁 Tirage au sort';
+      annonce.type === 'tombola'
+        ? annonce.remplacement
+          ? '🎟️ Tombola — nouveau tirage (remplaçant)'
+          : '🎟️ Tombola — tirage du lot'
+        : '🎁 Tirage au sort';
     $('lot').textContent =
       annonce.type === 'tombola'
         ? `${g.lotLibelle || 'Lot'}${g.fournisseurNom ? ' — remis par ' + g.fournisseurNom : ''}`
@@ -175,7 +179,7 @@
       ...gagnantsT.map((g) => ({ g, icone: '🎁', prefixe: '' })),
     ].forEach((entree) => {
       const puce = document.createElement('span');
-      puce.className = 'gagnant';
+      puce.className = 'gagnant' + (entree.g.raye ? ' raye' : '');
       const fort = document.createElement('strong');
       fort.textContent = nomComplet(entree.g);
       puce.append(`${entree.icone} ${entree.prefixe}`, fort);
@@ -196,7 +200,14 @@
       nbTombolaConnus = gagnantsL.length;
     } else {
       gagnantsT.slice(nbTirageConnus).forEach((g) => fileAnnonces.push({ type: 'tirage', gagnant: g }));
-      gagnantsL.slice(nbTombolaConnus).forEach((g) => fileAnnonces.push({ type: 'tombola', gagnant: g }));
+      gagnantsL.slice(nbTombolaConnus).forEach((g) =>
+        fileAnnonces.push({
+          type: 'tombola',
+          gagnant: g,
+          // Un rayé existe déjà sur ce lot : ce tirage est un remplacement.
+          remplacement: gagnantsL.some((x) => x !== g && x.lotIndex === g.lotIndex && x.raye),
+        }),
+      );
       nbTirageConnus = gagnantsT.length;
       nbTombolaConnus = gagnantsL.length;
       suivant();
