@@ -3586,9 +3586,12 @@
       chevron.className = 'chevron-carte';
       h2.prepend(chevron);
       const appliquer = () => {
-        let replie = false;
+        // REPLIÉ par défaut à l'ouverture de l'application ; chaque carte
+        // dépliée ou repliée est mémorisée sur l'appareil (téléphone ou
+        // ordinateur), et retrouvée telle quelle à la prochaine ouverture.
+        let replie = true;
         try {
-          replie = localStorage.getItem(cle) === '1';
+          replie = localStorage.getItem(cle) !== '0';
         } catch (_) {
           /* stockage indisponible */
         }
@@ -3621,9 +3624,11 @@
       bouton.className = 'discret repli-liste';
       liste.parentNode.insertBefore(bouton, liste);
       const appliquer = () => {
-        let replie = false;
+        // Longues listes : repliées par défaut elles aussi, position
+        // mémorisée sur l'appareil.
+        let replie = true;
         try {
-          replie = localStorage.getItem(cle) === '1';
+          replie = localStorage.getItem(cle) !== '0';
         } catch (_) {
           /* stockage indisponible */
         }
