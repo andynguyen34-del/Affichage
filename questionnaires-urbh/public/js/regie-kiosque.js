@@ -438,7 +438,7 @@
     }
     const retenus = [];
     const pris = new Set();
-    const etablissementsPris = new Set();
+    const nbParEtab = new Map();
     const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
     function passe(condition) {
       melange.forEach((v) => {
@@ -446,10 +446,13 @@
         if (!condition(v)) return;
         retenus.push(v);
         pris.add(v.participantId);
-        etablissementsPris.add(cleEtab(v));
+        nbParEtab.set(cleEtab(v), (nbParEtab.get(cleEtab(v)) || 0) + 1);
       });
     }
-    passe((v) => !retenusAilleurs.has(v.participantId) && !etablissementsPris.has(cleEtab(v)));
+    // Répartition d'une même blanchisserie sur plusieurs ateliers, avec une
+    // marge de deux personnes par atelier — même règle que l'administration.
+    passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 1));
+    passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 2));
     passe((v) => !retenusAilleurs.has(v.participantId));
     passe(() => true);
     const restants = melange.filter((v) => !pris.has(v.participantId));

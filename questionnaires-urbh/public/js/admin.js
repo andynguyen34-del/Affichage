@@ -1179,6 +1179,9 @@
           <a class="btn secondaire" href="kiosque-ateliers.html?e=${journeeId}&amp;regie=1" target="_blank" rel="noopener">
             🎛 Kiosque + régie (tirer depuis l'écran)
           </a>
+          <a class="btn secondaire" href="kiosque-ateliers.html?e=${journeeId}&amp;grille=1" target="_blank" rel="noopener">
+            🗓️ Tableau des créneaux (à projeter pendant l'AG)
+          </a>
         </div>
         <p class="muet petit">À projeter devant les salles : les listes des
         retenus et les listes d'attente s'affichent en direct, nom par nom,
@@ -1270,13 +1273,15 @@
                   </div>`;
                 })
                 .join('')
-            : `<p class="muet">Aucun atelier pour cette journée.</p>
-              <div class="ligne-boutons">
-                <button id="bouton-seed-ateliers" class="secondaire">
-                  Créer les 6 ateliers URBH types (salles B, C, D × 2 créneaux)
-                </button>
-              </div>`
+            : `<p class="muet">Aucun atelier pour cette journée.</p>`
         }
+        <div class="ligne-boutons">
+          <button id="bouton-seed-ateliers" class="secondaire">
+            Créer les ateliers du tableau du jeudi (URBH B/C/D ×2 + partenaires E/F/Auditorium)
+          </button>
+        </div>
+        <p class="muet petit">Bouton ré-exécutable sans risque : seuls les
+        ateliers manquants (même salle, même créneau) sont ajoutés.</p>
         <h3>Ajouter un atelier</h3>
         <form id="form-atelier">
           <label class="champ">Intitulé *
@@ -1557,8 +1562,8 @@
           ['2026-10-07', '14:00', '18:00', 'Accueil des participants', 'Entrée du palais des congrès'],
           ['2026-10-07', '16:30', '18:00', 'Réunion des présidents des comités régionaux', ''],
           ['2026-10-07', '18:00', '18:30', 'Accueil des nouveaux adhérents', ''],
-          ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture — nocturne des stands", HALL],
-          ['2026-10-07', '20:30', '23:00', 'Dîner', HALL],
+          ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture", HALL],
+          ['2026-10-07', '20:30', '23:00', 'Dîner — nocturne des stands', HALL],
           ['2026-10-08', '07:45', '08:00', 'Accueil café — ouverture des stands', AMPHI],
           ['2026-10-08', '08:00', '08:45', 'Assemblée Générale', AMPHI],
           ['2026-10-08', '08:45', '09:00', "Discours d'ouverture", AMPHI],
@@ -1983,22 +1988,64 @@
     const boutonSeed = document.getElementById('bouton-seed-ateliers');
     if (boutonSeed) {
       boutonSeed.addEventListener('click', async () => {
-        const types = [
-          {
-            salle: 'B',
-            nom: "L'Intelligence Artificielle au service des blanchisseries",
-            intervenants: 'La Rochelle : Vincent Pacton — Puy-en-Velay : Denis Bonnet — Toulouse',
-          },
-          {
-            salle: 'C',
-            nom: 'Des outils pour la gestion de la maintenance',
-            intervenants: 'Tours : Jean-Pascal Testard — Poitiers : Lucas Monrousseau et Hervé Dumoulin',
-          },
-          {
-            salle: 'D',
-            nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la RABC ?",
-            intervenants: 'Mickael Gilbrin, Frédéric Jourdan, Catherine Diallo',
-          },
+        // Tableau officiel du JEUDI APRÈS-MIDI (tiré à part des 41es JE) :
+        // ateliers URBH (B, C, D — deux sessions) et ateliers partenaires
+        // techniques (E, F, Auditorium). Le champ « creneau » regroupe les
+        // horaires qui se chevauchent : une seule inscription possible par
+        // créneau. Bouton ré-exécutable : les ateliers déjà présents
+        // (même salle, même créneau) ne sont pas recréés.
+        const TABLE = [
+          // Créneau 15h
+          { creneau: 'Jeudi 15h', salle: 'B', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
+            nom: "L'Intelligence Artificielle au service des blanchisseries (1re session)",
+            intervenants: 'Vincent Pacton, Denis Bonnet, Éric Tisserand — animatrice : Agnès Souvignet' },
+          { creneau: 'Jeudi 15h', salle: 'C', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
+            nom: 'Des outils pour la gestion de la maintenance (1re session)',
+            intervenants: 'Jean-Pascal Testard, Lucas Monrousseau, Hervé Dumoulin — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
+          { creneau: 'Jeudi 15h', salle: 'D', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
+            nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la démarche RABC ? (1re session)",
+            intervenants: 'Mikael Gilbrin, Frédéric Jourdan — animateurs : Catherine Diallo et Frédéric Jourdan' },
+          { creneau: 'Jeudi 15h', salle: 'Auditorium', heure: 15, minute: 15, horaire: 'Jeudi 15h15',
+            nom: 'Décret tertiaire',
+            intervenants: "Optim'Expertise — Hélène Ducarre" },
+          { creneau: 'Jeudi 15h', salle: 'E', heure: 15, minute: 15, horaire: 'Jeudi 15h15',
+            nom: 'Le textile au service du développement durable de votre établissement',
+            intervenants: "Cloro'fil Concept — Caroline L'Huillier" },
+          { creneau: 'Jeudi 15h', salle: 'F', heure: 15, minute: 15, horaire: 'Jeudi 15h15',
+            nom: "L'écosystème connectivité / IA sous-jacente",
+            intervenants: 'Primus — Fabrice Bosco' },
+          // Créneau 16h
+          { creneau: 'Jeudi 16h', salle: 'B', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
+            nom: "L'Intelligence Artificielle au service des blanchisseries (2e session)",
+            intervenants: 'Vincent Pacton, Denis Bonnet, Éric Tisserand — animatrice : Agnès Souvignet' },
+          { creneau: 'Jeudi 16h', salle: 'C', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
+            nom: 'Des outils pour la gestion de la maintenance (2e session)',
+            intervenants: 'Jean-Pascal Testard, Lucas Monrousseau, Hervé Dumoulin — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
+          { creneau: 'Jeudi 16h', salle: 'D', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
+            nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la démarche RABC ? (2e session)",
+            intervenants: 'Mikael Gilbrin, Frédéric Jourdan — animateurs : Catherine Diallo et Frédéric Jourdan' },
+          { creneau: 'Jeudi 16h', salle: 'E', heure: 16, minute: 15, horaire: 'Jeudi 16h15',
+            nom: 'Nouvelle version du logiciel de gestion textile',
+            intervenants: 'ActiPrint — Sébastien Bremec' },
+          { creneau: 'Jeudi 16h', salle: 'F', heure: 16, minute: 15, horaire: 'Jeudi 16h15',
+            nom: 'Un robot de nettoyage des sols',
+            intervenants: 'Nilfisk — François-Xavier Coudray' },
+          // Créneau 17h
+          { creneau: 'Jeudi 17h', salle: 'B', heure: 17, minute: 0, horaire: 'Jeudi 17h00',
+            nom: "Simplifier le suivi des levées de réserves grâce à l'IA associé à votre logiciel GMAO",
+            intervenants: 'Tribofilm — Alexis Chaillet' },
+          { creneau: 'Jeudi 17h', salle: 'C', heure: 17, minute: 0, horaire: 'Jeudi 17h00',
+            nom: 'Formation gestionnaire de la fonction linge',
+            intervenants: 'CCI des Vosges — Cécile Poirot, Stéphane Fié (Saumur)' },
+          { creneau: 'Jeudi 17h', salle: 'D', heure: 17, minute: 0, horaire: 'Jeudi 17h00',
+            nom: "L'Intelligence Artificielle au service du tri du linge sale",
+            intervenants: 'Girbau — Thierry Sénevat et Toni Dominguez' },
+          { creneau: 'Jeudi 17h', salle: 'E', heure: 17, minute: 0, horaire: 'Jeudi 17h00',
+            nom: "Les économies d'eau",
+            intervenants: 'Christeyns — Stéphane Sanquer' },
+          { creneau: 'Jeudi 17h', salle: 'Auditorium', heure: 17, minute: 0, horaire: 'Jeudi 17h00',
+            nom: "Décret tertiaire, c'est pour demain !",
+            intervenants: "Optim'Expertise — Hélène Ducarre" },
         ];
         // Le jeudi des journées (s'il existe) donne le début précis des
         // créneaux, utilisé pour le rappel 10 minutes avant sur les téléphones.
@@ -2013,21 +2060,34 @@
             }
           }
         }
-        const creneaux = [
-          { horaire: 'Jeudi 15h00 – 16h00', heure: 15 },
-          { horaire: 'Jeudi 16h00 – 17h00', heure: 16 },
-        ];
-        for (const c of creneaux) {
+        // Clé anti-doublon : salle + première heure trouvée dans l'horaire
+        // (couvre aussi les ateliers créés par les anciennes versions).
+        const cleAtelier = (salle, texte) => {
+          const h = String(texte || '').match(/(\d{1,2})\s*h/i);
+          return String(salle || '').toUpperCase() + '|' + (h ? h[1] : '');
+        };
+        const dejaLa = new Set(ateliers.map((a) => cleAtelier(a.salle, a.creneau || a.horaire)));
+        let crees = 0;
+        for (const t of TABLE) {
+          if (dejaLa.has(cleAtelier(t.salle, t.creneau))) continue;
           let debutLe = null;
           if (jeudi) {
             const d = new Date(jeudi);
-            d.setHours(c.heure, 0, 0, 0);
+            d.setHours(t.heure, t.minute, 0, 0);
             debutLe = firebase.firestore.Timestamp.fromDate(d);
           }
-          for (const t of types) {
-            await creerAtelier({ ...t, horaire: c.horaire, debutLe, capacite: 20 });
-          }
+          await creerAtelier({
+            nom: t.nom,
+            salle: t.salle,
+            horaire: t.horaire,
+            creneau: t.creneau,
+            intervenants: t.intervenants,
+            debutLe,
+            capacite: 20,
+          });
+          crees += 1;
         }
+        alert(crees ? `${crees} atelier(s) créé(s) d'après le tableau du jeudi.` : 'Tous les ateliers du tableau existent déjà.');
         router();
       });
     }
@@ -2086,7 +2146,7 @@
       }
       const retenus = [];
       const pris = new Set();
-      const etablissementsPris = new Set();
+      const nbParEtab = new Map(); // retenus de cet atelier, par blanchisserie
       const cleEtab = (v) =>
         (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
 
@@ -2096,10 +2156,15 @@
           if (!condition(v)) return;
           retenus.push(v);
           pris.add(v.participantId);
-          etablissementsPris.add(cleEtab(v));
+          nbParEtab.set(cleEtab(v), (nbParEtab.get(cleEtab(v)) || 0) + 1);
         });
       }
-      passe((v) => !retenusAilleurs.has(v.participantId) && !etablissementsPris.has(cleEtab(v)));
+      // Préférence à la RÉPARTITION d'une même blanchisserie sur plusieurs
+      // ateliers : d'abord une personne par établissement, puis une marge de
+      // DEUX par atelier (pour permettre à deux collègues de débattre entre
+      // eux), avant d'ouvrir plus largement.
+      passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 1));
+      passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 2));
       passe((v) => !retenusAilleurs.has(v.participantId));
       passe(() => true);
 
@@ -2700,7 +2765,16 @@
     );
   }
 
-  function htmlStatsQuestion(q, s) {
+  // Commentaires ciblés laissés sous une question (clé
+  // « <question>__commentaire » dans la carte de réponses du participant).
+  function commentairesQuestion(q, reponses) {
+    return reponses
+      .map((r) => (r.reponses || {})[q.id + '__commentaire'])
+      .filter(Boolean)
+      .map(String);
+  }
+
+  function htmlStatsQuestion(q, s, commentaires) {
     let resume = '';
     let corps = '';
 
@@ -2755,12 +2829,19 @@
         : '';
     }
 
+    const blocCommentaires =
+      commentaires && commentaires.length
+        ? `<div class="muet petit" style="margin-top:0.5rem">💬 Commentaires sur cette question :</div>
+          <ul class="verbatims">${commentaires.map((v) => `<li>${echapper(v)}</li>`).join('')}</ul>`
+        : '';
+
     return `<div class="stat-question">
       <div class="entete">
         <div class="libelle">${echapper(q.libelle)}</div>
         <div class="resume">${resume}</div>
       </div>
       ${corps}
+      ${blocCommentaires}
     </div>`;
   }
 
@@ -2923,7 +3004,11 @@
                       sectionCourante = q.section;
                       html += `<div class="section-titre">${echapper(q.section)}</div>`;
                     }
-                    html += htmlStatsQuestion(q, statsQuestion(q, reponses));
+                    html += htmlStatsQuestion(
+                      q,
+                      statsQuestion(q, reponses),
+                      commentairesQuestion(q, reponses),
+                    );
                   });
                   return html;
                 })()}

@@ -1085,8 +1085,12 @@
         }
       }),
     );
-    const horairesInscrits = new Set(
-      ateliers.filter((a) => mesVoeux[a.id]).map((a) => a.horaire || ''),
+    // Créneau de chevauchement : deux ateliers du même créneau (ex. « Jeudi
+    // 15h ») ne peuvent pas être suivis en même temps — une seule
+    // inscription par créneau. Repli sur l'horaire pour les anciens ateliers.
+    const creneauDe = (a) => a.creneau || a.horaire || '';
+    const creneauxInscrits = new Set(
+      ateliers.filter((a) => mesVoeux[a.id]).map(creneauDe),
     );
 
     // Les inscriptions ne sont ouvertes que pendant l'Assemblée Générale.
@@ -1120,8 +1124,9 @@
         if (inscrit) {
           etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera les inscrits.</div>`;
           action = `<button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Me désinscrire</button>`;
-        } else if (horairesInscrits.has(a.horaire || '')) {
-          etat = `<div class="muet petit">Vous êtes déjà inscrit à un autre atelier sur ce créneau.</div>`;
+        } else if (creneauxInscrits.has(creneauDe(a))) {
+          etat = `<div class="muet petit">Vous êtes déjà inscrit à un autre atelier sur ce
+            créneau horaire — les ateliers d'un même créneau se déroulent en même temps.</div>`;
         } else {
           action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
         }
@@ -1156,9 +1161,14 @@
               <strong>pendant l'Assemblée Générale</strong>${
                 ag ? ` (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})` : ''
               }. Les places étant limitées, elles
-              sont départagées par tirage au sort, en donnant leur chance à
-              toutes les blanchisseries et à chacun : on ne peut être retenu
-              dans plusieurs ateliers que s'il reste des places.</p>
+              sont départagées par tirage au sort. <strong>La préférence est
+              donnée à la répartition des participants d'une même
+              blanchisserie sur plusieurs ateliers</strong> (avec une marge de
+              deux par atelier si des collègues souhaitent pouvoir débattre
+              entre eux) ; on ne peut être retenu dans plusieurs ateliers que
+              s'il reste des places. Une seule inscription par créneau
+              horaire : les ateliers d'un même créneau se déroulent en même
+              temps.</p>
               ${
                 'Notification' in window && Notification.permission === 'default'
                   ? `<div class="ligne-boutons">

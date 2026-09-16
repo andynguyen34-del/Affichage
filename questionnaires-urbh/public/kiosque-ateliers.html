@@ -114,6 +114,36 @@
     ol.retenus li .org { opacity: 0.65; font-size: 0.85em; }
     .attente-liste { margin-top: 0.5rem; font-size: clamp(0.72rem, 1.2vw, 0.92rem); opacity: 0.6; }
     .vide { text-align: center; opacity: 0.7; font-size: 1.2rem; padding: 4rem 1rem; }
+    /* Mode tableau (grille horaires × salles, projeté pendant l'AG) */
+    table.tableau-ateliers {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    table.tableau-ateliers th, table.tableau-ateliers td {
+      border: 1px solid var(--bord);
+      padding: 0.5rem 0.6rem;
+      vertical-align: top;
+      font-size: clamp(0.7rem, 1.25vw, 1.02rem);
+    }
+    table.tableau-ateliers tr:first-child th {
+      background: rgba(240, 178, 62, 0.18);
+      color: var(--or);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: clamp(0.75rem, 1.4vw, 1.1rem);
+    }
+    table.tableau-ateliers th.creneau {
+      background: rgba(127, 179, 255, 0.14);
+      color: var(--bleu-clair);
+      white-space: nowrap;
+      width: 8.5em;
+      text-align: left;
+    }
+    table.tableau-ateliers td.occupe { background: var(--voile); }
+    table.tableau-ateliers td.occupe.tire { border-color: var(--or); }
+    table.tableau-ateliers .nom-cellule { font-weight: 700; line-height: 1.25; }
+    table.tableau-ateliers .detail-cellule { opacity: 0.65; font-size: 0.85em; margin-top: 0.25em; }
     .aide { position: fixed; right: 1rem; bottom: 0.6rem; font-size: 0.75rem; opacity: 0.4; }
     @media (prefers-reduced-motion: reduce) {
       .atelier.vient-d-etre-tire, ol.retenus li { animation: none; opacity: 1; }
@@ -129,7 +159,7 @@
     <div id="bandeau-creneau" class="bandeau-creneau"></div>
     <div id="grille"><div class="vide">Connexion…</div></div>
   </div>
-  <div class="aide">double-clic : plein écran</div>
+  <div class="aide">double-clic : plein écran · touche G : tableau des créneaux</div>
 
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>

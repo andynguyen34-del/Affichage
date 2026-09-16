@@ -38,6 +38,11 @@
   let premierAffichage = true;
   let groupes = []; // un groupe par créneau horaire : [{ horaire, ateliers }]
   let indexGroupe = 0;
+  let tousAteliers = [];
+  // Mode « tableau » (?grille=1, ou touche G) : la grille horaires × salles
+  // complète, comme le tableau Excel — à projeter pendant l'Assemblée
+  // Générale pour visualiser les ateliers qui se chevauchent.
+  let modeTableau = new URLSearchParams(location.search).get('grille') === '1';
 
   // Avec 20 places par atelier, tout ne tient pas sur un seul écran : le
   // kiosque affiche UN créneau à la fois (ses salles côte à côte, noms sur
@@ -114,8 +119,62 @@
     return carte;
   }
 
+  // Tableau complet horaires × salles (une seule inscription possible par
+  // créneau : les stagiaires visualisent les ateliers simultanés).
+  function rendreTableau() {
+    $grille.innerHTML = '';
+    $bandeau.textContent = 'Ateliers du jeudi après-midi — une inscription par créneau horaire';
+    const creneauDe = (a) => a.creneau || a.horaire || '';
+    const creneaux = [...new Set(tousAteliers.map(creneauDe))].sort((a, b) =>
+      String(a).localeCompare(String(b)),
+    );
+    const salles = [...new Set(tousAteliers.map((a) => a.salle || '?'))].sort((a, b) =>
+      String(a).localeCompare(String(b)),
+    );
+    const table = document.createElement('table');
+    table.className = 'tableau-ateliers';
+    const entete = document.createElement('tr');
+    entete.append(document.createElement('th'));
+    salles.forEach((s) => {
+      const th = document.createElement('th');
+      th.textContent = s.length > 1 ? s : 'Salle ' + s;
+      entete.append(th);
+    });
+    table.append(entete);
+    creneaux.forEach((c) => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.className = 'creneau';
+      th.textContent = c;
+      tr.append(th);
+      salles.forEach((s) => {
+        const td = document.createElement('td');
+        const a = tousAteliers.find((x) => creneauDe(x) === c && (x.salle || '?') === s);
+        if (a) {
+          td.className = 'occupe' + (a.statut === 'tire' ? ' tire' : '');
+          const nom = document.createElement('div');
+          nom.className = 'nom-cellule';
+          nom.textContent = a.nom || '';
+          td.append(nom);
+          const detail = document.createElement('div');
+          detail.className = 'detail-cellule';
+          detail.textContent =
+            (a.horaire || '') + (a.statut === 'tire' ? ' · tirage effectué' : '');
+          td.append(detail);
+        }
+        tr.append(td);
+      });
+      table.append(tr);
+    });
+    $grille.append(table);
+  }
+
   function rendre(nouveaux) {
     nouveaux = nouveaux || new Set();
+    if (modeTableau) {
+      rendreTableau();
+      return;
+    }
     $grille.innerHTML = '';
     $bandeau.innerHTML = '';
     if (!groupes.length) {
@@ -148,6 +207,7 @@
   }
 
   function afficher(ateliers) {
+    tousAteliers = ateliers;
     ateliers.sort(
       (a, b) =>
         String(a.horaire || '').localeCompare(String(b.horaire || '')) ||
@@ -169,13 +229,18 @@
 
   // Rotation automatique entre les créneaux ; ◀ ▶ au clavier pour la main.
   setInterval(() => {
-    if (groupes.length > 1) {
+    if (!modeTableau && groupes.length > 1) {
       indexGroupe = (indexGroupe + 1) % groupes.length;
       rendre();
     }
   }, 12000);
   document.addEventListener('keydown', (e) => {
-    if (!groupes.length) return;
+    if (e.key === 'g' || e.key === 'G') {
+      modeTableau = !modeTableau;
+      rendre();
+      return;
+    }
+    if (!groupes.length || modeTableau) return;
     if (e.key === 'ArrowRight') {
       indexGroupe = (indexGroupe + 1) % groupes.length;
       rendre();

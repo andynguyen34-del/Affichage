@@ -454,3 +454,8 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
   border-radius: 6px;
   flex-shrink: 0;
 }
+
+/* Commentaire ciblé sous une question du questionnaire (facultatif). */
+.commentaire-question { margin-top: 0.55rem; }
+.commentaire-question .ouvrir-commentaire { font-size: 0.85rem; padding-left: 0; }
+.commentaire-question .texte-commentaire { width: 100%; min-height: 4.5rem; margin-top: 0.3rem; }

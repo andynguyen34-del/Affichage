@@ -106,10 +106,22 @@
       corps = `<textarea name="${nom}" maxlength="2000" placeholder="Votre réponse…"></textarea>`;
     }
 
+    // Sous chaque question à cocher : possibilité d'ouvrir un champ pour
+    // laisser un commentaire CIBLÉ sur la question posée (facultatif).
+    const commentaire =
+      q.type === 'texte'
+        ? ''
+        : `<div class="commentaire-question">
+            <button type="button" class="discret ouvrir-commentaire">💬 Ajouter un commentaire sur cette question</button>
+            <textarea class="texte-commentaire" maxlength="1000" hidden
+              placeholder="Votre commentaire (facultatif) — astuce : le micro 🎤 du clavier de votre smartphone permet de le dicter."></textarea>
+          </div>`;
+
     return (
       `<div class="question" data-qid="${echapper(q.id)}" data-obligatoire="${q.obligatoire ? '1' : '0'}" data-type="${echapper(q.type)}">` +
       `<div class="libelle">${index}. ${echapper(q.libelle)}${etoile}</div>` +
       corps +
+      commentaire +
       '<div class="question-erreur">Merci de répondre à cette question.</div>' +
       '</div>'
     );
@@ -124,7 +136,9 @@
     $('contexte-journee').textContent = contexte;
 
     const zone = $('zone-questions');
-    let html = '';
+    let html = `<div class="info">💬 N'hésitez pas à laisser vos commentaires
+      sous les questions — <strong>ASTUCE</strong> : activez la fonction
+      dictaphone (micro 🎤 du clavier) de votre smartphone pour les dicter 😊</div>`;
     let sectionCourante = null;
     let numero = 0;
     (data.questions || []).forEach((q) => {
@@ -136,6 +150,14 @@
       html += htmlQuestion(q, numero);
     });
     zone.innerHTML = html;
+    zone.querySelectorAll('.ouvrir-commentaire').forEach((b) =>
+      b.addEventListener('click', () => {
+        const champ = b.parentElement.querySelector('.texte-commentaire');
+        champ.hidden = false;
+        b.hidden = true;
+        champ.focus();
+      }),
+    );
     montrer('formulaire');
   }
 
@@ -166,6 +188,14 @@
       bloc.classList.toggle('invalide', manquant);
       if (manquant && !premierInvalide) premierInvalide = bloc;
       if (valeur !== null) valeurs[qid] = valeur;
+
+      // Commentaire ciblé sur la question (facultatif), rangé sous la clé
+      // « <question>__commentaire » de la même carte de réponses.
+      const champCommentaire = bloc.querySelector('.texte-commentaire');
+      if (champCommentaire) {
+        const commentaire = champCommentaire.value.trim();
+        if (commentaire) valeurs[qid + '__commentaire'] = commentaire.slice(0, 1000);
+      }
     });
 
     return { valeurs, premierInvalide };
