@@ -100,6 +100,125 @@
     }
   }
 
+  // --------------------------------------------- installation avant tout
+  // À la PREMIÈRE ouverture (aucun profil), on propose d'abord d'installer
+  // l'application sur l'écran d'accueil : l'inscription se fait ensuite
+  // directement dedans, en une seule fois — plus de double saisie entre le
+  // navigateur et l'application installée. « Continuer sans installer »
+  // reste possible, et l'écran est sauté si l'application est déjà
+  // installée ou si on arrive par le QR d'un stand.
+
+  function estIOSApple() {
+    return (
+      /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+    );
+  }
+
+  function afficherGuideInstallation() {
+    const ancien = document.getElementById('guide-installation');
+    if (ancien) ancien.remove();
+    const ios = estIOSApple();
+    const corps = ios
+      ? `<p style="margin:0 0 0.8rem;font-size:0.88rem;color:#4b5563">Apple ne
+          permet pas l'installation automatique — trois gestes suffisent,
+          depuis Safari :</p>
+        <ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+          <li>Touchez <strong>Partager</strong>
+            <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
+              border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
+            — barre du bas de Safari (parfois derrière « ⋯ ») ;</li>
+          <li>faites défiler la liste — ou touchez <strong>« En voir
+            plus »</strong> — puis <strong>« Sur l'écran d'accueil »</strong>
+            (sinon : « Modifier les actions… » tout en bas pour l'activer) ;</li>
+          <li><strong>Ajouter</strong> : l'icône bleue <strong>JE URBH</strong>
+            apparaît sur l'écran d'accueil.</li>
+        </ol>
+        <p style="margin:0.8rem 0 0;font-size:0.8rem;color:#6b7280">Si « Sur
+          l'écran d'accueil » n'apparaît nulle part, la page est ouverte dans
+          le navigateur intégré d'une autre application : copiez l'adresse et
+          ouvrez-la dans Safari lui-même.</p>
+        <div style="text-align:center;font-size:1.5rem;margin-top:0.4rem">⬇️</div>`
+      : `<ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+          <li>Ouvrez le menu <strong>⋮</strong> du navigateur (en haut à droite) ;</li>
+          <li>choisissez <strong>« Installer l'application »</strong>
+            (ou « Ajouter à l'écran d'accueil ») ;</li>
+          <li>validez : l'icône bleue <strong>JE URBH</strong> est ajoutée.</li>
+        </ol>`;
+    const voile = document.createElement('div');
+    voile.id = 'guide-installation';
+    voile.style.cssText =
+      'position:fixed;inset:0;z-index:100;background:rgba(15,23,42,0.55);' +
+      'display:flex;align-items:flex-end;justify-content:center;';
+    voile.innerHTML = `
+      <div style="background:#fff;color:#1f2937;border-radius:16px 16px 0 0;
+        padding:1.2rem 1.2rem calc(1.2rem + env(safe-area-inset-bottom,0px));
+        max-width:460px;width:100%;box-shadow:0 -8px 30px rgba(0,0,0,0.3);
+        max-height:80vh;overflow:auto">
+        <h3 style="margin:0 0 0.6rem;font-size:1.05rem">Installer « JE URBH »</h3>
+        ${corps}
+        <button id="fermer-guide-installation" style="width:100%;margin-top:0.9rem">J'ai compris</button>
+      </div>`;
+    document.body.append(voile);
+    voile.addEventListener('click', (e2) => {
+      if (e2.target === voile || e2.target.id === 'fermer-guide-installation') voile.remove();
+    });
+  }
+
+  function doitProposerInstallation() {
+    if (standDemande) return false;
+    if (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true
+    ) {
+      return false;
+    }
+    try {
+      return localStorage.getItem('urbh_proposition_installation') !== '1';
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function vueProposerInstallation() {
+    try {
+      localStorage.setItem('urbh_proposition_installation', '1');
+    } catch (_) {
+      /* stockage indisponible */
+    }
+    $app.innerHTML = `
+      <div class="carte" style="text-align:center">
+        <h2>Bienvenue aux Journées d'études !</h2>
+        <p><strong>1re étape (recommandée) : installez l'application</strong>
+        sur l'écran d'accueil de votre téléphone. Vous vous inscrirez ensuite
+        directement dedans, une seule fois, et la retrouverez d'un geste
+        pendant toutes les journées.</p>
+        <div class="ligne-boutons" style="justify-content:center">
+          <button id="proposer-installer">📲 Installer l'application</button>
+        </div>
+        <div class="ligne-boutons" style="justify-content:center">
+          <button id="proposer-continuer" class="secondaire">Continuer sans installer</button>
+        </div>
+        <p class="muet petit">Déjà installée ? Fermez cette page et ouvrez
+        l'icône bleue « JE URBH » de votre écran d'accueil.</p>
+      </div>`;
+    document.getElementById('proposer-installer').addEventListener('click', async () => {
+      if (promptInstallation) {
+        promptInstallation.prompt();
+        try {
+          await promptInstallation.userChoice;
+        } catch (_) {
+          /* fenêtre fermée */
+        }
+        promptInstallation = null;
+        vueInscription();
+        return;
+      }
+      afficherGuideInstallation();
+    });
+    document.getElementById('proposer-continuer').addEventListener('click', () => vueInscription());
+  }
+
   // ------------------------------------------------------------- inscription
 
   function vueInscription(erreur) {
@@ -2102,6 +2221,10 @@
       if (doc.exists) {
         profil = doc.data();
         await apresProfil();
+      } else if (doitProposerInstallation()) {
+        // Première venue : l'installation d'abord, l'inscription ensuite
+        // (dans l'application installée, en une seule fois).
+        vueProposerInstallation();
       } else {
         vueInscription();
       }
@@ -2237,51 +2360,10 @@
       });
     }
     // Guide visuel iPhone/iPad : panneau dans la page (les alertes du
-    // navigateur peuvent être bloquées par Safari), ancré en bas, près du
-    // bouton Partager de Safari.
+    // navigateur peuvent être bloquées par Safari).
     const boutonGuideIOS = document.getElementById('bouton-guide-ios');
     if (boutonGuideIOS) {
-      boutonGuideIOS.addEventListener('click', () => {
-        const ancien = document.getElementById('guide-installation');
-        if (ancien) ancien.remove();
-        const voile = document.createElement('div');
-        voile.id = 'guide-installation';
-        voile.style.cssText =
-          'position:fixed;inset:0;z-index:100;background:rgba(15,23,42,0.55);' +
-          'display:flex;align-items:flex-end;justify-content:center;';
-        voile.innerHTML = `
-          <div style="background:#fff;color:#1f2937;border-radius:16px 16px 0 0;
-            padding:1.2rem 1.2rem calc(1.2rem + env(safe-area-inset-bottom,0px));
-            max-width:460px;width:100%;box-shadow:0 -8px 30px rgba(0,0,0,0.3);
-            max-height:80vh;overflow:auto">
-            <h3 style="margin:0 0 0.6rem;font-size:1.05rem">Installer sur iPhone / iPad</h3>
-            <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#4b5563">Apple ne
-              permet pas l'installation automatique — trois gestes suffisent,
-              depuis Safari :</p>
-            <ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
-              <li>Touchez <strong>Partager</strong>
-                <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
-                  border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
-                — barre du bas de Safari (parfois derrière « ⋯ ») ;</li>
-              <li>faites défiler la liste — ou touchez <strong>« En voir
-                plus »</strong> — puis <strong>« Sur l'écran d'accueil »</strong>
-                (sinon : « Modifier les actions… » tout en bas pour l'activer) ;</li>
-              <li><strong>Ajouter</strong> : l'icône bleue <strong>JE URBH</strong>
-                apparaît sur l'écran d'accueil.</li>
-            </ol>
-            <p style="margin:0.8rem 0 0;font-size:0.8rem;color:#6b7280">Si « Sur
-              l'écran d'accueil » n'apparaît nulle part, la page est ouverte dans
-              le navigateur intégré d'une autre application : copiez l'adresse et
-              ouvrez-la dans Safari lui-même.</p>
-            <button id="fermer-guide-installation"
-              style="width:100%;margin-top:0.9rem">J'ai compris</button>
-            <div style="text-align:center;font-size:1.5rem;margin-top:0.4rem">⬇️</div>
-          </div>`;
-        document.body.append(voile);
-        voile.addEventListener('click', (e2) => {
-          if (e2.target === voile || e2.target.id === 'fermer-guide-installation') voile.remove();
-        });
-      });
+      boutonGuideIOS.addEventListener('click', afficherGuideInstallation);
     }
     const boutonMasquer = document.getElementById('bouton-masquer-installation');
     if (boutonMasquer) {
