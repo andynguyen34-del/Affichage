@@ -631,6 +631,20 @@
     document.querySelectorAll('.bouton-outil, .lien-vue').forEach((b) =>
       b.addEventListener('click', () => aller(b.dataset.vue)),
     );
+    const boutonVision = document.getElementById('bouton-vision-test');
+    if (boutonVision) {
+      boutonVision.addEventListener('click', () => {
+        try {
+          localStorage.setItem(
+            'urbh_vision_test',
+            typeEffectif() === 'exposant' ? 'visiteur' : 'exposant',
+          );
+        } catch (_) {
+          /* stockage indisponible */
+        }
+        vueMenu();
+      });
+    }
     const boutonProfil = document.getElementById('bouton-profil');
     if (boutonProfil) {
       boutonProfil.addEventListener('click', () => {
@@ -715,14 +729,47 @@
     if (zone && profil) zone.innerHTML = infoReunion();
   }, 60000);
 
+  // Sélecteur de test « vision visiteur / fournisseur », réservé à quelques
+  // comptes de l'équipe d'organisation : il ne change QUE l'affichage
+  // (accueil, questionnaires proposés, écran tombola) — jamais les données
+  // enregistrées, qui gardent le vrai profil.
+  const TESTEURS_VISION = ['NGUYEN', 'GIMBRE', 'TROUVAIN', 'JOURDAN', 'DIALLO'];
+
+  function peutTesterVision() {
+    if (!profil) return false;
+    const nom = String(profil.nom || '').trim().toUpperCase();
+    const prenom = String(profil.prenom || '').trim().toUpperCase();
+    return TESTEURS_VISION.includes(nom) || prenom === 'YVES';
+  }
+
+  function typeEffectif() {
+    if (peutTesterVision()) {
+      try {
+        const t = localStorage.getItem('urbh_vision_test');
+        if (t === 'exposant' || t === 'visiteur') return t;
+      } catch (_) {
+        /* stockage indisponible */
+      }
+    }
+    return (profil && profil.type) || 'visiteur';
+  }
+
   function enTeteBonjour() {
     const info = infoReunion();
+    const vision = typeEffectif();
+    const visionTest = peutTesterVision() && profil && vision !== profil.type;
     return `<div class="carte carte-bonjour">
         <h2>Bonjour ${echapper(profil.prenom)} !</h2>
-        <p class="muet">${profil.type === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur'}${
-          profil.organisme ? ' — ' + echapper(profil.organisme) : ''
-        }
-          <button id="bouton-profil" class="discret">modifier</button></p>
+        <p class="muet">${vision === 'exposant' ? 'Exposant fournisseur' : 'Visiteur blanchisseur'}${
+          visionTest ? ' <span class="badge brouillon">vision de test</span>' : ''
+        }${profil.organisme ? ' — ' + echapper(profil.organisme) : ''}
+          <button id="bouton-profil" class="discret">modifier</button>${
+            peutTesterVision()
+              ? `<button id="bouton-vision-test" class="discret">🧪 Voir en ${
+                  vision === 'exposant' ? 'visiteur' : 'fournisseur'
+                }</button>`
+              : ''
+          }</p>
         ${info ? `<div id="info-reunion" class="info-reunion">${info}</div>` : ''}
       </div>`;
   }
@@ -744,7 +791,7 @@
     // Les EXPOSANTS fournisseurs ont une interface réduite : programme,
     // plan et questionnaires (pas d'ateliers, de tombola ni de passage sur
     // les stands, réservés aux visiteurs blanchisseurs).
-    const estExposant = profil && profil.type === 'exposant';
+    const estExposant = typeEffectif() === 'exposant';
     const OUTILS = estExposant
       ? [
           { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
@@ -1423,7 +1470,7 @@
         .get();
       questionnairesAttendus = snapQ.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === typeEffectif());
       // Les questionnaires d'atelier ne sont attendus que des retenus.
       questionnairesAttendus = await filtrerQuestionnairesConcernes(questionnairesAttendus);
     } catch (_) {
@@ -1500,7 +1547,7 @@
             ? `<div class="info">👥 Membre du Conseil d'Administration : vous ne
                 participez pas à la tombola. Vos pointages restent utiles pour
                 l'émargement, et les ateliers vous sont ouverts normalement.</div>`
-            : profil.type === 'exposant'
+            : typeEffectif() === 'exposant'
               ? `<p class="muet petit">Vous êtes enregistré comme exposant
                   fournisseur : vos pointages servent d'émargement, mais la
                   tombola est réservée aux visiteurs blanchisseurs.</p>`
@@ -1522,7 +1569,7 @@
         </ul>
         ${
           !membreCA &&
-          profil.type !== 'exposant' &&
+          typeEffectif() !== 'exposant' &&
           mesPointages.ouverture &&
           mesPointages.ag &&
           mesPointages.tombola &&
@@ -1660,7 +1707,7 @@
         .get();
       questionnaires = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === typeEffectif());
       questionnaires = await filtrerQuestionnairesConcernes(questionnaires);
     } catch (_) {
       questionnaires = [];

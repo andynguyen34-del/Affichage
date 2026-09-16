@@ -20,7 +20,7 @@ window.FIREBASE_CONFIG = {
 
 // Numéro de version de l'application, affiché en pied de page : permet de
 // vérifier que le site déployé correspond bien à la dernière livraison.
-window.APP_BUILD = 44;
+window.APP_BUILD = 45;
 
 window.firebaseConfigEstRenseignee = function () {
   const c = window.FIREBASE_CONFIG || {};
