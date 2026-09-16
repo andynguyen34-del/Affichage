@@ -2226,8 +2226,8 @@
                 <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
                   border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
                 — barre du bas de Safari (parfois derrière « ⋯ ») ;</li>
-              <li>faites défiler la liste puis touchez
-                <strong>« Sur l'écran d'accueil »</strong>
+              <li>faites défiler la liste — ou touchez <strong>« En voir
+                plus »</strong> — puis <strong>« Sur l'écran d'accueil »</strong>
                 (sinon : « Modifier les actions… » tout en bas pour l'activer) ;</li>
               <li><strong>Ajouter</strong> : l'icône bleue <strong>JE URBH</strong>
                 apparaît sur l'écran d'accueil.</li>

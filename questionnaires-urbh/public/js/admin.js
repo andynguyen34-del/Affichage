@@ -3858,7 +3858,8 @@
               <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
                 border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
               — barre du bas de Safari (en haut à droite sur iPad) ;</li>
-            <li>faites défiler puis <strong>« Sur l'écran d'accueil »</strong> ;</li>
+            <li>faites défiler la liste — ou touchez <strong>« En voir
+              plus »</strong> — puis <strong>« Sur l'écran d'accueil »</strong> ;</li>
             <li><strong>Ajouter</strong> : l'icône rouge <strong>URBH ADMIN</strong>
               apparaît sur l'écran d'accueil.</li>
           </ol>
