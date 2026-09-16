@@ -223,3 +223,110 @@ exports.tiragesAteliersAutomatiques = onSchedule('every 1 minutes', async () => 
     );
   }
 });
+
+// ------------------------------------------------------------------------
+// Reprise d'identité par le numéro de carte.
+//
+// L'identité d'un participant est la session anonyme de son navigateur : en
+// changeant d'appareil, en purgeant Safari, ou en installant l'application
+// sur l'écran d'accueil d'un iPhone (conteneur de stockage séparé), il
+// repart avec une NOUVELLE session. Sa fiche d'inscription (identifiée par
+// le n° de carte) est bien reprise, mais ses vœux, pointages, réponses,
+// participations et visites restaient accrochés à l'ancienne session.
+//
+// Dès que la fiche d'inscription change de session (participantId), cette
+// fonction rattache TOUT l'historique de l'ancienne session à la nouvelle.
+
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+
+exports.repriseIdentite = onDocumentWritten('inscriptions/{inscriptionId}', async (event) => {
+  const avant = event.data && event.data.before.exists ? event.data.before.data() : null;
+  const apres = event.data && event.data.after.exists ? event.data.after.data() : null;
+  if (!avant || !apres) return;
+  const ancienUid = avant.participantId;
+  const nouveauUid = apres.participantId;
+  if (!ancienUid || !nouveauUid || ancienUid === nouveauUid) return;
+
+  const db = admin.firestore();
+  console.log(
+    `Reprise d'identité : ${apres.numeroInscription || event.params.inscriptionId} ` +
+      `passe de ${ancienUid} à ${nouveauUid}.`,
+  );
+
+  // Documents à identifiant composé « <cible>_<uid> » : recréés sous la
+  // nouvelle session (sauf s'ils y existent déjà), puis anciens supprimés.
+  const COMPOSES = [
+    ['tirage', (d) => `${d.journeeId}_`],
+    ['pointages', (d) => `${d.journeeId}_${d.moment}_`],
+    ['voeux', (d) => `${d.atelierId}_`],
+    ['reponses', (d) => `${d.questionnaireId}_`],
+    ['visites', (d) => `${d.fournisseurId}_`],
+    ['evaluationsDirect', (d) => `${d.questionId}_`],
+    ['desistements', (d) => `${d.atelierId}_`],
+  ];
+  for (const [collection, prefixe] of COMPOSES) {
+    const snap = await db.collection(collection).where('participantId', '==', ancienUid).get();
+    for (const doc of snap.docs) {
+      const donnees = doc.data();
+      const nouvelId = prefixe(donnees) + nouveauUid;
+      const cibleRef = db.collection(collection).doc(nouvelId);
+      const cible = await cibleRef.get();
+      if (!cible.exists) {
+        await cibleRef.set({ ...donnees, participantId: nouveauUid });
+      }
+      await doc.ref.delete();
+    }
+  }
+
+  // Désistements où l'ancienne session apparaît comme promue.
+  const snapPromu = await db.collection('desistements').where('promuId', '==', ancienUid).get();
+  for (const doc of snapPromu.docs) {
+    await doc.ref.update({ promuId: nouveauUid });
+  }
+
+  // Listes des ateliers (retenus, liste d'attente).
+  const snapAteliers = await db
+    .collection('ateliers')
+    .where('journeeId', '==', apres.journeeId || '')
+    .get();
+  for (const doc of snapAteliers.docs) {
+    const a = doc.data();
+    const remap = (liste) =>
+      (liste || []).map((r) =>
+        r.participantId === ancienUid ? { ...r, participantId: nouveauUid } : r,
+      );
+    const concerne = (liste) => (liste || []).some((r) => r.participantId === ancienUid);
+    if (concerne(a.retenus) || concerne(a.listeAttente)) {
+      await doc.ref.update({
+        retenus: remap(a.retenus),
+        listeAttente: remap(a.listeAttente),
+      });
+    }
+  }
+
+  // Gagnants annoncés (tirage au sort et tombola) sur la vitrine publique.
+  if (apres.journeeId) {
+    const refPortail = db.collection('portails').doc(apres.journeeId);
+    const portail = await refPortail.get();
+    if (portail.exists) {
+      const p = portail.data();
+      const remap = (liste) =>
+        (liste || []).map((g) =>
+          g.participantId === ancienUid ? { ...g, participantId: nouveauUid } : g,
+        );
+      const concerne = (liste) => (liste || []).some((g) => g.participantId === ancienUid);
+      const maj = {};
+      if (p.tirage && concerne(p.tirage.gagnants)) maj['tirage.gagnants'] = remap(p.tirage.gagnants);
+      if (p.tombola && concerne(p.tombola.gagnants)) maj['tombola.gagnants'] = remap(p.tombola.gagnants);
+      if (Object.keys(maj).length) await refPortail.update(maj);
+    }
+  }
+
+  // Ancien profil d'appareil : supprimé (le nouveau vient d'être écrit).
+  try {
+    await db.collection('participants').doc(ancienUid).delete();
+  } catch (_) {
+    /* déjà absent */
+  }
+  console.log(`Reprise d'identité terminée pour ${nouveauUid}.`);
+});
