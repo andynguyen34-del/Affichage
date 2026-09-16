@@ -267,8 +267,44 @@
 
     try {
       const doc = await db.collection('questionnaires').doc(questionnaireId).get();
-      if (!doc.exists || doc.data().statut !== 'ouvert') montrer('indisponible');
-      else afficherFormulaire(doc.data());
+      if (!doc.exists || doc.data().statut !== 'ouvert') {
+        montrer('indisponible');
+        return;
+      }
+      const donnees = doc.data();
+      // Questionnaire d'atelier : réservé aux personnes RETENUES pour un
+      // atelier dont le nom contient le motif — inutile de questionner les
+      // autres.
+      if (donnees.reserveAtelier) {
+        let retenu = false;
+        try {
+          const snapA = await db
+            .collection('ateliers')
+            .where('journeeId', '==', donnees.journeeId || '')
+            .get();
+          const motif = String(donnees.reserveAtelier).toLowerCase();
+          retenu = snapA.docs.some((d) => {
+            const a = d.data();
+            return (
+              (a.nom || '').toLowerCase().includes(motif) &&
+              (a.retenus || []).some((r) => r.participantId === uid)
+            );
+          });
+        } catch (_) {
+          retenu = false;
+        }
+        if (!retenu) {
+          const zone = $('indisponible');
+          if (zone) {
+            zone.innerHTML =
+              '<h2>Questionnaire réservé</h2><p>Ce questionnaire concerne uniquement ' +
+              "les participants retenus pour l'atelier correspondant.</p>";
+          }
+          montrer('indisponible');
+          return;
+        }
+      }
+      afficherFormulaire(donnees);
     } catch (_) {
       montrer('indisponible');
     }

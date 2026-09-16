@@ -703,19 +703,29 @@
     const pointagesOuverts = portail.pointages || {};
     const pointageOuvert = MOMENTS_POINTAGE.some((m) => pointagesOuverts[m.cle]);
 
-    const OUTILS = [
-      { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
-      { vue: 'plan', icone: '🗺️', libelle: 'Plan & recherche des stands' },
-      { vue: 'visites', icone: '🏭', libelle: 'Visite des stands' },
-      { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
-      {
-        vue: 'tombola',
-        icone: '🎟️',
-        libelle: 'Tombola & tirage au sort',
-        pastille: tirageOuvert ? 'tirage ouvert' : pointageOuvert ? 'pointage ouvert' : '',
-      },
-      { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
-    ];
+    // Les EXPOSANTS fournisseurs ont une interface réduite : programme,
+    // plan et questionnaires (pas d'ateliers, de tombola ni de passage sur
+    // les stands, réservés aux visiteurs blanchisseurs).
+    const estExposant = profil && profil.type === 'exposant';
+    const OUTILS = estExposant
+      ? [
+          { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
+          { vue: 'plan', icone: '🗺️', libelle: 'Plan & recherche des stands' },
+          { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
+        ]
+      : [
+          { vue: 'programme', icone: '📅', libelle: 'Programme pédagogique' },
+          { vue: 'plan', icone: '🗺️', libelle: 'Plan & recherche des stands' },
+          { vue: 'visites', icone: '🏭', libelle: 'Visite des stands' },
+          { vue: 'ateliers', icone: '🛠️', libelle: 'Inscription Atelier' },
+          {
+            vue: 'tombola',
+            icone: '🎟️',
+            libelle: 'Tombola & tirage au sort',
+            pastille: tirageOuvert ? 'tirage ouvert' : pointageOuvert ? 'pointage ouvert' : '',
+          },
+          { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
+        ];
 
     $app.innerHTML = `
       ${enTeteBonjour()}
@@ -1376,6 +1386,8 @@
       questionnairesAttendus = snapQ.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+      // Les questionnaires d'atelier ne sont attendus que des retenus.
+      questionnairesAttendus = await filtrerQuestionnairesConcernes(questionnairesAttendus);
     } catch (_) {
       questionnairesAttendus = [];
     }
@@ -1576,6 +1588,30 @@
 
   // ---------------------------------------------------------- questionnaires
 
+  // Questionnaires « réservés aux retenus » : un questionnaire d'atelier
+  // (champ reserveAtelier = motif recherché dans le nom des ateliers) n'est
+  // proposé qu'aux personnes RETENUES pour cet atelier — inutile de
+  // questionner quelqu'un qui n'y a pas participé.
+  async function filtrerQuestionnairesConcernes(questionnaires) {
+    if (!questionnaires.some((q) => q.reserveAtelier)) return questionnaires;
+    let ateliers = [];
+    try {
+      const snap = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
+      ateliers = snap.docs.map((d) => d.data());
+    } catch (_) {
+      ateliers = [];
+    }
+    const estRetenu = (motif) => {
+      const m = String(motif || '').toLowerCase();
+      return ateliers.some(
+        (a) =>
+          (a.nom || '').toLowerCase().includes(m) &&
+          (a.retenus || []).some((r) => r.participantId === uid),
+      );
+    };
+    return questionnaires.filter((q) => !q.reserveAtelier || estRetenu(q.reserveAtelier));
+  }
+
   async function vueQuestionnaires() {
     let questionnaires = [];
     try {
@@ -1587,6 +1623,7 @@
       questionnaires = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((q) => !q.audience || q.audience === 'tous' || q.audience === profil.type);
+      questionnaires = await filtrerQuestionnairesConcernes(questionnaires);
     } catch (_) {
       questionnaires = [];
     }

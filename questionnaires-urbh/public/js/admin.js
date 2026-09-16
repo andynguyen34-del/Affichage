@@ -96,6 +96,16 @@
     return resultat;
   }
 
+  // Questionnaires d'atelier « réservés aux retenus » : chaque modèle porte
+  // un motif recherché dans le NOM des ateliers — seuls les participants
+  // retenus pour un atelier correspondant sont questionnés (et comptés dans
+  // la condition « questionnaires répondus » de la tombola).
+  const MOTIFS_ATELIERS = {
+    atelier_ia: 'au service des blanchisseries',
+    atelier_maintenance: 'gestion de la maintenance',
+    atelier_rabc: 'RABC',
+  };
+
   // Moments de pointage (émargement) : ils conditionnent la participation à
   // la tombola de clôture — mêmes clés que sur le portail participants.
   const MOMENTS_POINTAGE = [
@@ -671,6 +681,23 @@
     const questionnaires = snapQ.docs.map((d) => ({ id: d.id, ...d.data() }));
     questionnaires.sort((a, b) => (a.creeLe && b.creeLe ? a.creeLe.seconds - b.creeLe.seconds : 0));
 
+    // Complétion automatique : les questionnaires d'atelier créés avant que
+    // la restriction « réservé aux retenus » existe reçoivent leur motif.
+    for (const [cle, motif] of Object.entries(MOTIFS_ATELIERS)) {
+      const modele = window.MODELES && MODELES[cle];
+      if (!modele) continue;
+      for (const q of questionnaires) {
+        if (q.titre && q.titre.startsWith(modele.titre) && q.reserveAtelier !== motif) {
+          try {
+            await db.collection('questionnaires').doc(q.id).update({ reserveAtelier: motif });
+            q.reserveAtelier = motif;
+          } catch (_) {
+            /* sans gravité : retenté à la prochaine ouverture */
+          }
+        }
+      }
+    }
+
     // Vitrine publique (portail) : créée à la volée pour les journées antérieures.
     const refPortail = db.collection('portails').doc(journeeId);
     let portailDoc = await refPortail.get();
@@ -832,8 +859,25 @@
       const snapR = await db.collection('reponses').where('questionnaireId', '==', q.id).get();
       repondantsParQuestionnaire[q.id] = new Set(snapR.docs.map((d) => d.data().participantId));
     }
+    // Un questionnaire d'atelier (reserveAtelier) n'est exigé que des
+    // participants RETENUS pour un atelier correspondant.
+    const retenusParQuestionnaire = {};
+    questionnairesTombola.forEach((q) => {
+      if (!q.reserveAtelier) return;
+      const motif = String(q.reserveAtelier).toLowerCase();
+      const ids = new Set();
+      ateliers.forEach((a) => {
+        if ((a.nom || '').toLowerCase().includes(motif)) {
+          (a.retenus || []).forEach((r) => ids.add(r.participantId));
+        }
+      });
+      retenusParQuestionnaire[q.id] = ids;
+    });
     const aRepondu = (participantId) =>
-      questionnairesTombola.every((q) => repondantsParQuestionnaire[q.id].has(participantId));
+      questionnairesTombola.every((q) => {
+        if (q.reserveAtelier && !retenusParQuestionnaire[q.id].has(participantId)) return true;
+        return repondantsParQuestionnaire[q.id].has(participantId);
+      });
     // Les membres du Conseil d'Administration (liste des N° d'inscription
     // tenue dans la carte Tombola) ne peuvent pas gagner à la tombola.
     const exclusCA = new Set(
@@ -1444,7 +1488,11 @@
                     <a class="titre-item" href="#/questionnaire/${q.id}">${echapper(q.titre)}</a>
                     ${badgeStatut(q.statut)}
                     <div class="muet">${(q.questions || []).length} questions —
-                      ${q.audience === 'visiteur' ? 'visiteurs' : q.audience === 'exposant' ? 'exposants' : 'tous les inscrits'}</div>
+                      ${q.audience === 'visiteur' ? 'visiteurs' : q.audience === 'exposant' ? 'exposants' : 'tous les inscrits'}${
+                        q.reserveAtelier
+                          ? ' — <strong>réservé aux retenus de l\'atelier</strong> (« ' + echapper(q.reserveAtelier) + ' »)'
+                          : ''
+                      }</div>
                   </div>
                   <div class="pousse">
                     <a class="btn secondaire" href="#/questionnaire/${q.id}">Ouvrir</a>
@@ -2736,6 +2784,8 @@
           titre: modele.titre + ' — ' + journee.titre,
           statut: 'brouillon',
           audience,
+          // Questionnaire d'atelier : réservé aux retenus de cet atelier.
+          reserveAtelier: MOTIFS_ATELIERS[cle] || '',
           questions: JSON.parse(JSON.stringify(modele.questions)),
           creeLe: firebase.firestore.FieldValue.serverTimestamp(),
         });

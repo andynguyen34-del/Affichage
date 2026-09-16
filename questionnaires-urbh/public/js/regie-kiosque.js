@@ -266,7 +266,29 @@
       const snapR = await db.collection('reponses').where('questionnaireId', '==', q.id).get();
       repondants[q.id] = new Set(snapR.docs.map((d) => d.data().participantId));
     }
-    const aRepondu = (id) => questionnaires.every((q) => repondants[q.id].has(id));
+    // Questionnaires d'atelier : exigés seulement des retenus (même règle
+    // que l'administration).
+    const retenusParQuestionnaire = {};
+    if (questionnaires.some((q) => q.reserveAtelier)) {
+      const snapA = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
+      const ateliers = snapA.docs.map((d) => d.data());
+      questionnaires.forEach((q) => {
+        if (!q.reserveAtelier) return;
+        const motif = String(q.reserveAtelier).toLowerCase();
+        const ids = new Set();
+        ateliers.forEach((a) => {
+          if ((a.nom || '').toLowerCase().includes(motif)) {
+            (a.retenus || []).forEach((r) => ids.add(r.participantId));
+          }
+        });
+        retenusParQuestionnaire[q.id] = ids;
+      });
+    }
+    const aRepondu = (id) =>
+      questionnaires.every((q) => {
+        if (q.reserveAtelier && !retenusParQuestionnaire[q.id].has(id)) return true;
+        return repondants[q.id].has(id);
+      });
     const exclusCA = new Set(
       ((portail.tombola && portail.tombola.exclusCA) || []).map(normaliserNumero),
     );
