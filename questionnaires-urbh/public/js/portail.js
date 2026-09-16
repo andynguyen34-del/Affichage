@@ -230,6 +230,10 @@
         automatiquement.</p>
         ${erreur ? `<div class="erreur">${echapper(erreur)}</div>` : ''}
         <form id="form-profil">
+          <label class="champ">N° d'inscription *
+            <input id="p-numero" required maxlength="20" autocomplete="off"
+              placeholder="Sur la carte remise à l'accueil"></label>
+          <div id="p-numero-etat" class="muet petit" style="margin:-0.5rem 0 0.8rem"></div>
           <div class="question">
             <div class="libelle">Vous êtes… <span class="obligatoire">*</span></div>
             <div class="ouinon">
@@ -245,10 +249,6 @@
             <input id="p-nom" required autocomplete="family-name"></label>
           <label class="champ">Établissement / société
             <input id="p-organisme" autocomplete="organization"></label>
-          <label class="champ">N° d'inscription *
-            <input id="p-numero" required maxlength="20" autocomplete="off"
-              placeholder="Sur la carte remise à l'accueil"></label>
-          <div id="p-numero-etat" class="muet petit" style="margin:-0.5rem 0 0.8rem"></div>
           <label class="champ">Mobile *
             <input id="p-mobile" type="tel" required autocomplete="tel"
               placeholder="06 12 34 56 78"

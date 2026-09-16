@@ -199,6 +199,43 @@
     return journees;
   }
 
+  // Purge COMPLÈTE des traces d'une session participant : fiche(s)
+  // d'inscription, participation au tirage, vœux, pointages, visites,
+  // évaluations en direct, désistements, profil d'appareil, et retrait des
+  // listes d'ateliers. Les réponses aux questionnaires ne sont supprimées
+  // que sur demande (garderReponses=false) : anonymes, elles portent les
+  // statistiques Qualiopi.
+  async function purgerParticipant(uidCible, garderReponses) {
+    const aSupprimer = [];
+    const collections = [
+      'inscriptions', 'tirage', 'voeux', 'pointages', 'visites',
+      'desistements', 'evaluationsDirect',
+    ];
+    if (!garderReponses) collections.push('reponses');
+    for (const col of collections) {
+      const snap = await db.collection(col).where('participantId', '==', uidCible).get();
+      snap.docs.forEach((d) => aSupprimer.push(d.ref));
+    }
+    aSupprimer.push(db.collection('participants').doc(uidCible));
+    for (let i = 0; i < aSupprimer.length; i += 400) {
+      const lot = db.batch();
+      aSupprimer.slice(i, i + 400).forEach((ref) => lot.delete(ref));
+      await lot.commit();
+    }
+    // Retrait des listes de retenus / d'attente des ateliers.
+    const snapAt = await db.collection('ateliers').get();
+    for (const d of snapAt.docs) {
+      const a = d.data();
+      const concerne = (l) => (l || []).some((r) => r.participantId === uidCible);
+      if (concerne(a.retenus) || concerne(a.listeAttente)) {
+        await d.ref.update({
+          retenus: (a.retenus || []).filter((r) => r.participantId !== uidCible),
+          listeAttente: (a.listeAttente || []).filter((r) => r.participantId !== uidCible),
+        });
+      }
+    }
+  }
+
   // Anonymisation d'un participant (droit à l'effacement) : efface l'identité
   // dans toutes les collections, retire sa fiche de l'annuaire, puis marque la
   // demande « traitée » — le participant voit la confirmation dans son app.
@@ -401,7 +438,8 @@
                     <div class="pousse">
                       ${
                         d.statut === 'traitee'
-                          ? '<span class="badge ouvert">✅ traitée</span>'
+                          ? `<span class="badge ouvert">✅ traitée</span>
+                            <button class="discret bouton-supprimer-anonymise" data-id="${attr(d.id)}">Supprimer</button>`
                           : `<button class="danger bouton-anonymiser" data-id="${attr(d.id)}">Anonymiser et confirmer</button>`
                       }
                     </div>
@@ -515,6 +553,28 @@
       });
       location.hash = '#/journee/' + doc.id;
     });
+
+    // Suppression d'un compte anonymisé : la demande traitée disparaît de la
+    // liste, et les traces restantes (fiches « Anonymisé », pointages, vœux…)
+    // sont purgées. Les réponses aux questionnaires, anonymes, sont
+    // conservées pour les statistiques Qualiopi.
+    document.querySelectorAll('.bouton-supprimer-anonymise').forEach((b) =>
+      b.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Supprimer ce compte anonymisé ?\n\nLa demande traitée et toutes les ' +
+              'traces restantes disparaissent (les réponses anonymes aux ' +
+              'questionnaires sont conservées pour les statistiques).',
+          )
+        ) {
+          return;
+        }
+        b.disabled = true;
+        await purgerParticipant(b.dataset.id, true);
+        await db.collection('demandesAnonymisation').doc(b.dataset.id).delete();
+        router();
+      }),
+    );
 
     document.querySelectorAll('.bouton-anonymiser').forEach((b) =>
       b.addEventListener('click', async () => {
@@ -1990,23 +2050,18 @@
         const i = inscriptions.find((x) => x.id === b.dataset.id);
         if (
           !confirm(
-            `Supprimer l'entrée « ${i ? i.prenom + ' ' + i.nom : ''} » de la liste des inscrits ?\n\n` +
-              'Le profil enregistré sur son appareil est aussi effacé : la personne ' +
-              'devra se représenter, avec un numéro de carte reconnu dans l’annuaire.',
+            `Supprimer « ${i ? i.prenom + ' ' + i.nom : ''} » ?\n\n` +
+              'TOUTES ses traces disparaissent : inscription, tirage, vœux et places ' +
+              'd’ateliers, pointages, visites de stands, évaluations, réponses aux ' +
+              'questionnaires, et le profil de son appareil. La personne devra se ' +
+              'représenter, avec un numéro de carte reconnu dans l’annuaire.',
           )
         ) {
           return;
         }
+        b.disabled = true;
         await db.collection('inscriptions').doc(b.dataset.id).delete();
-        // Sans cette purge, l'appareil recréait la fiche à sa prochaine
-        // ouverture du portail à partir du profil conservé localement.
-        if (i && i.participantId) {
-          try {
-            await db.collection('participants').doc(i.participantId).delete();
-          } catch (_) {
-            /* profil déjà absent */
-          }
-        }
+        if (i && i.participantId) await purgerParticipant(i.participantId, false);
         router();
       }),
     );
