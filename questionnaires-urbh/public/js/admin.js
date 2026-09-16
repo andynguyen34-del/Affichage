@@ -919,8 +919,22 @@
         }
       })
       .filter(Boolean)
-      .sort((a, b) => a.debut - b.debut)
+      // Les lignes génériques « Ateliers … » du programme sont remplacées
+      // par une évaluation PAR ATELIER, réservée à ses retenus (ci-dessous).
+      .filter((e) => !/^ateliers?\b/i.test(e.titre))
       .map((e) => ({ ...e, id: idEvaluationProgramme(e) }));
+    ateliers.forEach((a) => {
+      if (!a.debutLe) return;
+      const debut = a.debutLe.toDate();
+      evenementsEval.push({
+        id: 'evat_' + a.id,
+        titre: `Atelier${a.salle ? ' ' + a.salle : ''} — ${a.nom || ''}`,
+        debut,
+        fin: new Date(debut.getTime() + 45 * 60000),
+        reserveRetenus: (a.retenus || []).length,
+      });
+    });
+    evenementsEval.sort((a, b) => a.debut - b.debut);
     const snapEval = await db
       .collection('evaluationsDirect')
       .where('journeeId', '==', journeeId)
@@ -1060,8 +1074,10 @@
         <p class="muet petit">Chaque événement du programme devient évaluable
         sur l'accueil des participants <strong>dès qu'il est terminé</strong> :
         5 étoiles obligatoires + commentaire facultatif, une question à la
-        fois — il faut répondre pour passer à la suivante. Excluez ici les
-        événements à ne pas évaluer (pauses, repas…). Le questionnaire de
+        fois — il faut répondre pour passer à la suivante. Les
+        <strong>ateliers sont évalués individuellement, uniquement par leurs
+        retenus</strong>, 45 minutes après le début de la séance. Excluez ici
+        les événements à ne pas évaluer (pauses, repas…). Le questionnaire de
         satisfaction reste en place pour les questions générales.</p>
         ${
           evenementsEval.length
@@ -1088,7 +1104,11 @@
                             : '<span class="badge brouillon">à venir</span>'
                       }
                       <div class="muet petit">${fmtHorodatage(e.debut)} —
-                        ${reponses.length} avis${
+                        ${
+                          e.reserveRetenus !== undefined
+                            ? `réservé aux retenus de l'atelier (${e.reserveRetenus}) — `
+                            : ''
+                        }${reponses.length} avis${
                           moyenne !== null ? ` — moyenne <strong>${moyenne.toFixed(1)} ★</strong>` : ''
                         }</div>
                       ${

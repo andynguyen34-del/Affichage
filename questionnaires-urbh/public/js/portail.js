@@ -706,13 +706,38 @@
     return 'ev' + Math.floor(e.debut.getTime() / 1000) + '_' + slug;
   }
 
-  function evaluationsAttendues() {
+  // Durée type d'un atelier : son évaluation s'ouvre ce délai après l'heure
+  // de début (les ateliers n'ont pas d'heure de fin propre).
+  const DUREE_ATELIER_MIN = 45;
+
+  async function evaluationsAttendues() {
     const exclues = new Set((portail && portail.evaluationsExclues) || []);
     const t = maintenant();
-    return programmeTrie()
+    // Les lignes génériques « Ateliers … » du programme ne sont pas
+    // évaluées ici : chaque atelier a sa propre question, réservée à ses
+    // RETENUS (ci-dessous).
+    const attendues = programmeTrie()
       .filter((e) => (e.fin || e.debut) <= t)
-      .map((e) => ({ ...e, id: idEvaluation(e) }))
-      .filter((e) => !exclues.has(e.id));
+      .filter((e) => !/^ateliers?\b/i.test(e.titre || ''))
+      .map((e) => ({ ...e, id: idEvaluation(e) }));
+    try {
+      const snap = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
+      snap.docs.forEach((d) => {
+        const a = d.data();
+        if (!a.debutLe || !(a.retenus || []).some((r) => r.participantId === uid)) return;
+        const debut = a.debutLe.toDate();
+        if (t < new Date(debut.getTime() + DUREE_ATELIER_MIN * 60000)) return;
+        attendues.push({
+          id: 'evat_' + d.id,
+          titre: `Atelier${a.salle ? ' ' + a.salle : ''} — ${a.nom || ''}`,
+          debut,
+        });
+      });
+    } catch (_) {
+      /* ateliers indisponibles : les autres évaluations restent proposées */
+    }
+    attendues.sort((a, b) => a.debut - b.debut);
+    return attendues.filter((e) => !exclues.has(e.id));
   }
 
   // Réponses déjà envoyées, mémorisées sur l'appareil pour éviter de
@@ -737,7 +762,7 @@
   async function chargerEvaluationDirecte() {
     const zone = document.getElementById('carte-evaluation');
     if (!zone) return;
-    const attendues = evaluationsAttendues();
+    const attendues = await evaluationsAttendues();
     if (!attendues.length) {
       zone.innerHTML = '';
       return;
