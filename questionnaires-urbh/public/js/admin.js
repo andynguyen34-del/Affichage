@@ -1543,7 +1543,14 @@
             ? `<div class="ligne-boutons">
                 <button id="bouton-imprimer-qr-stands" class="secondaire">🖨️ Imprimer les QR des stands</button>
                 <button id="bouton-csv-visites" class="secondaire" ${visitesJ.length ? '' : 'disabled'}>Exporter tous les passages (CSV)</button>
+                <button id="bouton-rz-visites" class="danger" ${visitesJ.length ? '' : 'disabled'}>
+                  🧹 Remettre à zéro les passages (${visitesJ.length})
+                </button>
               </div>
+              <p class="muet petit">« Remettre à zéro » efface tous les
+              passages enregistrés — à faire une fois avant l'ouverture des
+              JE pour repartir sans les essais. Pensez à exporter le CSV
+              d'abord si vous voulez en garder une trace.</p>
               <ul class="liste">${fournisseursJ
                 .map(
                   (f) => `<li>
@@ -2752,6 +2759,30 @@
       a.download = fichier;
       a.click();
       URL.revokeObjectURL(a.href);
+    }
+
+    // Remise à zéro des passages sur les stands (avant l'ouverture des JE :
+    // efface les essais pour repartir d'un compteur propre).
+    const boutonRzVisites = document.getElementById('bouton-rz-visites');
+    if (boutonRzVisites) {
+      boutonRzVisites.addEventListener('click', async () => {
+        if (
+          !confirm(
+            `Effacer définitivement les ${visitesJ.length} passage(s) enregistré(s) sur les stands ?\n\n` +
+              'À faire avant l’ouverture des JE pour repartir de zéro. ' +
+              'Exportez le CSV d’abord si vous voulez en garder une trace.',
+          )
+        ) {
+          return;
+        }
+        boutonRzVisites.disabled = true;
+        for (let i = 0; i < visitesJ.length; i += 400) {
+          const lot = db.batch();
+          visitesJ.slice(i, i + 400).forEach((v) => lot.delete(db.collection('visites').doc(v.id)));
+          await lot.commit();
+        }
+        router();
+      });
     }
 
     const boutonCsvVisites = document.getElementById('bouton-csv-visites');
