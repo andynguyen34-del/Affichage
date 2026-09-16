@@ -291,6 +291,7 @@
             participantId: uid,
             nom: profil.nom || '',
             prenom: profil.prenom || '',
+            numeroInscription: profil.numeroInscription || '',
             demandeLe: new Date().toISOString(),
             statut: 'en_attente',
           });

@@ -285,9 +285,25 @@
     const journees = await chargerJournees();
     const snapDa = await db.collection('demandesAnonymisation').get();
     const demandes = snapDa.docs.map((d) => ({ id: d.id, ...d.data() }));
-    // Rattrapage : les demandes traitées par une ancienne version gardaient
-    // le nom du demandeur — on les anonymise ici au passage.
+    // Rattrapages : les demandes traitées par une ancienne version gardaient
+    // le nom du demandeur (anonymisé ici au passage), et les demandes créées
+    // avant la v42 ne portaient pas le n° de carte (récupéré sur le profil).
     for (const d of demandes) {
+      if (!d.numeroInscription) {
+        try {
+          const p = await db.collection('participants').doc(d.id).get();
+          const numero = p.exists ? p.data().numeroInscription || '' : '';
+          if (numero) {
+            await db
+              .collection('demandesAnonymisation')
+              .doc(d.id)
+              .update({ numeroInscription: numero });
+            d.numeroInscription = numero;
+          }
+        } catch (_) {
+          /* profil absent : la ligne s'affiche sans numéro */
+        }
+      }
       if (d.statut === 'traitee' && d.nom && d.nom !== 'Anonymisé') {
         try {
           await db
@@ -369,7 +385,7 @@
                   (d) => `<li>
                     <div>
                       <span class="titre-item">${echapper(d.prenom || '')} ${echapper(d.nom || '')}</span>
-                      <div class="muet petit">demandé le ${d.demandeLe ? new Date(d.demandeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '?'}
+                      <div class="muet petit">${d.numeroInscription ? `Carte n° ${echapper(d.numeroInscription)} — ` : ''}demandé le ${d.demandeLe ? new Date(d.demandeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '?'}
                         ${d.statut === 'traitee' ? ` — traité le ${d.traiteLe ? new Date(d.traiteLe).toLocaleDateString('fr-FR') : ''}` : ''}</div>
                     </div>
                     <div class="pousse">
