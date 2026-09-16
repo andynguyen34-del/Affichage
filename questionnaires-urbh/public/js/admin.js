@@ -3769,11 +3769,17 @@
         window.navigator.standalone === true) &&
       !location.hostname.endsWith('.web.app');
 
-    // Le bouton est TOUJOURS visible sinon : l'installation automatique
-    // (beforeinstallprompt) ne se déclenche pas partout — jamais sur iPhone,
-    // et jamais quand l'application bleue du même site est déjà installée.
-    // À défaut, le bouton guide vers la solution.
-    $installer.hidden = estConsoleInstallee();
+    // Le bouton reste TOUJOURS visible (il est affiché d'office dans la
+    // page) : dans la console installée il devient simplement « ✓ Installée »
+    // au lieu de disparaître — un bouton qui s'évapore déroute.
+    function majBoutonInstallation() {
+      if (estConsoleInstallee()) {
+        $installer.textContent = '✓ Installée';
+        $installer.disabled = true;
+        $installer.title = "La console est déjà installée sur cet appareil.";
+      }
+    }
+    majBoutonInstallation();
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -3824,7 +3830,10 @@
         promptInstallation.prompt();
         try {
           const choix = await promptInstallation.userChoice;
-          if (choix && choix.outcome === 'accepted') $installer.hidden = true;
+          if (choix && choix.outcome === 'accepted') {
+            $installer.textContent = '✓ Installée';
+            $installer.disabled = true;
+          }
         } catch (_) {
           /* fenêtre fermée : le bouton reste disponible */
         }
@@ -3922,7 +3931,8 @@
       afficherGuide("Installer la console d'administration", corps);
     });
     window.addEventListener('appinstalled', () => {
-      $installer.hidden = true;
+      $installer.textContent = '✓ Installée';
+      $installer.disabled = true;
     });
   }
 })();
