@@ -1918,27 +1918,48 @@
     else vueMenu();
   }
 
-  // Barre de simulation (?simu=1) : ◀ ▶ fait défiler les phases de la
-  // journée par rapport à la période d'AG paramétrée. Réservée à la mise au
-  // point : seul l'affichage est décalé, pas l'heure des enregistrements.
-  const PHASES_SIMU = ['⏱️ Temps réel', "Avant l'AG", "Pendant l'AG", "Après l'AG"];
+  // Barre de simulation (?simu=1) : ◀ ▶ fait défiler TOUT le déroulé des
+  // journées, événement du programme par événement — chaque étape place
+  // l'heure simulée juste APRÈS l'événement, ce qui fait apparaître sa
+  // question d'évaluation en direct (et l'état « en ce moment / à suivre »
+  // du bandeau). Réservée à la mise au point : seul l'affichage est décalé,
+  // pas l'heure des enregistrements.
   let phaseSimu = 0;
 
-  function appliquerPhaseSimu() {
+  function phasesSimu() {
+    const phases = [{ libelle: '⏱️ Temps réel', cible: null }];
     const ag = periodeAG();
-    let cible = null;
+    const reperes = [];
     if (ag) {
-      if (phaseSimu === 1) cible = ag.debut.getTime() - 30 * 60000;
-      if (phaseSimu === 2) cible = (ag.debut.getTime() + ag.fin.getTime()) / 2;
-      if (phaseSimu === 3) cible = ag.fin.getTime() + 30 * 60000;
+      reperes.push({ libelle: "Avant l'AG", cible: ag.debut.getTime() - 30 * 60000 });
+      reperes.push({ libelle: "Pendant l'AG", cible: (ag.debut.getTime() + ag.fin.getTime()) / 2 });
     }
-    decalageSimu = cible == null ? 0 : cible - Date.now();
+    programmeTrie().forEach((e) => {
+      reperes.push({
+        libelle: `Après ${fmtHeureCourte(e.fin || e.debut)} — ${e.titre}`,
+        // 46 minutes après le début : couvre aussi les ateliers de ce
+        // créneau (évaluables 45 min après leur début).
+        cible: Math.max(
+          (e.fin || e.debut).getTime() + 2 * 60000,
+          e.debut.getTime() + 46 * 60000,
+        ),
+      });
+    });
+    reperes.sort((a, b) => a.cible - b.cible);
+    return phases.concat(
+      reperes.length
+        ? reperes
+        : [{ libelle: 'Programme vide — créez-le dans l’administration', cible: null }],
+    );
+  }
+
+  function appliquerPhaseSimu() {
+    const phases = phasesSimu();
+    if (phaseSimu >= phases.length) phaseSimu = 0;
+    const phase = phases[phaseSimu];
+    decalageSimu = phase.cible == null ? 0 : phase.cible - Date.now();
     const zone = document.getElementById('simu-phase');
-    if (zone) {
-      zone.textContent =
-        PHASES_SIMU[phaseSimu] +
-        (phaseSimu && !ag ? " (période d'AG non paramétrée)" : '');
-    }
+    if (zone) zone.textContent = `${phaseSimu}/${phases.length - 1} · ${phase.libelle}`;
     if (profil && !standDemande) vueMenu();
   }
 
@@ -1949,20 +1970,21 @@
     barre.style.cssText =
       'position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;' +
       'justify-content:center;gap:0.6rem;padding:0.45rem 0.6rem;background:#1d4e89;color:#fff;' +
-      'font-size:0.85rem;box-shadow:0 -2px 8px rgba(0,0,0,0.25)';
+      'font-size:0.8rem;box-shadow:0 -2px 8px rgba(0,0,0,0.25)';
     barre.innerHTML = `
       <span>🧪 Simulation</span>
       <button id="simu-prec" style="font:inherit;padding:0.15rem 0.7rem;border-radius:6px;border:none;cursor:pointer">◀</button>
-      <strong id="simu-phase" style="min-width:11rem;text-align:center">${PHASES_SIMU[0]}</strong>
+      <strong id="simu-phase" style="flex:1;max-width:24rem;text-align:center;line-height:1.2">⏱️ Temps réel</strong>
       <button id="simu-suiv" style="font:inherit;padding:0.15rem 0.7rem;border-radius:6px;border:none;cursor:pointer">▶</button>`;
     document.body.appendChild(barre);
-    document.body.style.paddingBottom = '3.2rem';
+    document.body.style.paddingBottom = '3.6rem';
     document.getElementById('simu-prec').addEventListener('click', () => {
-      phaseSimu = (phaseSimu + PHASES_SIMU.length - 1) % PHASES_SIMU.length;
+      const nb = phasesSimu().length;
+      phaseSimu = (phaseSimu + nb - 1) % nb;
       appliquerPhaseSimu();
     });
     document.getElementById('simu-suiv').addEventListener('click', () => {
-      phaseSimu = (phaseSimu + 1) % PHASES_SIMU.length;
+      phaseSimu = (phaseSimu + 1) % phasesSimu().length;
       appliquerPhaseSimu();
     });
   }
