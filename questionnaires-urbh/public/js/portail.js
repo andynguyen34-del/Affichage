@@ -572,12 +572,50 @@
   // Caméra du scanner de QR de stand : coupée dès qu'on change d'écran.
   let arreterScanner = null;
 
-  function aller(vue) {
+  function afficherVue(vue) {
     if (arreterScanner) arreterScanner();
     vueCourante = vue;
     window.scrollTo(0, 0);
     vueMenu();
   }
+
+  // Le bouton « retour » du téléphone (ou du navigateur) doit RAMENER À
+  // L'ACCUEIL, pas fermer l'application : chaque sous-écran pose une étape
+  // dans l'historique du navigateur (une seule, remplacée quand on passe
+  // d'un sous-écran à un autre). « Retour » dépile cette étape → accueil ;
+  // un second « retour », depuis l'accueil, quitte normalement.
+  let etapeEmpilee = false;
+
+  function aller(vue) {
+    if (vue === 'accueil') {
+      if (etapeEmpilee) {
+        try {
+          history.back(); // le popstate ci-dessous affiche l'accueil
+          return;
+        } catch (_) {
+          /* repli direct */
+        }
+      }
+      afficherVue('accueil');
+      return;
+    }
+    try {
+      if (etapeEmpilee) {
+        history.replaceState({ vue }, '', location.href);
+      } else {
+        history.pushState({ vue }, '', location.href);
+        etapeEmpilee = true;
+      }
+    } catch (_) {
+      /* historique indisponible : la navigation fonctionne quand même */
+    }
+    afficherVue(vue);
+  }
+
+  window.addEventListener('popstate', (evt) => {
+    etapeEmpilee = !!(evt.state && evt.state.vue);
+    afficherVue(evt.state && evt.state.vue ? evt.state.vue : 'accueil');
+  });
 
   // Bandeau de retour affiché en tête de chaque écran outil.
   function barreRetour(titre) {
