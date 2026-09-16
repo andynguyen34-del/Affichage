@@ -3779,6 +3779,46 @@
       e.preventDefault();
       promptInstallation = e;
     });
+    // Panneau d'aide affiché DANS la page : contrairement à alert()/confirm(),
+    // il ne peut pas être bloqué par le navigateur (Safari coupe les alertes
+    // répétées), et il reste lisible et cliquable sur téléphone.
+    function afficherGuide(titre, corpsHtml, boutons) {
+      const ancien = document.getElementById('guide-installation');
+      if (ancien) ancien.remove();
+      const voile = document.createElement('div');
+      voile.id = 'guide-installation';
+      voile.style.cssText =
+        'position:fixed;inset:0;z-index:100;background:rgba(15,23,42,0.55);' +
+        'display:flex;align-items:flex-end;justify-content:center;';
+      const panneau = document.createElement('div');
+      panneau.style.cssText =
+        'background:#fff;color:#1f2937;border-radius:16px 16px 0 0;' +
+        'padding:1.2rem 1.2rem calc(1.2rem + env(safe-area-inset-bottom,0px));' +
+        'max-width:460px;width:100%;box-shadow:0 -8px 30px rgba(0,0,0,0.3);' +
+        'max-height:80vh;overflow:auto';
+      panneau.innerHTML =
+        `<h3 style="margin:0 0 0.6rem;font-size:1.05rem">${titre}</h3>` + corpsHtml;
+      const ligne = document.createElement('div');
+      ligne.style.cssText = 'display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.9rem';
+      (boutons || [{ libelle: "J'ai compris" }]).forEach((b) => {
+        const bouton = document.createElement('button');
+        bouton.textContent = b.libelle;
+        bouton.style.cssText = 'flex:1;min-width:9rem' + (b.secondaire ? ';background:#fff;color:#1d4e89' : '');
+        if (b.secondaire) bouton.className = 'secondaire';
+        bouton.addEventListener('click', () => {
+          voile.remove();
+          if (b.action) b.action();
+        });
+        ligne.append(bouton);
+      });
+      panneau.append(ligne);
+      voile.append(panneau);
+      voile.addEventListener('click', (e2) => {
+        if (e2.target === voile) voile.remove();
+      });
+      document.body.append(voile);
+    }
+
     $installer.addEventListener('click', async () => {
       if (promptInstallation) {
         promptInstallation.prompt();
@@ -3791,89 +3831,95 @@
         promptInstallation = null;
         return;
       }
-      // Pas de proposition automatique. Cause la plus fréquente : le
-      // navigateur croit l'application déjà installée, car l'application
-      // BLEUE des participants couvre tout le site (y compris cette page).
-      // Firebase publie le même site sur une adresse JUMELLE
-      // (…firebaseapp.com), vue comme un site distinct : l'installation y
-      // redevient possible — même console, mêmes données.
+
+      // iPhone et iPad (l'iPad se présente comme un Mac, on le repère au
+      // tactile) : l'ajout à l'écran d'accueil marche depuis N'IMPORTE
+      // QUELLE adresse — pas besoin de la bascule vers l'adresse jumelle.
+      const surIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+      if (surIOS) {
+        afficherGuide(
+          'Installer sur iPhone / iPad',
+          `<p style="margin:0 0 0.8rem;font-size:0.88rem;color:#4b5563">Apple ne
+            permet pas l'installation automatique — trois gestes suffisent,
+            depuis Safari :</p>
+          <ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+            <li>Touchez <strong>Partager</strong>
+              <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
+                border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
+              — barre du bas de Safari (en haut à droite sur iPad) ;</li>
+            <li>faites défiler puis <strong>« Sur l'écran d'accueil »</strong> ;</li>
+            <li><strong>Ajouter</strong> : l'icône rouge <strong>URBH ADMIN</strong>
+              apparaît sur l'écran d'accueil.</li>
+          </ol>
+          <p style="margin:0.8rem 0 0;font-size:0.8rem;color:#6b7280">Si « Sur
+            l'écran d'accueil » n'apparaît pas, ouvrez d'abord cette page dans
+            Safari lui-même (pas dans le navigateur intégré d'une autre
+            application).</p>
+          <div style="text-align:center;font-size:1.5rem;margin-top:0.4rem">⬇️</div>`,
+        );
+        return;
+      }
+
+      // Ailleurs, quand rien n'est proposé automatiquement : la cause la
+      // plus fréquente est l'application BLEUE déjà installée, qui couvre
+      // tout le site web.app. L'adresse jumelle …firebaseapp.com est vue
+      // comme un site distinct : l'installation y redevient possible.
       const hote = location.hostname;
       if (hote.endsWith('.web.app')) {
         const jumelle = hote.replace(/\.web\.app$/, '.firebaseapp.com');
-        if (
-          confirm(
-            "Le navigateur ne propose pas l'installation sur cette adresse " +
-              "(l'application bleue des participants couvre déjà ce site).\n\n" +
-              'Ouvrir la console sur son adresse jumelle\n' +
-              jumelle +
-              "\npour l'installer ? (même administration, mêmes données — " +
-              'reconnectez-vous une fois sur place)',
-          )
-        ) {
-          location.href = 'https://' + jumelle + '/index.html';
-        }
+        afficherGuide(
+          "Installer la console d'administration",
+          `<p style="margin:0;font-size:0.9rem;color:#4b5563">Le navigateur ne
+            propose pas l'installation sur cette adresse — l'application bleue
+            des participants couvre déjà ce site. La console s'installe depuis
+            son adresse jumelle <strong>${jumelle}</strong> (même
+            administration, mêmes données — reconnectez-vous une fois sur
+            place).</p>`,
+          [
+            { libelle: "Ouvrir l'adresse jumelle", action: () => { location.href = 'https://' + jumelle + '/index.html'; } },
+            { libelle: 'Annuler', secondaire: true },
+          ],
+        );
         return;
       }
-      // Déjà sur l'adresse jumelle : marche à suivre selon l'appareil.
-      const surIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+      // Déjà sur l'adresse jumelle : marche à suivre selon le navigateur.
       const surAndroid = /Android/.test(navigator.userAgent);
-      if (surIOS) {
-        // Apple n'offre aucune installation automatique : guide visuel
-        // ancré en bas, au-dessus du bouton Partager de Safari.
-        const voile = document.createElement('div');
-        voile.id = 'guide-ios';
-        voile.style.cssText =
-          'position:fixed;inset:0;z-index:100;background:rgba(15,23,42,0.55);' +
-          'display:flex;align-items:flex-end;justify-content:center;';
-        voile.innerHTML = `
-          <div style="background:#fff;color:#1f2937;border-radius:16px 16px 0 0;
-            padding:1.2rem 1.2rem calc(1.2rem + env(safe-area-inset-bottom,0px));
-            max-width:430px;width:100%;box-shadow:0 -8px 30px rgba(0,0,0,0.3)">
-            <h3 style="margin:0 0 0.5rem;font-size:1.05rem">Installer sur iPhone / iPad</h3>
-            <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#4b5563">Apple ne
-              permet pas l'installation automatique — trois gestes suffisent,
-              depuis Safari :</p>
-            <ol style="margin:0 0 0.8rem;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
-              <li>Touchez <strong>Partager</strong>
-                <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
-                  border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
-                — barre du bas de Safari (en haut à droite sur iPad) ;</li>
-              <li>faites défiler puis <strong>« Sur l'écran d'accueil »</strong> ;</li>
-              <li><strong>Ajouter</strong> : l'icône rouge <strong>URBH ADMIN</strong>
-                apparaît sur l'écran d'accueil.</li>
-            </ol>
-            <p style="margin:0 0 0.9rem;font-size:0.8rem;color:#6b7280">Si « Sur
-              l'écran d'accueil » n'apparaît pas, ouvrez d'abord cette page dans
-              Safari lui-même (pas dans le navigateur intégré d'une autre
-              application).</p>
-            <button id="fermer-guide-ios" style="width:100%">J'ai compris</button>
-            <div style="text-align:center;font-size:1.5rem;margin-top:0.4rem">⬇️</div>
-          </div>`;
-        document.body.append(voile);
-        voile.addEventListener('click', (e2) => {
-          if (e2.target === voile || e2.target.id === 'fermer-guide-ios') voile.remove();
-        });
-        return;
-      }
-      let aide;
+      const surSafariMac =
+        /Macintosh/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent) &&
+        !/Chrome|Chromium|Edg/.test(navigator.userAgent);
+      let corps;
       if (surAndroid) {
-        aide =
-          'Sur Android (Chrome) :\n\n' +
-          '1. Ouvrez le menu ⋮ en haut à droite du navigateur.\n' +
-          '2. Choisissez « Installer l’application » (ou « Ajouter à l’écran d’accueil »).\n' +
-          '3. Validez : l’icône rouge « URBH ADMIN » est ajoutée.\n\n' +
-          'Si le menu ne le propose pas, rechargez la page puis réessayez.';
+        corps = `<ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+            <li>Ouvrez le menu <strong>⋮</strong> en haut à droite de Chrome ;</li>
+            <li>choisissez <strong>« Installer l'application »</strong>
+              (ou « Ajouter à l'écran d'accueil ») ;</li>
+            <li>validez : l'icône rouge <strong>URBH ADMIN</strong> est ajoutée.</li>
+          </ol>`;
+      } else if (surSafariMac) {
+        corps = `<ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+            <li>Menu <strong>Fichier</strong> de Safari ;</li>
+            <li>choisissez <strong>« Ajouter au Dock… »</strong> ;</li>
+            <li>validez : la console s'ouvre depuis le Dock comme une application.</li>
+          </ol>
+          <p style="margin:0.8rem 0 0;font-size:0.8rem;color:#6b7280">« Ajouter au
+            Dock » demande macOS Sonoma ou plus récent ; sinon, utilisez Chrome
+            ou Edge pour installer la console.</p>`;
       } else {
-        aide =
-          'Sur ordinateur (Chrome ou Edge) :\n\n' +
-          '1. Regardez à droite de la barre d’adresse : une petite icône ' +
-          'd’installation (écran avec flèche) apparaît — cliquez-la.\n' +
-          '2. Sinon : menu ⋮ (ou …) → « Caster, enregistrer et partager » → ' +
-          '« Installer la page » (Chrome), ou « Applications » → ' +
-          '« Installer ce site en tant qu’application » (Edge).\n\n' +
-          'Si rien n’est proposé, rechargez la page puis réessayez.';
+        corps = `<ol style="margin:0;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+            <li>Regardez à droite de la barre d'adresse : une petite icône
+              d'installation apparaît — cliquez-la ;</li>
+            <li>sinon : menu ⋮ (ou …) → « Caster, enregistrer et partager » →
+              <strong>« Installer la page »</strong> (Chrome), ou
+              « Applications » → <strong>« Installer ce site en tant
+              qu'application »</strong> (Edge).</li>
+          </ol>
+          <p style="margin:0.8rem 0 0;font-size:0.8rem;color:#6b7280">Si rien
+            n'est proposé, rechargez la page puis réessayez.</p>`;
       }
-      alert(aide);
+      afficherGuide("Installer la console d'administration", corps);
     });
     window.addEventListener('appinstalled', () => {
       $installer.hidden = true;
