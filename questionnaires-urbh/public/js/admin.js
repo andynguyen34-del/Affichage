@@ -894,6 +894,44 @@
         aRepondu(p.participantId),
     ));
 
+    // Évaluations en direct : chaque événement du programme devient
+    // évaluable (5 ★ + commentaire) sur l'accueil des participants dès
+    // qu'il est terminé. Même identifiant que le portail (début + titre).
+    const idEvaluationProgramme = (e) => {
+      const slug = String(e.titre || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^A-Za-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40);
+      return 'ev' + Math.floor(e.debut.getTime() / 1000) + '_' + slug;
+    };
+    const evenementsEval = (portail.programme || [])
+      .map((e) => {
+        try {
+          return {
+            titre: e.titre || '',
+            debut: e.debut.toDate(),
+            fin: e.fin ? e.fin.toDate() : null,
+          };
+        } catch (_) {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.debut - b.debut)
+      .map((e) => ({ ...e, id: idEvaluationProgramme(e) }));
+    const snapEval = await db
+      .collection('evaluationsDirect')
+      .where('journeeId', '==', journeeId)
+      .get();
+    const evalsParQuestion = {};
+    snapEval.docs.forEach((d) => {
+      const v = d.data();
+      (evalsParQuestion[v.questionId] = evalsParQuestion[v.questionId] || []).push(v);
+    });
+    const evaluationsExclues = new Set(portail.evaluationsExclues || []);
+
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
     const base = location.origin + location.pathname.replace(/index\.html$/, '');
@@ -1015,6 +1053,63 @@
             <input id="ev-lieu" placeholder="Ex. : Amphithéâtre"></label>
           <button type="submit">Ajouter</button>
         </form>
+      </div>
+
+      <div class="carte">
+        <h2>⭐ Évaluations en direct (au fil du programme)</h2>
+        <p class="muet petit">Chaque événement du programme devient évaluable
+        sur l'accueil des participants <strong>dès qu'il est terminé</strong> :
+        5 étoiles obligatoires + commentaire facultatif, une question à la
+        fois — il faut répondre pour passer à la suivante. Excluez ici les
+        événements à ne pas évaluer (pauses, repas…). Le questionnaire de
+        satisfaction reste en place pour les questions générales.</p>
+        ${
+          evenementsEval.length
+            ? `<ul class="liste">${evenementsEval
+                .map((e) => {
+                  const reponses = evalsParQuestion[e.id] || [];
+                  const notes = reponses.map((r) => Number(r.etoiles) || 0).filter(Boolean);
+                  const moyenne = notes.length
+                    ? notes.reduce((s, n2) => s + n2, 0) / notes.length
+                    : null;
+                  const commentaires = reponses
+                    .map((r) => (r.commentaire || '').trim())
+                    .filter(Boolean);
+                  const exclu = evaluationsExclues.has(e.id);
+                  const fini = (e.fin || e.debut) <= new Date();
+                  return `<li>
+                    <div style="min-width:0">
+                      <span class="titre-item">${echapper(e.titre)}</span>
+                      ${
+                        exclu
+                          ? '<span class="badge ferme">exclu de l\'évaluation</span>'
+                          : fini
+                            ? '<span class="badge ouvert">évaluable</span>'
+                            : '<span class="badge brouillon">à venir</span>'
+                      }
+                      <div class="muet petit">${fmtHorodatage(e.debut)} —
+                        ${reponses.length} avis${
+                          moyenne !== null ? ` — moyenne <strong>${moyenne.toFixed(1)} ★</strong>` : ''
+                        }</div>
+                      ${
+                        commentaires.length
+                          ? `<ul class="verbatims">${commentaires
+                              .map((c) => `<li>💬 ${echapper(c)}</li>`)
+                              .join('')}</ul>`
+                          : ''
+                      }
+                    </div>
+                    <div class="pousse">
+                      <button class="discret bouton-basculer-eval" data-id="${attr(e.id)}">
+                        ${exclu ? 'Réinclure' : 'Exclure'}
+                      </button>
+                    </div>
+                  </li>`;
+                })
+                .join('')}</ul>`
+            : `<p class="muet">Le programme est vide : créez-le ci-dessus, les
+                évaluations en direct suivront automatiquement.</p>`
+        }
       </div>
 
       <div class="carte">
@@ -1660,6 +1755,18 @@
         const i = Number(b.dataset.index);
         if (!confirm('Supprimer cet événement du programme ?')) return;
         await enregistrerProgramme(programmeJ.filter((_, idx) => idx !== i));
+      }),
+    );
+
+    // Exclure / réinclure un événement de l'évaluation en direct.
+    document.querySelectorAll('.bouton-basculer-eval').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const id = b.dataset.id;
+        const nouvelles = evaluationsExclues.has(id)
+          ? [...evaluationsExclues].filter((x) => x !== id)
+          : [...evaluationsExclues, id];
+        await refPortail.update({ evaluationsExclues: nouvelles });
+        router();
       }),
     );
 
@@ -2732,6 +2839,7 @@
         ...visitesJ.map((v) => db.collection('visites').doc(v.id)),
         ...pointagesJ.map((p) => db.collection('pointages').doc(p.id)),
         ...desistementsJ.map((d) => db.collection('desistements').doc(d.id)),
+        ...snapEval.docs.map((d) => d.ref),
         refPortail,
         db.collection('journees').doc(journeeId),
       ];

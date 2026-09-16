@@ -459,3 +459,27 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
 .commentaire-question { margin-top: 0.55rem; }
 .commentaire-question .ouvrir-commentaire { font-size: 0.85rem; padding-left: 0; }
 .commentaire-question .texte-commentaire { width: 100%; min-height: 4.5rem; margin-top: 0.3rem; }
+
+/* Évaluation en direct (accueil du portail) : 5 étoiles + commentaire. */
+.carte-evaluation { border-color: var(--orange); }
+.carte-evaluation h2 { color: var(--orange); margin-bottom: 0.3rem; }
+.etoiles { display: flex; gap: 0.3rem; margin: 0.5rem 0; justify-content: center; }
+.etoiles .etoile {
+  background: none;
+  border: none;
+  font-size: 2.1rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  color: #d8dee8;
+  cursor: pointer;
+}
+.etoiles .etoile.active { color: #f0b23e; }
+.etoiles .etoile:hover, .etoiles .etoile:focus { background: none; color: #f0b23e; }
+.carte-evaluation textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--bord);
+  border-radius: 8px;
+  resize: vertical;
+}

@@ -688,6 +688,138 @@
 
   const fmtHeureCourte = (d) =>
     d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  // ------------------------------------------- évaluation en direct (5 ★)
+  // Chaque événement du programme devient évaluable DÈS QU'IL S'EST DÉROULÉ :
+  // une question à la fois sous les boutons de l'accueil (5 étoiles
+  // obligatoires, commentaire facultatif), et il faut répondre pour passer à
+  // la suivante. Le questionnaire de satisfaction reste pour le général.
+
+  // Identifiant stable d'un événement du programme (heure de début + titre).
+  function idEvaluation(e) {
+    const slug = String(e.titre || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^A-Za-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return 'ev' + Math.floor(e.debut.getTime() / 1000) + '_' + slug;
+  }
+
+  function evaluationsAttendues() {
+    const exclues = new Set((portail && portail.evaluationsExclues) || []);
+    const t = maintenant();
+    return programmeTrie()
+      .filter((e) => (e.fin || e.debut) <= t)
+      .map((e) => ({ ...e, id: idEvaluation(e) }))
+      .filter((e) => !exclues.has(e.id));
+  }
+
+  // Réponses déjà envoyées, mémorisées sur l'appareil pour éviter de
+  // revérifier chaque question en base à chaque retour à l'accueil.
+  function evaluationsRepondues() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('urbh_eval_repondues') || '[]'));
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function marquerEvaluationRepondue(id) {
+    try {
+      const s = [...evaluationsRepondues(), id];
+      localStorage.setItem('urbh_eval_repondues', JSON.stringify(s.slice(-100)));
+    } catch (_) {
+      /* stockage indisponible */
+    }
+  }
+
+  async function chargerEvaluationDirecte() {
+    const zone = document.getElementById('carte-evaluation');
+    if (!zone) return;
+    const attendues = evaluationsAttendues();
+    if (!attendues.length) {
+      zone.innerHTML = '';
+      return;
+    }
+    const connues = evaluationsRepondues();
+    let courante = null;
+    let restantes = 0;
+    for (const e of attendues) {
+      if (connues.has(e.id)) continue;
+      let repondu = false;
+      try {
+        const doc = await db.collection('evaluationsDirect').doc(e.id + '_' + uid).get();
+        repondu = doc.exists;
+      } catch (_) {
+        repondu = false;
+      }
+      if (repondu) {
+        marquerEvaluationRepondue(e.id);
+        continue;
+      }
+      if (!courante) courante = e;
+      restantes += 1;
+    }
+    if (!courante) {
+      zone.innerHTML = `<div class="carte carte-evaluation-ok muet petit" style="text-align:center">
+        ✅ Merci, vous êtes à jour de vos avis en direct !</div>`;
+      return;
+    }
+    zone.innerHTML = `<div class="carte carte-evaluation">
+        <h2>⭐ Votre avis en direct</h2>
+        <p style="margin:0.2rem 0"><strong>${echapper(courante.titre)}</strong>
+          <span class="muet petit">— ${echapper(fmtHeureCourte(courante.debut))}${
+            restantes > 1 ? ` · encore ${restantes} avis en attente` : ''
+          }</span></p>
+        <div class="etoiles" id="eval-etoiles">
+          ${[1, 2, 3, 4, 5]
+            .map((n) => `<button type="button" class="etoile" data-note="${n}" aria-label="${n} étoile${n > 1 ? 's' : ''}">★</button>`)
+            .join('')}
+        </div>
+        <textarea id="eval-commentaire" maxlength="1000" rows="2"
+          placeholder="Commentaire (facultatif) — astuce : dictez-le avec le micro 🎤 du clavier."></textarea>
+        <div class="ligne-boutons">
+          <button id="eval-envoyer" disabled>Envoyer mon avis</button>
+        </div>
+        <div id="eval-erreur" class="erreur" hidden></div>
+      </div>`;
+
+    let note = 0;
+    const etoiles = zone.querySelectorAll('.etoile');
+    const boutonEnvoyer = document.getElementById('eval-envoyer');
+    etoiles.forEach((b) =>
+      b.addEventListener('click', () => {
+        note = Number(b.dataset.note);
+        etoiles.forEach((x) => x.classList.toggle('active', Number(x.dataset.note) <= note));
+        boutonEnvoyer.disabled = false;
+      }),
+    );
+    boutonEnvoyer.addEventListener('click', async () => {
+      if (!note) return;
+      boutonEnvoyer.disabled = true;
+      try {
+        await db
+          .collection('evaluationsDirect')
+          .doc(courante.id + '_' + uid)
+          .set({
+            questionId: courante.id,
+            journeeId,
+            participantId: uid,
+            etoiles: note,
+            commentaire: document.getElementById('eval-commentaire').value.trim().slice(0, 1000),
+            creeLe: new Date().toISOString(),
+          });
+        marquerEvaluationRepondue(courante.id);
+        chargerEvaluationDirecte(); // question suivante, s'il y en a une
+      } catch (e2) {
+        const zoneErreur = document.getElementById('eval-erreur');
+        zoneErreur.textContent = "L'avis n'a pas pu être enregistré. Réessayez." + detailErreur(e2);
+        zoneErreur.hidden = false;
+        boutonEnvoyer.disabled = false;
+      }
+    });
+  }
   const fmtJour = (d) => {
     const t = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -823,6 +955,7 @@
           </button>`,
         ).join('')}
       </div>
+      <div id="carte-evaluation"></div>
       <div id="carte-installation"></div>
       <div class="ligne-boutons" style="justify-content:center;margin-bottom:0.5rem">
         <button id="bouton-quitter" class="secondaire">🚪 Quitter l'application</button>
@@ -835,6 +968,7 @@
 
     majCarteInstallation();
     brancherNavigation();
+    chargerEvaluationDirecte();
 
     document.getElementById('bouton-quitter').addEventListener('click', () => {
       // Fermeture de la fenêtre quand la plateforme l'autorise (application
