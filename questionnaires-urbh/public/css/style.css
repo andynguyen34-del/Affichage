@@ -339,13 +339,18 @@ ul.liste a.btn.secondaire { color: var(--bleu); }
 /* Impression des QR de stands : une page par stand */
 #impression-qr { display: none; }
 @media print {
+  /* Marges de page à zéro : le navigateur n'a plus de place pour imprimer
+     son en-tête et son pied de page (date, titre, adresse, n° de page).
+     L'espacement est redonné par le remplissage des fiches elles-mêmes. */
+  body.mode-impression-qr { margin: 0; }
+  @page { margin: 0; }
   body.mode-impression-qr header.appbar,
   body.mode-impression-qr main { display: none !important; }
   body.mode-impression-qr #impression-qr { display: block; }
   .qr-stand {
     text-align: center;
     page-break-after: always;
-    padding-top: 2.5cm;
+    padding: 3.5cm 1.5cm 0;
   }
   .qr-stand-titre { font-size: 30pt; font-weight: 700; color: #1d4e89; }
   .qr-stand-sous { font-size: 18pt; color: #444; margin-bottom: 0.8cm; }
@@ -357,7 +362,10 @@ ul.liste a.btn.secondaire { color: var(--bleu); }
 @media print {
   body { background: #fff; }
   header.appbar, .pas-impression, .fil { display: none !important; }
-  main { max-width: none; padding: 0; }
+  /* Les marges de page sont à zéro (voir ci-dessus, pour supprimer
+     l'en-tête/pied de page du navigateur) : le bilan retrouve les siennes
+     par le remplissage du contenu. */
+  main { max-width: none; padding: 12mm; }
   .carte { border: none; padding: 0.4rem 0; margin-bottom: 0.6rem; }
   .tuile, .q-item { border: 1px solid #bbb; }
   .stat-question { break-inside: avoid; }
