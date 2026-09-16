@@ -3817,14 +3817,46 @@
       // Déjà sur l'adresse jumelle : marche à suivre selon l'appareil.
       const surIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       const surAndroid = /Android/.test(navigator.userAgent);
-      let aide;
       if (surIOS) {
-        aide =
-          'Sur iPhone / iPad (Safari) :\n\n' +
-          '1. Touchez le bouton Partager (carré avec flèche vers le haut).\n' +
-          '2. Choisissez « Sur l’écran d’accueil ».\n' +
-          '3. Validez : l’icône rouge « URBH ADMIN » est ajoutée.';
-      } else if (surAndroid) {
+        // Apple n'offre aucune installation automatique : guide visuel
+        // ancré en bas, au-dessus du bouton Partager de Safari.
+        const voile = document.createElement('div');
+        voile.id = 'guide-ios';
+        voile.style.cssText =
+          'position:fixed;inset:0;z-index:100;background:rgba(15,23,42,0.55);' +
+          'display:flex;align-items:flex-end;justify-content:center;';
+        voile.innerHTML = `
+          <div style="background:#fff;color:#1f2937;border-radius:16px 16px 0 0;
+            padding:1.2rem 1.2rem calc(1.2rem + env(safe-area-inset-bottom,0px));
+            max-width:430px;width:100%;box-shadow:0 -8px 30px rgba(0,0,0,0.3)">
+            <h3 style="margin:0 0 0.5rem;font-size:1.05rem">Installer sur iPhone / iPad</h3>
+            <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#4b5563">Apple ne
+              permet pas l'installation automatique — trois gestes suffisent,
+              depuis Safari :</p>
+            <ol style="margin:0 0 0.8rem;padding-left:1.3rem;font-size:0.95rem;line-height:1.65">
+              <li>Touchez <strong>Partager</strong>
+                <span style="display:inline-block;border:1.5px solid #1d4e89;color:#1d4e89;
+                  border-radius:6px;padding:0 0.4em;font-weight:700">&#x2191;</span>
+                — barre du bas de Safari (en haut à droite sur iPad) ;</li>
+              <li>faites défiler puis <strong>« Sur l'écran d'accueil »</strong> ;</li>
+              <li><strong>Ajouter</strong> : l'icône rouge <strong>URBH ADMIN</strong>
+                apparaît sur l'écran d'accueil.</li>
+            </ol>
+            <p style="margin:0 0 0.9rem;font-size:0.8rem;color:#6b7280">Si « Sur
+              l'écran d'accueil » n'apparaît pas, ouvrez d'abord cette page dans
+              Safari lui-même (pas dans le navigateur intégré d'une autre
+              application).</p>
+            <button id="fermer-guide-ios" style="width:100%">J'ai compris</button>
+            <div style="text-align:center;font-size:1.5rem;margin-top:0.4rem">⬇️</div>
+          </div>`;
+        document.body.append(voile);
+        voile.addEventListener('click', (e2) => {
+          if (e2.target === voile || e2.target.id === 'fermer-guide-ios') voile.remove();
+        });
+        return;
+      }
+      let aide;
+      if (surAndroid) {
         aide =
           'Sur Android (Chrome) :\n\n' +
           '1. Ouvrez le menu ⋮ en haut à droite du navigateur.\n' +
