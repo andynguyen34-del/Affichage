@@ -3334,21 +3334,58 @@
     let promptInstallation = null;
     const estInstallee = () =>
       window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    // Le bouton est TOUJOURS visible (sauf quand la console tourne déjà en
+    // application installée) : l'installation automatique
+    // (beforeinstallprompt) ne se déclenche pas partout — jamais sur iPhone,
+    // et souvent pas quand l'application bleue du même site est déjà connue
+    // du navigateur. À défaut, le bouton affiche la marche à suivre.
+    $installer.hidden = estInstallee();
+
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       promptInstallation = e;
-      if (!estInstallee()) $installer.hidden = false;
     });
     $installer.addEventListener('click', async () => {
-      if (!promptInstallation) return;
-      promptInstallation.prompt();
-      try {
-        const choix = await promptInstallation.userChoice;
-        if (choix && choix.outcome === 'accepted') $installer.hidden = true;
-      } catch (_) {
-        /* fenêtre fermée : le bouton reste disponible */
+      if (promptInstallation) {
+        promptInstallation.prompt();
+        try {
+          const choix = await promptInstallation.userChoice;
+          if (choix && choix.outcome === 'accepted') $installer.hidden = true;
+        } catch (_) {
+          /* fenêtre fermée : le bouton reste disponible */
+        }
+        promptInstallation = null;
+        return;
       }
-      promptInstallation = null;
+      // Pas de proposition automatique : marche à suivre selon l'appareil.
+      const surIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const surAndroid = /Android/.test(navigator.userAgent);
+      let aide;
+      if (surIOS) {
+        aide =
+          'Sur iPhone / iPad (Safari) :\n\n' +
+          '1. Touchez le bouton Partager (carré avec flèche vers le haut).\n' +
+          '2. Choisissez « Sur l’écran d’accueil ».\n' +
+          '3. Validez : l’icône rouge « URBH ADMIN » est ajoutée.';
+      } else if (surAndroid) {
+        aide =
+          'Sur Android (Chrome) :\n\n' +
+          '1. Ouvrez le menu ⋮ en haut à droite du navigateur.\n' +
+          '2. Choisissez « Installer l’application » (ou « Ajouter à l’écran d’accueil »).\n' +
+          '3. Validez : l’icône rouge « URBH ADMIN » est ajoutée.\n\n' +
+          'Si le menu ne le propose pas, rechargez la page puis réessayez.';
+      } else {
+        aide =
+          'Sur ordinateur (Chrome ou Edge) :\n\n' +
+          '1. Regardez à droite de la barre d’adresse : une petite icône ' +
+          'd’installation (écran avec flèche) apparaît — cliquez-la.\n' +
+          '2. Sinon : menu ⋮ (ou …) → « Caster, enregistrer et partager » → ' +
+          '« Installer la page » (Chrome), ou « Applications » → ' +
+          '« Installer ce site en tant qu’application » (Edge).\n\n' +
+          'Si rien n’est proposé, rechargez la page puis réessayez.';
+      }
+      alert(aide);
     });
     window.addEventListener('appinstalled', () => {
       $installer.hidden = true;

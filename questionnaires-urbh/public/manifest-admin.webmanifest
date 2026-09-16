@@ -5,7 +5,7 @@
   "description": "Console d'administration des journées d'études URBH : inscrits, tirages, tombola, ateliers, questionnaires.",
   "lang": "fr",
   "start_url": "/index.html",
-  "scope": "/",
+  "scope": "/index.html",
   "display": "standalone",
   "theme_color": "#b3211c",
   "background_color": "#f4f6f9",
