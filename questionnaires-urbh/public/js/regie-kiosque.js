@@ -561,7 +561,10 @@
               ? ' · déjà tiré'
               : a.statut === 'ouvert'
                 ? ' · inscriptions ouvertes'
-                : ' · inscriptions fermées'),
+                : ' · inscriptions fermées') +
+            (a.tirageAutoLe && a.statut !== 'tire'
+              ? ` · 🕗 tirage auto ${a.tirageAutoLe.toDate().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+              : ''),
           boutons,
         ),
       );

@@ -1149,6 +1149,16 @@
         </div>
         <div><strong>${echapper(a.nom)}</strong></div>
         ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
+        ${(() => {
+          if (!a.tirageAutoLe || a.statut === 'tire') return '';
+          try {
+            return `<div class="muet petit">🕗 Tirage au sort : ${echapper(
+              fmtHeure(a.tirageAutoLe.toDate()),
+            )}</div>`;
+          } catch (_) {
+            return '';
+          }
+        })()}
         ${etat}
         ${action ? `<div class="ligne-boutons">${action}</div>` : ''}
       </div>`;

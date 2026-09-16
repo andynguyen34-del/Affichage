@@ -687,6 +687,23 @@
     const pointagesOuverts = portail.pointages || {};
     const agInfo = portail.ag || null;
 
+    // Heure par défaut du tirage automatique des ateliers : la FIN DE L'AG
+    // si elle est paramétrée, sinon le jeudi des journées à 8h45.
+    const finAGparDefaut = (() => {
+      if (agInfo && agInfo.fin) return agInfo.fin;
+      if (journee.date) {
+        const debutJ = new Date(journee.date + 'T00:00:00');
+        const finJ = new Date((journee.dateFin || journee.date) + 'T00:00:00');
+        for (let d = new Date(debutJ); d <= finJ; d.setDate(d.getDate() + 1)) {
+          if (d.getDay() === 4) {
+            d.setHours(8, 45, 0, 0);
+            return firebase.firestore.Timestamp.fromDate(d);
+          }
+        }
+      }
+      return null;
+    })();
+
     const snapI = await db
       .collection('inscriptions')
       .where('journeeId', '==', journeeId)
@@ -1230,6 +1247,20 @@
                       }
                     </div>
                     ${
+                      a.statut !== 'tire'
+                        ? a.tirageAutoLe
+                          ? `<div class="muet petit">🕗 <strong>Tirage automatique programmé :
+                              ${fmtHorodatage(a.tirageAutoLe)}</strong>
+                              <button class="discret bouton-annuler-prog-tirage" data-id="${attr(a.id)}">Annuler la programmation</button></div>`
+                          : `<div class="ligne-boutons" style="align-items:flex-end">
+                              <label class="champ petit" style="margin:0">Tirage automatique à
+                                <input type="datetime-local" class="prog-tirage-heure" data-id="${attr(a.id)}"
+                                  value="${attr(versDatetimeLocal(finAGparDefaut))}"></label>
+                              <button class="secondaire bouton-programmer-tirage" data-id="${attr(a.id)}">🕗 Programmer</button>
+                            </div>`
+                        : ''
+                    }
+                    ${
                       a.statut === 'tire'
                         ? `<div><strong>Retenus (${(a.retenus || []).length})</strong> :
                             ${(a.retenus || [])
@@ -1277,11 +1308,19 @@
             ? `<div class="ligne-boutons">
                 <button id="bouton-ouvrir-tous-ateliers" class="secondaire">✅ Ouvrir les inscriptions de tous les ateliers</button>
                 <button id="bouton-fermer-tous-ateliers" class="secondaire">⛔ Fermer toutes les inscriptions</button>
+                <button id="bouton-programmer-tous-tirages" class="secondaire"
+                  ${finAGparDefaut ? '' : 'disabled title="Paramétrez la période de l’AG ou la date de la journée"'}>
+                  🕗 Programmer tous les tirages à la fin de l'AG${finAGparDefaut ? ` (${fmtHorodatage(finAGparDefaut)})` : ''}
+                </button>
               </div>
               <p class="muet petit">Les participants s'inscrivent et se
               désinscrivent librement tant que les inscriptions d'un atelier
               sont ouvertes — le tirage au sort les fige. Chaque atelier
-              s'ouvre ou se ferme aussi individuellement ci-dessus.</p>`
+              s'ouvre ou se ferme aussi individuellement ci-dessus, et son
+              tirage peut être <strong>programmé à une heure précise</strong> :
+              il se déclenche alors tout seul sur le serveur (à la minute
+              près), même si l'administration est fermée. Nécessite le
+              déploiement des fonctions (DEPLOYER-FONCTIONS).</p>`
             : ''
         }
         <div class="ligne-boutons">
@@ -2245,6 +2284,41 @@
         for (const a of ateliers) {
           if (a.statut === 'ouvert') {
             await db.collection('ateliers').doc(a.id).update({ statut: 'ferme' });
+          }
+        }
+        router();
+      });
+    }
+
+    // Programmation du tirage automatique (exécuté chaque minute par la
+    // fonction serveur tiragesAteliersAutomatiques).
+    document.querySelectorAll('.bouton-programmer-tirage').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const champ = document.querySelector(`.prog-tirage-heure[data-id="${b.dataset.id}"]`);
+        const d = champ ? new Date(champ.value) : null;
+        if (!d || Number.isNaN(d.getTime())) {
+          alert("Choisissez la date et l'heure du tirage automatique.");
+          return;
+        }
+        await db.collection('ateliers').doc(b.dataset.id).update({
+          tirageAutoLe: firebase.firestore.Timestamp.fromDate(d),
+        });
+        router();
+      }),
+    );
+    document.querySelectorAll('.bouton-annuler-prog-tirage').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await db.collection('ateliers').doc(b.dataset.id).update({ tirageAutoLe: null });
+        router();
+      }),
+    );
+    const boutonProgrammerTous = document.getElementById('bouton-programmer-tous-tirages');
+    if (boutonProgrammerTous) {
+      boutonProgrammerTous.addEventListener('click', async () => {
+        if (!finAGparDefaut) return;
+        for (const a of ateliers) {
+          if (a.statut !== 'tire') {
+            await db.collection('ateliers').doc(a.id).update({ tirageAutoLe: finAGparDefaut });
           }
         }
         router();

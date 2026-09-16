@@ -4,6 +4,12 @@
 // dans « desistements »), un SMS est envoyé automatiquement à la personne
 // promue depuis la liste d'attente, via Brevo (SMS transactionnel).
 //
+// tiragesAteliersAutomatiques : chaque minute, les ateliers dont l'heure de
+// tirage programmée (champ « tirageAutoLe », paramétré dans
+// l'administration — typiquement la fin de l'AG, jeudi 8h45) est atteinte
+// sont tirés au sort automatiquement, avec EXACTEMENT les mêmes règles
+// d'équité que le tirage manuel de l'administration.
+//
 // Mise en service (une seule fois) :
 //   1. Console Firebase → projet questionnaires-urbh → passer au plan Blaze.
 //   2. Compte Brevo (brevo.com) → SMS transactionnel activé → clé API v3.
@@ -13,6 +19,7 @@
 //   4. Double-clic sur DEPLOYER-FONCTIONS.bat.
 
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
@@ -87,3 +94,132 @@ exports.smsDesistement = onDocumentCreated(
     }
   },
 );
+
+// ------------------------------------------------------------------------
+// Tirage au sort automatique des ateliers à l'heure programmée.
+//
+// Mêmes règles que le tirage manuel (administration / régie) :
+//  - une chance par numéro de carte (déduplication des sessions multiples) ;
+//  - priorité à la répartition d'une même blanchisserie sur plusieurs
+//    ateliers (une personne par établissement, puis marge de deux), puis
+//    aux personnes non retenues ailleurs, puis aux autres ;
+//  - liste d'attente dans le même ordre de priorité.
+
+function normaliserNumero(brut) {
+  return String(brut == null ? '' : brut)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/\//g, '-');
+}
+
+function dedupeParNumero(liste) {
+  const vus = new Set();
+  const resultat = [];
+  (liste || []).forEach((p) => {
+    const cle = normaliserNumero(p.numeroInscription) || '~' + p.participantId;
+    if (vus.has(cle)) return;
+    vus.add(cle);
+    resultat.push(p);
+  });
+  return resultat;
+}
+
+function tirerEquitable(voeux, capacite, retenusAilleurs) {
+  const melange = [...voeux];
+  for (let i = melange.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [melange[i], melange[j]] = [melange[j], melange[i]];
+  }
+  const retenus = [];
+  const pris = new Set();
+  const nbParEtab = new Map();
+  const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
+  function passe(condition) {
+    melange.forEach((v) => {
+      if (retenus.length >= capacite || pris.has(v.participantId)) return;
+      if (!condition(v)) return;
+      retenus.push(v);
+      pris.add(v.participantId);
+      nbParEtab.set(cleEtab(v), (nbParEtab.get(cleEtab(v)) || 0) + 1);
+    });
+  }
+  passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 1));
+  passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 2));
+  passe((v) => !retenusAilleurs.has(v.participantId));
+  passe(() => true);
+  const restants = melange.filter((v) => !pris.has(v.participantId));
+  const attente = [
+    ...restants.filter((v) => !retenusAilleurs.has(v.participantId)),
+    ...restants.filter((v) => retenusAilleurs.has(v.participantId)),
+  ];
+  return { retenus, attente };
+}
+
+function versPublic(v) {
+  return {
+    participantId: v.participantId,
+    prenom: v.prenom || '',
+    nom: v.nom || '',
+    organisme: v.organisme || '',
+    numeroInscription: v.numeroInscription || '',
+    type: v.type || '',
+  };
+}
+
+exports.tiragesAteliersAutomatiques = onSchedule('every 1 minutes', async () => {
+  const db = admin.firestore();
+  const maintenant = admin.firestore.Timestamp.now();
+
+  const snap = await db
+    .collection('ateliers')
+    .where('tirageAutoLe', '<=', maintenant)
+    .get();
+  const dus = snap.docs
+    .map((d) => ({ id: d.id, ref: d.ref, ...d.data() }))
+    .filter((a) => a.statut !== 'tire')
+    .sort(
+      (a, b) => (a.tirageAutoLe ? a.tirageAutoLe.toMillis() : 0) - (b.tirageAutoLe ? b.tirageAutoLe.toMillis() : 0),
+    );
+  if (!dus.length) return;
+
+  // Tirés UN PAR UN, dans l'ordre programmé : les retenus d'un atelier
+  // comptent comme « retenus ailleurs » pour les suivants (équité).
+  for (const atelier of dus) {
+    const snapTous = await db
+      .collection('ateliers')
+      .where('journeeId', '==', atelier.journeeId)
+      .get();
+    const retenusAilleurs = new Set();
+    snapTous.docs.forEach((d) => {
+      if (d.id !== atelier.id) {
+        (d.data().retenus || []).forEach((r) => retenusAilleurs.add(r.participantId));
+      }
+    });
+    const snapV = await db.collection('voeux').where('atelierId', '==', atelier.id).get();
+    const voeux = snapV.docs.map((d) => d.data());
+    if (!voeux.length) {
+      // Personne d'inscrit : on ferme simplement les inscriptions et on
+      // efface la programmation pour ne pas repasser chaque minute.
+      await atelier.ref.update({ statut: 'ferme', tirageAutoLe: null });
+      console.log(`Atelier ${atelier.id} (« ${atelier.nom} ») : aucun inscrit, tirage annulé.`);
+      continue;
+    }
+    const { retenus, attente } = tirerEquitable(
+      dedupeParNumero(voeux),
+      atelier.capacite || 20,
+      retenusAilleurs,
+    );
+    await atelier.ref.update({
+      statut: 'tire',
+      retenus: retenus.map(versPublic),
+      listeAttente: attente.map(versPublic),
+      tireLe: admin.firestore.FieldValue.serverTimestamp(),
+      tirageAutoLe: null,
+    });
+    console.log(
+      `Tirage automatique : atelier ${atelier.id} (« ${atelier.nom} »), ` +
+        `${retenus.length} retenu(s), ${attente.length} en attente.`,
+    );
+  }
+});

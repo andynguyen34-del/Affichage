@@ -67,3 +67,10 @@ Si le terminal n'est pas connecté : `firebase login` d'abord
 
 Ensuite, chaque désistement d'atelier envoie automatiquement le SMS à la
 personne promue. `DEPLOYER.bat` reste inchangé pour les pages et les règles.
+
+Les fonctions portent aussi le **tirage au sort automatique des ateliers** :
+l'heure programmée dans l'administration (typiquement la fin de l'AG, jeudi
+8h45) est surveillée chaque minute côté serveur, et le tirage se déclenche
+tout seul avec les mêmes règles d'équité que le tirage manuel. Ce mécanisme
+est déployé par `DEPLOYER-FONCTIONS.bat` (à relancer quand une nouvelle
+version l'annonce).
