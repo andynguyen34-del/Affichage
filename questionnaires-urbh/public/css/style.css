@@ -23,6 +23,9 @@ body {
   background: var(--fond);
   color: var(--texte);
   line-height: 1.5;
+  /* Aucun débordement horizontal : un contenu trop large ne doit jamais
+     décaler la page (bande blanche, éléments superposés sur mobile). */
+  overflow-x: hidden;
 }
 
 header.appbar {
@@ -36,7 +39,23 @@ header.appbar {
 }
 header.appbar h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
 header.appbar .sous-titre { opacity: 0.85; font-size: 0.85rem; }
-header.appbar .droite { margin-left: auto; display: flex; gap: 0.6rem; align-items: center; }
+header.appbar .droite {
+  margin-left: auto;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  /* Sur téléphone, l'e-mail + les boutons passent à la ligne DANS le
+     bandeau bleu au lieu de déborder à droite. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  min-width: 0;
+}
+header.appbar .droite span { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  header.appbar { padding: 0.6rem 0.8rem; gap: 0.5rem; }
+  header.appbar .droite { width: 100%; }
+}
 
 main { max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
 main.etroit { max-width: 720px; }
