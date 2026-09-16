@@ -10,6 +10,19 @@
 (function () {
   'use strict';
 
+  // Même règle que le portail : les participants vivent sur …web.app —
+  // l'adresse jumelle …firebaseapp.com porte un stockage séparé.
+  if (/^([A-Za-z0-9-]+)\.firebaseapp\.com$/.test(location.hostname)) {
+    location.replace(
+      'https://' +
+        location.hostname.replace(/\.firebaseapp\.com$/, '.web.app') +
+        location.pathname +
+        location.search +
+        location.hash,
+    );
+    return;
+  }
+
   const ECHELLE4 = [
     'Très insatisfaisant',
     'Insatisfaisant',

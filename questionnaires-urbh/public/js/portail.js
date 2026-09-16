@@ -28,6 +28,22 @@
     $app.innerHTML = `<div class="carte">${html}</div>`;
   }
 
+  // Le portail participant vit sur l'adresse …web.app : l'adresse jumelle
+  // …firebaseapp.com (réservée à l'installation de la console admin) porte
+  // un stockage SÉPARÉ — un participant qui y arrive (vieux QR imprimé
+  // depuis la jumelle) perdrait son identité. On le redirige d'office,
+  // en conservant le stand ou la journée demandés.
+  if (/^([A-Za-z0-9-]+)\.firebaseapp\.com$/.test(location.hostname)) {
+    location.replace(
+      'https://' +
+        location.hostname.replace(/\.firebaseapp\.com$/, '.web.app') +
+        location.pathname +
+        location.search +
+        location.hash,
+    );
+    return;
+  }
+
   // Détail technique d'une erreur Firebase, ajouté aux messages pour
   // diagnostiquer précisément (permission-denied = règles en retard, etc.).
   function detailErreur(e) {

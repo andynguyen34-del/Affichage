@@ -77,8 +77,20 @@
       .replace(/\//g, '-');
   }
 
+  // Adresse CANONIQUE du site pour tous les liens et QR codes générés :
+  // toujours …web.app, même quand la console est ouverte sur l'adresse
+  // jumelle …firebaseapp.com (réservée à l'installation de la console).
+  // L'identité des participants vit sur web.app : un QR pointant vers la
+  // jumelle leur ferait perdre leur session.
+  function origineCanonique() {
+    return location.origin.replace(
+      /^https:\/\/([A-Za-z0-9-]+)\.firebaseapp\.com$/,
+      'https://$1.web.app',
+    );
+  }
+
   function urlPublique(questionnaireId) {
-    return `${location.origin}${location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')}/repondre.html?id=${questionnaireId}`;
+    return `${origineCanonique()}${location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')}/repondre.html?id=${questionnaireId}`;
   }
 
   // Une même personne connectée depuis plusieurs appareils (ou après une
@@ -1043,7 +1055,7 @@
 
     const actions = Array.isArray(journee.actions) ? journee.actions : [];
 
-    const base = location.origin + location.pathname.replace(/index\.html$/, '');
+    const base = origineCanonique() + location.pathname.replace(/index\.html$/, '');
     const urlFlyer = base + 'portail.html';
     const urlDirecte = base + 'portail.html?e=' + journeeId;
 
