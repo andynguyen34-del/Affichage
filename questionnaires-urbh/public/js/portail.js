@@ -1093,10 +1093,11 @@
       ateliers.filter((a) => mesVoeux[a.id]).map(creneauDe),
     );
 
-    // Les inscriptions ne sont ouvertes que pendant l'Assemblée Générale.
+    // Les inscriptions s'ouvrent et se ferment ATELIER PAR ATELIER par
+    // l'administrateur (statut « ouvert ») : tant qu'elles le sont, chacun
+    // coche et décoche librement — jusqu'au tirage au sort. La période de
+    // l'AG ne sert plus que de repère affiché.
     const ag = periodeAG();
-    const pendantAG = !!ag && maintenant() >= ag.debut && maintenant() <= ag.fin;
-    const apresAG = !!ag && maintenant() > ag.fin;
     const fmtHeure = (d) =>
       d.toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
 
@@ -1120,24 +1121,25 @@
         } else {
           etat = `<div class="muet petit">Tirage au sort effectué.</div>`;
         }
-      } else if (pendantAG) {
+      } else if (a.statut === 'ouvert') {
         if (inscrit) {
-          etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera les inscrits.</div>`;
+          etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera
+            les inscrits. Vous pouvez vous désinscrire jusqu'au tirage.</div>`;
           action = `<button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Me désinscrire</button>`;
         } else if (creneauxInscrits.has(creneauDe(a))) {
           etat = `<div class="muet petit">Vous êtes déjà inscrit à un autre atelier sur ce
-            créneau horaire — les ateliers d'un même créneau se déroulent en même temps.</div>`;
+            créneau horaire — les ateliers d'un même créneau se déroulent en même temps.
+            Désinscrivez-vous de l'autre atelier pour changer.</div>`;
         } else {
           action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
         }
-      } else if (apresAG) {
-        // Après l'AG, l'écran d'inscription disparaît : seuls restent le
-        // résultat du tirage et l'attente du tirage pour les inscrits.
-        if (!inscrit) return '';
-        etat = `<div class="muet petit">Inscriptions closes — le tirage au sort aura lieu prochainement.</div>`;
+      } else if (inscrit) {
+        etat = `<div class="info">✅ Inscription enregistrée — inscriptions closes,
+          le tirage au sort aura lieu prochainement.</div>`;
       } else {
-        etat = `<div class="muet petit">Les inscriptions se feront pendant l'Assemblée
-          Générale${ag ? ` (${echapper(fmtHeure(ag.debut))})` : ''}.</div>`;
+        etat = `<div class="muet petit">Inscriptions pas encore ouvertes${
+          ag ? ` — elles s'ouvriront pendant l'Assemblée Générale (${echapper(fmtHeure(ag.debut))})` : ''
+        }.</div>`;
       }
 
       return `<div class="q-item">
@@ -1157,10 +1159,14 @@
         ${
           !ateliers.length
             ? `<p class="muet">Les ateliers seront présentés ici très prochainement.</p>`
-            : `<p class="muet petit">Les inscriptions sont ouvertes
-              <strong>pendant l'Assemblée Générale</strong>${
-                ag ? ` (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})` : ''
-              }. Les places étant limitées, elles
+            : `<p class="muet petit">Les inscriptions sont ouvertes atelier
+              par atelier${
+                ag
+                  ? `, en principe pendant l'Assemblée Générale
+                    (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})`
+                  : ''
+              }, et chacun peut <strong>s'inscrire ou se désinscrire librement
+              jusqu'au tirage au sort</strong>. Les places étant limitées, elles
               sont départagées par tirage au sort. <strong>La préférence est
               donnée à la répartition des participants d'une même
               blanchisserie sur plusieurs ateliers</strong> (avec une marge de

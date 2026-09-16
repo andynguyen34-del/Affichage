@@ -113,7 +113,10 @@
     } else {
       const etat = document.createElement('div');
       etat.className = 'etat';
-      etat.textContent = '⏳ Tirage au sort à venir — résultats affichés ici en direct.';
+      etat.textContent =
+        a.statut === 'ouvert'
+          ? "🟢 Inscriptions ouvertes — inscrivez-vous sur l'application !"
+          : '⏳ Tirage au sort à venir — résultats affichés ici en direct.';
       carte.append(etat);
     }
     return carte;
@@ -159,7 +162,12 @@
           const detail = document.createElement('div');
           detail.className = 'detail-cellule';
           detail.textContent =
-            (a.horaire || '') + (a.statut === 'tire' ? ' · tirage effectué' : '');
+            (a.horaire || '') +
+            (a.statut === 'tire'
+              ? ' · tirage effectué'
+              : a.statut === 'ouvert'
+                ? ' · inscriptions ouvertes'
+                : '');
           td.append(detail);
         }
         tr.append(td);

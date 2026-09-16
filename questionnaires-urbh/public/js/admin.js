@@ -1137,31 +1137,28 @@
 
       <div class="carte">
         <h2>🛠️ Ateliers (inscription + tirage au sort)</h2>
-        <p class="muet petit">Les inscriptions se font sur le portail,
-        <strong>uniquement pendant l'Assemblée Générale</strong> (période
-        ci-dessous) : une fois l'AG terminée, l'écran d'inscription disparaît
-        du portail. Le tirage au sort de chaque atelier retient en priorité :
-        1) les personnes qui n'ont encore gagné aucun atelier ET dont la
-        blanchisserie n'est pas déjà représentée ici, 2) puis les autres
-        personnes sans atelier, 3) et seulement s'il reste des places, celles
-        déjà retenues dans un autre atelier (signalées ⚠️). Les autres sont en
-        liste d'attente dans le même ordre de priorité. Tirez les ateliers un
-        par un pour garder la main sur les places restantes.</p>
-        <h3>Période d'inscription = durée de l'AG</h3>
+        <p class="muet petit">Les inscriptions se font sur le portail :
+        <strong>vous les ouvrez et les fermez atelier par atelier</strong>
+        (boutons ci-dessous, ou tous d'un coup). Tant que les inscriptions
+        d'un atelier sont ouvertes, chacun coche et décoche librement son
+        inscription — <strong>jusqu'au tirage au sort</strong>, qui fige les
+        listes. Le tirage retient en priorité : 1) les personnes qui n'ont
+        encore gagné aucun atelier ET dont la blanchisserie n'a personne ici,
+        2) même chose avec une marge de deux par blanchisserie, 3) puis les
+        autres personnes sans atelier, 4) et seulement s'il reste des places,
+        celles déjà retenues ailleurs (signalées ⚠️). Les autres sont en
+        liste d'attente dans le même ordre. Tirez les ateliers un par un pour
+        garder la main sur les places restantes.</p>
+        <h3>Période de l'Assemblée Générale (information affichée sur le portail)</h3>
         ${
           agInfo && agInfo.debut && agInfo.fin
             ? `<p class="muet petit">AG paramétrée du
                 <strong>${fmtHorodatage(agInfo.debut)}</strong> au
-                <strong>${fmtHorodatage(agInfo.fin)}</strong> —
-                inscriptions ${
-                  new Date() < agInfo.debut.toDate()
-                    ? 'pas encore ouvertes'
-                    : new Date() > agInfo.fin.toDate()
-                      ? 'closes (AG terminée)'
-                      : '<strong>ouvertes (AG en cours)</strong>'
-                }.</p>`
-            : `<p class="muet petit">⚠️ Période d'AG non paramétrée : les
-                inscriptions aux ateliers restent fermées sur le portail.</p>`
+                <strong>${fmtHorodatage(agInfo.fin)}</strong>. Elle sert de
+                repère aux participants — l'ouverture réelle des inscriptions
+                se fait par les boutons de chaque atelier.</p>`
+            : `<p class="muet petit">Période d'AG non paramétrée (elle sert
+                de repère affiché aux participants).</p>`
         }
         <form id="form-ag" class="ligne-boutons" style="align-items:flex-end">
           <label class="champ" style="margin:0">Début de l'AG
@@ -1198,20 +1195,16 @@
                   const organismes = new Set(
                     voeux.map((v) => (v.organisme || '').trim().toLowerCase()).filter(Boolean),
                   );
-                  const agOuverte =
-                    agInfo &&
-                    agInfo.debut &&
-                    agInfo.fin &&
-                    new Date() >= agInfo.debut.toDate() &&
-                    new Date() <= agInfo.fin.toDate();
+                  // Les inscriptions s'ouvrent et se ferment ATELIER PAR
+                  // ATELIER : tant qu'elles sont ouvertes, les participants
+                  // s'inscrivent et se désinscrivent librement — jusqu'au
+                  // tirage au sort.
                   const badges = {
                     tire: '<span class="badge ferme">Tirage effectué</span>',
+                    ouvert: '<span class="badge ouvert">Inscriptions ouvertes</span>',
                   };
                   badges[a.statut] =
-                    badges[a.statut] ||
-                    (agOuverte
-                      ? '<span class="badge ouvert">Inscriptions ouvertes (AG en cours)</span>'
-                      : '<span class="badge brouillon">Inscriptions pendant l\'AG</span>');
+                    badges[a.statut] || '<span class="badge brouillon">Inscriptions fermées</span>';
                   return `<div class="q-item">
                     <div class="q-entete">
                       <span class="q-type">Salle ${echapper(a.salle)}</span>
@@ -1227,7 +1220,11 @@
                     <div class="ligne-boutons">
                       ${
                         a.statut !== 'tire'
-                          ? `<button class="bouton-tirer-atelier" data-id="${attr(a.id)}" ${voeux.length ? '' : 'disabled title="Aucun inscrit"'}>🎲 Tirer au sort</button>`
+                          ? `<button class="secondaire bouton-basculer-atelier" data-id="${attr(a.id)}"
+                              data-vers="${a.statut === 'ouvert' ? 'ferme' : 'ouvert'}">
+                              ${a.statut === 'ouvert' ? '⛔ Fermer les inscriptions' : '✅ Ouvrir les inscriptions'}
+                            </button>
+                            <button class="bouton-tirer-atelier" data-id="${attr(a.id)}" ${voeux.length ? '' : 'disabled title="Aucun inscrit"'}>🎲 Tirer au sort</button>`
                           : `<button class="secondaire bouton-csv-atelier" data-id="${attr(a.id)}">Feuille d'émargement (CSV)</button>
                             <button class="secondaire bouton-refaire-atelier" data-id="${attr(a.id)}">Refaire le tirage</button>`
                       }
@@ -1274,6 +1271,18 @@
                 })
                 .join('')
             : `<p class="muet">Aucun atelier pour cette journée.</p>`
+        }
+        ${
+          ateliers.some((a) => a.statut !== 'tire')
+            ? `<div class="ligne-boutons">
+                <button id="bouton-ouvrir-tous-ateliers" class="secondaire">✅ Ouvrir les inscriptions de tous les ateliers</button>
+                <button id="bouton-fermer-tous-ateliers" class="secondaire">⛔ Fermer toutes les inscriptions</button>
+              </div>
+              <p class="muet petit">Les participants s'inscrivent et se
+              désinscrivent librement tant que les inscriptions d'un atelier
+              sont ouvertes — le tirage au sort les fige. Chaque atelier
+              s'ouvre ou se ferme aussi individuellement ci-dessus.</p>`
+            : ''
         }
         <div class="ligne-boutons">
           <button id="bouton-seed-ateliers" class="secondaire">
@@ -2211,6 +2220,35 @@
         tireLe: firebase.firestore.FieldValue.serverTimestamp(),
       });
       router();
+    }
+
+    document.querySelectorAll('.bouton-basculer-atelier').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await db.collection('ateliers').doc(b.dataset.id).update({ statut: b.dataset.vers });
+        router();
+      }),
+    );
+    const boutonOuvrirTous = document.getElementById('bouton-ouvrir-tous-ateliers');
+    if (boutonOuvrirTous) {
+      boutonOuvrirTous.addEventListener('click', async () => {
+        for (const a of ateliers) {
+          if (a.statut !== 'tire' && a.statut !== 'ouvert') {
+            await db.collection('ateliers').doc(a.id).update({ statut: 'ouvert' });
+          }
+        }
+        router();
+      });
+    }
+    const boutonFermerTous = document.getElementById('bouton-fermer-tous-ateliers');
+    if (boutonFermerTous) {
+      boutonFermerTous.addEventListener('click', async () => {
+        for (const a of ateliers) {
+          if (a.statut === 'ouvert') {
+            await db.collection('ateliers').doc(a.id).update({ statut: 'ferme' });
+          }
+        }
+        router();
+      });
     }
 
     document.querySelectorAll('.bouton-tirer-atelier').forEach((b) =>

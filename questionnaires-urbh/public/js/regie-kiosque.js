@@ -536,6 +536,16 @@
           }),
         );
       } else {
+        // Ouverture / fermeture des inscriptions, atelier par atelier —
+        // même commande que la carte Ateliers de l'administration.
+        boutons.push(
+          bouton(a.statut === 'ouvert' ? '⛔ Fermer' : '✅ Ouvrir', 'contour', async () => {
+            await db
+              .collection('ateliers')
+              .doc(a.id)
+              .update({ statut: a.statut === 'ouvert' ? 'ferme' : 'ouvert' });
+          }),
+        );
         const b = bouton('🎲 Tirer', 'or', () => lancerTirageAtelier(journeeId, a.id));
         if (!inscrits) {
           b.disabled = true;
@@ -546,7 +556,12 @@
       panneau.append(
         ligne(
           `${a.salle ? a.salle + ' — ' : ''}${a.nom || ''}`,
-          `${a.horaire || ''} · ${inscrits} inscrit(s)${a.statut === 'tire' ? ' · déjà tiré' : ''}`,
+          `${a.horaire || ''} · ${inscrits} inscrit(s)` +
+            (a.statut === 'tire'
+              ? ' · déjà tiré'
+              : a.statut === 'ouvert'
+                ? ' · inscriptions ouvertes'
+                : ' · inscriptions fermées'),
           boutons,
         ),
       );
