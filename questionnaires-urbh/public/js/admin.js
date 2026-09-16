@@ -3332,15 +3332,21 @@
   const $installer = document.getElementById('bouton-installer-admin');
   if ($installer) {
     let promptInstallation = null;
-    const estInstallee = () =>
-      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    // En mode « application » sur l'adresse jumelle (…firebaseapp.com), on
+    // est DANS la console rouge installée : le bouton n'a plus d'objet. En
+    // mode « application » sur …web.app, c'est la fenêtre de l'application
+    // BLEUE qui affiche la page d'administration : le bouton reste visible
+    // pour proposer la bascule vers l'adresse jumelle installable.
+    const estConsoleInstallee = () =>
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true) &&
+      !location.hostname.endsWith('.web.app');
 
-    // Le bouton est TOUJOURS visible (sauf quand la console tourne déjà en
-    // application installée) : l'installation automatique
+    // Le bouton est TOUJOURS visible sinon : l'installation automatique
     // (beforeinstallprompt) ne se déclenche pas partout — jamais sur iPhone,
-    // et souvent pas quand l'application bleue du même site est déjà connue
-    // du navigateur. À défaut, le bouton affiche la marche à suivre.
-    $installer.hidden = estInstallee();
+    // et jamais quand l'application bleue du même site est déjà installée.
+    // À défaut, le bouton guide vers la solution.
+    $installer.hidden = estConsoleInstallee();
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -3358,7 +3364,30 @@
         promptInstallation = null;
         return;
       }
-      // Pas de proposition automatique : marche à suivre selon l'appareil.
+      // Pas de proposition automatique. Cause la plus fréquente : le
+      // navigateur croit l'application déjà installée, car l'application
+      // BLEUE des participants couvre tout le site (y compris cette page).
+      // Firebase publie le même site sur une adresse JUMELLE
+      // (…firebaseapp.com), vue comme un site distinct : l'installation y
+      // redevient possible — même console, mêmes données.
+      const hote = location.hostname;
+      if (hote.endsWith('.web.app')) {
+        const jumelle = hote.replace(/\.web\.app$/, '.firebaseapp.com');
+        if (
+          confirm(
+            "Le navigateur ne propose pas l'installation sur cette adresse " +
+              "(l'application bleue des participants couvre déjà ce site).\n\n" +
+              'Ouvrir la console sur son adresse jumelle\n' +
+              jumelle +
+              "\npour l'installer ? (même administration, mêmes données — " +
+              'reconnectez-vous une fois sur place)',
+          )
+        ) {
+          location.href = 'https://' + jumelle + '/index.html';
+        }
+        return;
+      }
+      // Déjà sur l'adresse jumelle : marche à suivre selon l'appareil.
       const surIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       const surAndroid = /Android/.test(navigator.userAgent);
       let aide;
