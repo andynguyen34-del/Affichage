@@ -58,6 +58,9 @@ service cloud.firestore {
     }
 
     // Profil d'un participant, rattaché à son uid anonyme (son téléphone).
+    // Le N° de carte doit exister dans l'ANNUAIRE des inscrits attendus :
+    // impossible de créer une fiche avec un numéro inconnu (l'accueil peut
+    // ajouter une carte manquante à l'annuaire depuis l'administration).
     match /participants/{uid} {
       allow get: if isAdmin() || (connecte() && request.auth.uid == uid);
       allow create, update: if connecte()
@@ -69,7 +72,8 @@ service cloud.firestore {
               'creeLe', 'majLe'])
         && request.resource.data.type in ['visiteur', 'exposant']
         && request.resource.data.nom is string
-        && request.resource.data.prenom is string;
+        && request.resource.data.prenom is string
+        && exists(/databases/$(database)/documents/annuaire/$(request.resource.data.numeroInscription));
       // L'administrateur peut réécrire un profil : nécessaire pour honorer
       // une demande d'anonymisation.
       allow update: if isAdmin();
@@ -109,7 +113,8 @@ service cloud.firestore {
               'organisme', 'email', 'mobile', 'numeroInscription',
               'accompagnementHandicap', 'creeLe', 'dernierAccesLe',
               'nbAcces'])
-        && request.resource.data.type in ['visiteur', 'exposant'];
+        && request.resource.data.type in ['visiteur', 'exposant']
+        && exists(/databases/$(database)/documents/annuaire/$(request.resource.data.numeroInscription));
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow update: if isAdmin(); // anonymisation
       allow list: if isAdmin();

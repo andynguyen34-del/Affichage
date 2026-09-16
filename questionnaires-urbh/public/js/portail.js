@@ -190,8 +190,9 @@
           etat.style.color = '#2e8b57';
         } else {
           etat.textContent =
-            'Numéro inconnu de la liste des inscrits — vérifiez la carte remise à l\'accueil (vous pouvez tout de même continuer).';
-          etat.style.color = '#d97706';
+            "Numéro inconnu de la liste des inscrits — vérifiez la carte remise à l'accueil. " +
+            "Sans numéro reconnu, l'inscription est impossible : adressez-vous à l'accueil URBH.";
+          etat.style.color = '#c0392b';
         }
       } catch (_) {
         etat.textContent = '';
@@ -219,6 +220,21 @@
       };
       const bouton = document.getElementById('p-valider');
       bouton.disabled = true;
+      // Le numéro de carte doit exister dans l'annuaire des inscrits : sans
+      // cela, pas de fiche (les règles serveur le vérifient aussi).
+      try {
+        const fiche = await db.collection('annuaire').doc(nouveau.numeroInscription).get();
+        if (!fiche.exists) {
+          vueInscription(
+            `Le numéro « ${nouveau.numeroInscription} » n'est pas dans la liste des inscrits. ` +
+              "Vérifiez la carte remise à l'accueil ; si le numéro est bien celui de votre carte, " +
+              "adressez-vous à l'accueil URBH pour qu'il soit ajouté.",
+          );
+          return;
+        }
+      } catch (_) {
+        /* vérification impossible (réseau) : les règles serveur trancheront */
+      }
       try {
         await db.collection('participants').doc(uid).set(nouveau);
         profil = nouveau;
@@ -1912,7 +1928,28 @@
   // Après identification : passage sur un stand si on est arrivé par son QR,
   // sinon menu de choix.
   async function apresProfil() {
-    await enregistrerInscription();
+    // Un profil dont le numéro de carte n'est pas (ou plus) dans l'annuaire
+    // revient au formulaire : sa fiche d'inscrit n'est pas recréée, et la
+    // personne corrige son numéro.
+    try {
+      const numero = normaliserNumero(profil.numeroInscription);
+      const fiche = numero ? await db.collection('annuaire').doc(numero).get() : null;
+      if (!fiche || !fiche.exists) {
+        vueInscription(
+          `Le numéro de carte enregistré (« ${profil.numeroInscription || 'aucun'} ») n'est pas
+          reconnu dans la liste des inscrits. Corrigez-le pour continuer —
+          en cas de doute, adressez-vous à l'accueil URBH.`,
+        );
+        return;
+      }
+    } catch (_) {
+      /* vérification impossible (réseau) : on continue, les règles serveur veillent */
+    }
+    try {
+      await enregistrerInscription();
+    } catch (_) {
+      /* refusée par les règles (numéro retiré de l'annuaire) : sans blocage */
+    }
     surveillerAteliers();
     if (standDemande) vueStand(standDemande);
     else vueMenu();

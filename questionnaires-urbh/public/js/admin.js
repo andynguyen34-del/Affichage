@@ -443,6 +443,26 @@
           <input type="file" id="an-fichier" accept=".xlsx,.xls,.csv">
         </label>
         <div id="an-zone-mapping"></div>
+        <h3>Ajouter une carte manquante (accueil)</h3>
+        <p class="muet petit">Seuls les numéros présents dans l'annuaire
+        peuvent s'inscrire sur le portail : si une carte distribuée à
+        l'accueil n'y figure pas, ajoutez-la ici.</p>
+        <form id="form-annuaire-ajout" class="ligne-boutons" style="align-items:flex-end">
+          <label class="champ" style="margin:0">N° de carte *
+            <input id="aj-numero" required maxlength="20" placeholder="JE2026-999" style="max-width:10rem"></label>
+          <label class="champ" style="margin:0">Prénom *
+            <input id="aj-prenom" required style="max-width:10rem"></label>
+          <label class="champ" style="margin:0">Nom *
+            <input id="aj-nom" required style="max-width:10rem"></label>
+          <label class="champ" style="margin:0;flex:1;min-width:160px">Établissement
+            <input id="aj-organisme"></label>
+          <label class="champ" style="margin:0">Profil
+            <select id="aj-type">
+              <option value="visiteur">Visiteur</option>
+              <option value="exposant">Exposant</option>
+            </select></label>
+          <button type="submit">Ajouter à l'annuaire</button>
+        </form>
         ${
           annuaire.length
             ? `<div class="ligne-boutons">
@@ -451,6 +471,21 @@
             : ''
         }
       </div>`;
+
+    document.getElementById('form-annuaire-ajout').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const numero = normaliserNumero(document.getElementById('aj-numero').value);
+      if (!numero) return;
+      await db.collection('annuaire').doc(numero).set({
+        numero,
+        prenom: document.getElementById('aj-prenom').value.trim(),
+        nom: document.getElementById('aj-nom').value.trim(),
+        organisme: document.getElementById('aj-organisme').value.trim(),
+        type: document.getElementById('aj-type').value,
+      });
+      alert(`Carte ${numero} ajoutée à l'annuaire : la personne peut maintenant s'inscrire.`);
+      router();
+    });
 
     document.getElementById('form-journee').addEventListener('submit', async (evt) => {
       evt.preventDefault();
@@ -1953,8 +1988,25 @@
     document.querySelectorAll('.bouton-supprimer-inscrit').forEach((b) =>
       b.addEventListener('click', async () => {
         const i = inscriptions.find((x) => x.id === b.dataset.id);
-        if (!confirm(`Supprimer l'entrée « ${i ? i.prenom + ' ' + i.nom : ''} » de la liste des inscrits ?`)) return;
+        if (
+          !confirm(
+            `Supprimer l'entrée « ${i ? i.prenom + ' ' + i.nom : ''} » de la liste des inscrits ?\n\n` +
+              'Le profil enregistré sur son appareil est aussi effacé : la personne ' +
+              'devra se représenter, avec un numéro de carte reconnu dans l’annuaire.',
+          )
+        ) {
+          return;
+        }
         await db.collection('inscriptions').doc(b.dataset.id).delete();
+        // Sans cette purge, l'appareil recréait la fiche à sa prochaine
+        // ouverture du portail à partir du profil conservé localement.
+        if (i && i.participantId) {
+          try {
+            await db.collection('participants').doc(i.participantId).delete();
+          } catch (_) {
+            /* profil déjà absent */
+          }
+        }
         router();
       }),
     );
