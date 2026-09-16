@@ -11,7 +11,7 @@
 // Le numéro de version doit suivre APP_BUILD (firebase-config.js) : le
 // changer invalide l'ancien cache au déploiement suivant.
 
-const CACHE = 'urbh-v35';
+const CACHE = 'urbh-v36';
 
 const COQUILLE = [
   '/portail.html',
@@ -24,6 +24,12 @@ const COQUILLE = [
   '/icons/icone-192.png',
   '/icons/icone-512.png',
   '/manifest.webmanifest',
+  // Console d'administration (application séparée, icône rouge).
+  '/index.html',
+  '/js/admin.js',
+  '/icons/admin-192.png',
+  '/icons/admin-512.png',
+  '/manifest-admin.webmanifest',
 ];
 
 self.addEventListener('install', (evt) => {

@@ -824,7 +824,10 @@
     const urlDirecte = base + 'portail.html?e=' + journeeId;
 
     $app.innerHTML = `
-      <div class="fil"><a href="#/journees">Journées d'études</a> › ${echapper(journee.titre)}</div>
+      <div class="fil">
+        <a class="btn secondaire" href="#/journees">← Accueil administration</a>
+        <span class="fil-chemin"><a href="#/journees">Journées d'études</a> › ${echapper(journee.titre)}</span>
+      </div>
 
       <div class="carte">
         <h2>${echapper(journee.titre)}</h2>
@@ -2834,9 +2837,11 @@
 
     $app.innerHTML = `
       <div class="fil pas-impression">
+        <a class="btn secondaire" href="#/journee/${attr(questionnaire.journeeId)}">← Retour à la journée</a>
+        <span class="fil-chemin">
         <a href="#/journees">Journées d'études</a> ›
         <a href="#/journee/${attr(questionnaire.journeeId)}">${echapper(questionnaire.journeeTitre || 'Journée')}</a> ›
-        Questionnaire
+        Questionnaire</span>
       </div>
 
       <div class="carte">
@@ -3314,4 +3319,39 @@
     }
     router();
   });
+
+  // ------------------------------------------------- installation (PWA)
+  // La console d'administration s'installe comme une application à part
+  // (icône ROUGE « URBH ADMIN », manifest-admin.webmanifest), distincte de
+  // l'application bleue des participants — sur téléphone comme sur PC.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {
+      /* hors https ou navigateur ancien : sans conséquence */
+    });
+  }
+  const $installer = document.getElementById('bouton-installer-admin');
+  if ($installer) {
+    let promptInstallation = null;
+    const estInstallee = () =>
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      promptInstallation = e;
+      if (!estInstallee()) $installer.hidden = false;
+    });
+    $installer.addEventListener('click', async () => {
+      if (!promptInstallation) return;
+      promptInstallation.prompt();
+      try {
+        const choix = await promptInstallation.userChoice;
+        if (choix && choix.outcome === 'accepted') $installer.hidden = true;
+      } catch (_) {
+        /* fenêtre fermée : le bouton reste disponible */
+      }
+      promptInstallation = null;
+    });
+    window.addEventListener('appinstalled', () => {
+      $installer.hidden = true;
+    });
+  }
 })();

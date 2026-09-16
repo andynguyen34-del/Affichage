@@ -152,9 +152,11 @@ ul.liste a.btn:hover { text-decoration: none; }
 ul.liste a.btn.secondaire { color: var(--bleu); }
 
 /* Fil d'Ariane */
-.fil { font-size: 0.88rem; margin-bottom: 0.8rem; }
+.fil { font-size: 0.88rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
 .fil a { color: var(--bleu); text-decoration: none; }
 .fil a:hover { text-decoration: underline; }
+.fil a.btn { color: var(--bleu); text-decoration: none; }
+.fil .fil-chemin { opacity: 0.85; }
 
 /* Questionnaire public : questions */
 .question { margin-bottom: 1.3rem; }
