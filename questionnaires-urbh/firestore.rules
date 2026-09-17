@@ -1,0 +1,312 @@
+rules_version = '2';
+
+// Questionnaires URBH — règles d'accès.
+//
+// Principe :
+//  - L'administration (journées, questionnaires, réponses, inscriptions,
+//    tirage) est réservée aux comptes listés dans config/admins.
+//  - Un participant est authentifié de façon ANONYME (Firebase Auth) : son
+//    identifiant (uid) est conservé par son téléphone, ce qui permet de le
+//    reconnaître à chaque retour sans compte ni mot de passe.
+//  - Les identifiants de documents composés « <cible>_<uid> » garantissent
+//    côté serveur UNE seule participation au tirage et UNE seule réponse par
+//    questionnaire et par personne.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email in
+             get(/databases/$(database)/documents/config/admins).data.emails;
+    }
+
+    function connecte() {
+      return request.auth != null;
+    }
+
+    function portailTirageOuvert(journeeId) {
+      return get(/databases/$(database)/documents/portails/$(journeeId))
+               .data.tirage.ouvert == true;
+    }
+
+    function portailPointageOuvert(journeeId, moment) {
+      return get(/databases/$(database)/documents/portails/$(journeeId))
+               .data.pointages[moment] == true;
+    }
+
+    // Liste des administrateurs : à créer une fois depuis la console Firebase
+    // (document config/admins, champ « emails » = tableau d'adresses).
+    // Modifiable uniquement depuis la console, jamais depuis l'application.
+    match /config/admins {
+      allow read: if connecte();
+      allow write: if false;
+    }
+
+    match /journees/{journeeId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Vitrine publique d'une journée (titre, date, lieu, état du tirage,
+    // gagnants annoncés). Aucune donnée personnelle des répondants.
+    match /portails/{journeeId} {
+      allow get: if true;
+      // Le portail public recherche la journée active (requête filtrée sur
+      // actif == true) ; le reste des listages est réservé à l'administration.
+      allow list: if isAdmin() || resource.data.actif == true;
+      allow write: if isAdmin();
+    }
+
+    // Profil d'un participant, rattaché à son uid anonyme (son téléphone).
+    // Le N° de carte doit exister dans l'ANNUAIRE des inscrits attendus :
+    // impossible de créer une fiche avec un numéro inconnu (l'accueil peut
+    // ajouter une carte manquante à l'annuaire depuis l'administration).
+    match /participants/{uid} {
+      allow get: if isAdmin() || (connecte() && request.auth.uid == uid);
+      allow create, update: if connecte()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(
+             ['type', 'nom', 'prenom', 'organisme', 'email', 'mobile',
+              'numeroInscription', 'accompagnementHandicap',
+              'consentementPartage', 'consentementLe', 'anonymiseLe',
+              'creeLe', 'majLe'])
+        && request.resource.data.type in ['visiteur', 'exposant']
+        && request.resource.data.nom is string
+        && request.resource.data.prenom is string
+        && exists(/databases/$(database)/documents/annuaire/$(request.resource.data.numeroInscription));
+      // L'administrateur peut réécrire un profil : nécessaire pour honorer
+      // une demande d'anonymisation.
+      allow update: if isAdmin();
+      allow list, delete: if isAdmin();
+    }
+
+    // Demande d'anonymisation des données (droit à l'effacement). Une par
+    // participant (identifiant = uid). L'administrateur la traite puis la
+    // marque « traitée » : le participant voit la confirmation dans l'app.
+    match /demandesAnonymisation/{uid} {
+      allow create: if connecte()
+        && request.auth.uid == uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['participantId', 'nom', 'prenom', 'numeroInscription',
+              'demandeLe', 'statut'])
+        && request.resource.data.statut == 'en_attente';
+      allow get: if isAdmin() || (connecte() && request.auth.uid == uid);
+      allow list, update, delete: if isAdmin();
+    }
+
+    // Présence d'un participant à une journée. Identifiant imposé
+    // « <journeeId>_<n° de carte> » : UNE inscription par carte et par
+    // journée, quel que soit l'appareil — la personne qui revient d'un autre
+    // téléphone reprend sa fiche (participantId mis à jour au passage).
+    // Repli « <journeeId>_<uid> » pour un profil sans numéro de carte.
+    match /inscriptions/{inscriptionId} {
+      allow create, update: if connecte()
+        && (inscriptionId
+              == request.resource.data.journeeId + '_'
+                 + request.resource.data.numeroInscription
+            || inscriptionId
+              == request.resource.data.journeeId + '_' + request.auth.uid)
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['journeeId', 'participantId', 'type', 'nom', 'prenom',
+              'organisme', 'email', 'mobile', 'numeroInscription',
+              'accompagnementHandicap', 'creeLe', 'dernierAccesLe',
+              'nbAcces'])
+        && request.resource.data.type in ['visiteur', 'exposant']
+        && exists(/databases/$(database)/documents/annuaire/$(request.resource.data.numeroInscription));
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow update: if isAdmin(); // anonymisation
+      allow list: if isAdmin();
+      // Le participant peut effacer sa propre fiche « par session » héritée
+      // des anciennes versions (ménage automatique des doublons).
+      allow delete: if isAdmin()
+        || (connecte()
+            && inscriptionId == resource.data.journeeId + '_' + request.auth.uid
+            && resource.data.participantId == request.auth.uid);
+    }
+
+    // Participation au tirage au sort. Identifiant imposé
+    // « <journeeId>_<uid> » : une participation par personne et par journée,
+    // uniquement quand le tirage est ouvert.
+    match /tirage/{participationId} {
+      allow create: if connecte()
+        && participationId == request.resource.data.journeeId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['journeeId', 'participantId', 'type', 'nom', 'prenom',
+              'organisme', 'mobile', 'numeroInscription', 'creeLe'])
+        && portailTirageOuvert(request.resource.data.journeeId);
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Annuaire des inscrits attendus, importé depuis les fichiers Excel
+    // (adhérents visiteurs, représentants fournisseurs). Identifiant de
+    // document = N° d'inscription normalisé. Volontairement limité à
+    // numéro / nom / prénom / établissement / type : un participant connecté
+    // ne peut consulter que la fiche du numéro qu'il saisit, pour se faire
+    // reconnaître — jamais d'e-mail ni de mobile ici.
+    match /annuaire/{numero} {
+      allow get: if connecte();
+      allow list, write: if isAdmin();
+    }
+
+    // Ateliers soumis à inscription puis tirage au sort (salles B, C, D…).
+    // Le document porte le résultat du tirage (retenus, liste d'attente),
+    // affiché aux participants — comme à la porte de la salle.
+    match /ateliers/{atelierId} {
+      allow get, list: if connecte();
+      allow write: if isAdmin();
+      // Désistement d'un retenu depuis le portail : il se retire de la liste
+      // des retenus et le premier de la liste d'attente est promu. Seules ces
+      // deux listes peuvent changer, et exactement une personne sort au
+      // total — impossible d'ajouter qui que ce soit.
+      allow update: if connecte()
+        && resource.data.statut == 'tire'
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['retenus', 'listeAttente'])
+        && request.resource.data.retenus.size() <= resource.data.retenus.size()
+        && request.resource.data.retenus.size() + request.resource.data.listeAttente.size()
+           == resource.data.retenus.size() + resource.data.listeAttente.size() - 1;
+    }
+
+    // Trace d'un désistement d'atelier (une par personne et par atelier),
+    // avec la personne promue depuis la liste d'attente : l'administration
+    // y retrouve qui prévenir par SMS.
+    match /desistements/{desistementId} {
+      allow create: if connecte()
+        && desistementId == request.resource.data.atelierId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['atelierId', 'journeeId', 'participantId', 'nom', 'prenom',
+              'organisme', 'promuId', 'promuNom', 'promuPrenom', 'creeLe']);
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Vœu d'inscription à un atelier. Identifiant imposé
+    // « <atelierId>_<uid> » : une inscription par personne et par atelier,
+    // uniquement quand l'administrateur a OUVERT les inscriptions de cet
+    // atelier (statut « ouvert », paramétrable atelier par atelier).
+    // Le participant coche et décoche librement dans les mêmes conditions —
+    // le tirage au sort (statut « tire ») fige tout.
+    match /voeux/{voeuId} {
+      allow create: if connecte()
+        && voeuId == request.resource.data.atelierId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['atelierId', 'journeeId', 'participantId', 'type', 'nom',
+              'prenom', 'organisme', 'mobile', 'numeroInscription', 'creeLe'])
+        && get(/databases/$(database)/documents/ateliers/$(request.resource.data.atelierId))
+             .data.statut == 'ouvert';
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow delete: if isAdmin()
+        || (connecte()
+            && resource.data.participantId == request.auth.uid
+            && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
+                 .data.statut == 'ouvert');
+      allow list: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Pointage de présence à un moment clé de la journée (émargement) :
+    // « ouverture » (première conférence), « ag » (Assemblée Générale),
+    // « tombola » (présence en salle au moment du tirage). Identifiant imposé
+    // « <journeeId>_<moment>_<uid> » : un pointage par personne et par
+    // moment, uniquement quand l'administrateur a ouvert ce pointage.
+    // Ces points conditionnent la participation à la tombola de clôture.
+    match /pointages/{pointageId} {
+      allow create: if connecte()
+        && pointageId == request.resource.data.journeeId + '_'
+             + request.resource.data.moment + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['journeeId', 'moment', 'participantId', 'type', 'nom',
+              'prenom', 'organisme', 'mobile', 'numeroInscription',
+              'pointeLe'])
+        && request.resource.data.moment in ['ouverture', 'ag', 'tombola']
+        && portailPointageOuvert(request.resource.data.journeeId,
+             request.resource.data.moment);
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Fournisseurs exposants : nom, n° de stand, description. Chaque stand
+    // porte un QR code qui pointe vers portail.html?stand=<id>.
+    match /fournisseurs/{fournisseurId} {
+      allow get, list: if connecte();
+      allow write: if isAdmin();
+    }
+
+    // Passage d'un visiteur sur un stand, avec partage consenti de ses
+    // coordonnées au fournisseur. Identifiant imposé
+    // « <fournisseurId>_<uid> » : un passage par personne et par stand.
+    match /visites/{visiteId} {
+      allow create: if connecte()
+        && visiteId == request.resource.data.fournisseurId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['fournisseurId', 'fournisseurNom', 'journeeId', 'participantId',
+              'type', 'nom', 'prenom', 'organisme', 'email', 'mobile',
+              'numeroInscription', 'viseLe'])
+        && exists(/databases/$(database)/documents/fournisseurs/$(request.resource.data.fournisseurId));
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    // Évaluation « en direct » d'un moment des journées (questions à 5
+    // étoiles posées au fil du déroulé, définies sur le portail —
+    // portails/<journee>.evaluations). Identifiant imposé
+    // « <questionId>_<uid> » : une réponse par personne et par question.
+    match /evaluationsDirect/{evaluationId} {
+      allow create: if connecte()
+        && evaluationId == request.resource.data.questionId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['questionId', 'journeeId', 'participantId', 'etoiles',
+              'commentaire', 'creeLe'])
+        && request.resource.data.etoiles is int
+        && request.resource.data.etoiles >= 1
+        && request.resource.data.etoiles <= 5;
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if isAdmin(); // anonymisation
+    }
+
+    match /questionnaires/{questionnaireId} {
+      // Un participant ne voit que les questionnaires ouverts (le portail ne
+      // demande d'ailleurs que ceux-là dans sa requête).
+      allow get: if resource.data.statut == 'ouvert' || isAdmin();
+      allow list: if isAdmin() || (connecte() && resource.data.statut == 'ouvert');
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Réponse à un questionnaire. Identifiant imposé
+    // « <questionnaireId>_<uid> » : une réponse par personne et par
+    // questionnaire, uniquement quand le questionnaire est ouvert.
+    match /reponses/{reponseId} {
+      allow create: if connecte()
+        && reponseId == request.resource.data.questionnaireId + '_' + request.auth.uid
+        && request.resource.data.participantId == request.auth.uid
+        && request.resource.data.keys().hasOnly(
+             ['questionnaireId', 'journeeId', 'participantId',
+              'participantType', 'soumisLe', 'reponses'])
+        && request.resource.data.reponses is map
+        && request.resource.data.soumisLe == request.time
+        && get(/databases/$(database)/documents/questionnaires/$(request.resource.data.questionnaireId))
+             .data.statut == 'ouvert'
+        && request.resource.data.journeeId ==
+           get(/databases/$(database)/documents/questionnaires/$(request.resource.data.questionnaireId))
+             .data.journeeId;
+      allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
+      allow list, delete: if isAdmin();
+      allow update: if false;
+    }
+  }
+}

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Kiosque — Ateliers URBH</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icone-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&display=swap">
+  <style>
+    /* Écran de projection des ateliers : même monde sombre que le kiosque
+       des tirages, volontairement unique (salle). */
+    :root {
+      --nuit: #0b1c33;
+      --nuit-2: #143a68;
+      --encre: #f2f6fc;
+      --or: #f0b23e;
+      --bleu-clair: #7fb3ff;
+      --voile: rgba(255, 255, 255, 0.07);
+      --bord: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+      color: var(--encre);
+      background: radial-gradient(120% 90% at 50% 0%, var(--nuit-2) 0%, var(--nuit) 62%);
+      overflow: hidden;
+    }
+    .decor-affiche {
+      position: fixed;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      opacity: 0.16;
+      filter: blur(3px) saturate(1.15);
+      z-index: 0;
+    }
+    .scene { position: relative; z-index: 1; }
+    .scene { height: 100%; display: flex; flex-direction: column; padding: 2.5vh 3vw; }
+    .entete { text-align: center; margin-bottom: 2vh; }
+    .entete .surtitre {
+      text-transform: uppercase;
+      letter-spacing: 0.35em;
+      font-size: clamp(0.65rem, 1.2vw, 1rem);
+      color: var(--bleu-clair);
+      font-weight: 600;
+    }
+    .entete h1 {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(1.3rem, 2.8vw, 2.3rem);
+      margin: 0.15rem 0 0;
+    }
+    .bandeau-creneau {
+      text-align: center;
+      margin-bottom: 1.4vh;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--or);
+      font-size: clamp(0.95rem, 1.9vw, 1.5rem);
+    }
+    .bandeau-creneau .points { margin-left: 0.9rem; }
+    .bandeau-creneau .point {
+      width: 0.75em;
+      height: 0.75em;
+      border-radius: 50%;
+      border: 1px solid var(--or);
+      background: transparent;
+      margin: 0 0.22em;
+      padding: 0;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .bandeau-creneau .point.actif { background: var(--or); }
+    #grille {
+      flex: 1;
+      display: flex;
+      gap: 1.2rem;
+      align-items: stretch;
+      overflow: auto;
+    }
+    #grille .atelier { flex: 1 1 0; min-width: 0; }
+    .atelier {
+      background: var(--voile);
+      border: 1px solid var(--bord);
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .atelier.vient-d-etre-tire { animation: surgir 0.8s ease; border-color: var(--or); }
+    @keyframes surgir { 0% { transform: scale(0.94); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
+    .atelier .haut { display: flex; align-items: center; gap: 0.7rem; }
+    .salle {
+      font-family: 'Archivo Black', 'Archivo', sans-serif;
+      font-size: clamp(1.4rem, 3vw, 2.4rem);
+      color: var(--nuit);
+      background: var(--or);
+      border-radius: 10px;
+      padding: 0.05em 0.45em;
+      line-height: 1.2;
+    }
+    .atelier .horaire { font-size: clamp(0.75rem, 1.3vw, 1rem); opacity: 0.8; }
+    .atelier .nom { font-weight: 700; font-size: clamp(0.9rem, 1.6vw, 1.25rem); line-height: 1.25; }
+    .atelier .etat { margin-top: 0.8rem; opacity: 0.7; font-size: clamp(0.85rem, 1.4vw, 1.05rem); }
+    ol.retenus { margin: 0.7rem 0 0; padding-left: 1.6em; font-size: clamp(0.8rem, 1.35vw, 1.05rem); }
+    ol.retenus.colonnes { columns: 2; column-gap: 1.6rem; }
+    ol.retenus.colonnes li { break-inside: avoid; }
+    ol.retenus li { margin-bottom: 0.15em; opacity: 0; animation: apparaitre 0.4s ease forwards; }
+    @keyframes apparaitre { to { opacity: 1; } }
+    ol.retenus li strong { color: var(--or); font-weight: 700; }
+    ol.retenus li .org { opacity: 0.65; font-size: 0.85em; }
+    .attente-liste { margin-top: 0.5rem; font-size: clamp(0.72rem, 1.2vw, 0.92rem); opacity: 0.6; }
+    .vide { text-align: center; opacity: 0.7; font-size: 1.2rem; padding: 4rem 1rem; }
+    /* Mode tableau (grille horaires × salles, projeté pendant l'AG) */
+    table.tableau-ateliers {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    table.tableau-ateliers th, table.tableau-ateliers td {
+      border: 1px solid var(--bord);
+      padding: 0.5rem 0.6rem;
+      vertical-align: top;
+      font-size: clamp(0.7rem, 1.25vw, 1.02rem);
+    }
+    table.tableau-ateliers tr:first-child th {
+      background: rgba(240, 178, 62, 0.18);
+      color: var(--or);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: clamp(0.75rem, 1.4vw, 1.1rem);
+    }
+    table.tableau-ateliers th.creneau {
+      background: rgba(127, 179, 255, 0.14);
+      color: var(--bleu-clair);
+      white-space: nowrap;
+      width: 8.5em;
+      text-align: left;
+    }
+    table.tableau-ateliers td.occupe { background: var(--voile); }
+    table.tableau-ateliers td.occupe.tire { border-color: var(--or); }
+    table.tableau-ateliers .nom-cellule { font-weight: 700; line-height: 1.25; }
+    table.tableau-ateliers .detail-cellule { opacity: 0.65; font-size: 0.85em; margin-top: 0.25em; }
+    .aide { position: fixed; right: 1rem; bottom: 0.6rem; font-size: 0.75rem; opacity: 0.4; }
+    @media (prefers-reduced-motion: reduce) {
+      .atelier.vient-d-etre-tire, ol.retenus li { animation: none; opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <div class="entete">
+      <div class="surtitre" id="surtitre">Journées d'études</div>
+      <h1 id="titre">Ateliers — participants retenus</h1>
+    </div>
+    <div id="bandeau-creneau" class="bandeau-creneau"></div>
+    <div id="grille"><div class="vide">Connexion…</div></div>
+  </div>
+  <div class="aide">double-clic : plein écran · touche G : tableau des créneaux</div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="js/kiosque-ateliers.js"></script>
+  <script src="js/regie-kiosque.js"></script>
+</body>
+</html>
