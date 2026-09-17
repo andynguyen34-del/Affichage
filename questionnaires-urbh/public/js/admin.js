@@ -1760,6 +1760,21 @@
           faire apparaître sur le portail ; ceux qui existent déjà ne sont
           pas dupliqués.</p>
         </form>
+        <h3>Phase de test</h3>
+        <p class="muet">Le temps de tester avant les JE : rendre les
+        questionnaires <strong>ouverts</strong> visibles par <strong>tous les
+        inscrits</strong>, sans filtre visiteur/exposant ni réservation aux
+        retenus des ateliers. À désactiver avant le début des journées pour
+        retrouver le ciblage normal.</p>
+        <div class="ligne-boutons">
+          <button type="button" id="bouton-questionnaires-pour-tous"
+            class="${portail.questionnairesPourTous ? '' : 'secondaire'}">
+            🧪 Visibles par tous : ${portail.questionnairesPourTous ? 'OUI (test en cours)' : 'NON'}
+          </button>
+          <button type="button" id="bouton-ouvrir-tous-questionnaires" class="secondaire">
+            Ouvrir tous les questionnaires
+          </button>
+        </div>
       </div>
 
       <div class="carte">
@@ -3076,6 +3091,28 @@
       );
       router();
     });
+
+    document
+      .getElementById('bouton-questionnaires-pour-tous')
+      .addEventListener('click', async () => {
+        await refPortail.update({ questionnairesPourTous: !portail.questionnairesPourTous });
+        router();
+      });
+
+    document
+      .getElementById('bouton-ouvrir-tous-questionnaires')
+      .addEventListener('click', async () => {
+        const brouillons = questionnaires.filter((q) => q.statut !== 'ouvert');
+        for (const q of brouillons) {
+          await db.collection('questionnaires').doc(q.id).update({ statut: 'ouvert' });
+        }
+        alert(
+          brouillons.length
+            ? `${brouillons.length} questionnaire(s) ouvert(s).`
+            : 'Tous les questionnaires sont déjà ouverts.',
+        );
+        router();
+      });
 
     // --- actions d'amélioration
 

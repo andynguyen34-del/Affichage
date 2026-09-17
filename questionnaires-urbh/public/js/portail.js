@@ -2015,10 +2015,16 @@
         .where('journeeId', '==', journeeId)
         .where('statut', '==', 'ouvert')
         .get();
-      questionnaires = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((q) => !q.audience || q.audience === 'tous' || q.audience === typeEffectif());
-      questionnaires = await filtrerQuestionnairesConcernes(questionnaires);
+      questionnaires = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Phase de test (interrupteur de l'administration) : tous les
+      // questionnaires ouverts sont visibles par tout le monde. Sinon,
+      // chacun ne voit que son public et ses ateliers.
+      if (!(portail && portail.questionnairesPourTous)) {
+        questionnaires = questionnaires.filter(
+          (q) => !q.audience || q.audience === 'tous' || q.audience === typeEffectif(),
+        );
+        questionnaires = await filtrerQuestionnairesConcernes(questionnaires);
+      }
     } catch (_) {
       questionnaires = [];
     }

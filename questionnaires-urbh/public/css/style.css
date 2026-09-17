@@ -510,3 +510,66 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
   border-radius: 8px;
   resize: vertical;
 }
+
+/* Questionnaires ludiques : notes en étoiles + barre de progression. */
+.note-etoiles {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.note-etoiles label {
+  cursor: pointer;
+  font-size: 2.2rem;
+  line-height: 1;
+  padding: 0.1rem 0.15rem;
+  color: #d8dee8;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.note-etoiles label:hover { transform: scale(1.15); }
+.note-etoiles input { position: absolute; opacity: 0; }
+/* Toutes les étoiles jusqu'à celle choisie passent en or. */
+.note-etoiles label:has(input:checked),
+.note-etoiles label:has(~ label input:checked) { color: #f0b23e; }
+.note-etoiles .emoji-note { font-size: 1.7rem; margin-left: 0.45rem; min-width: 2rem; }
+.note-etoiles .emoji-note.pop { animation: pop-emoji 0.35s ease; }
+@keyframes pop-emoji {
+  0% { transform: scale(0.3); }
+  60% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.libelle-note { min-height: 1.1em; margin-top: 0.15rem; }
+#progression-questions {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: var(--fond);
+  padding: 0.55rem 0.2rem;
+  margin-bottom: 0.8rem;
+  border-bottom: 1px solid var(--bord);
+}
+#progression-questions .jauge {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f2;
+  overflow: hidden;
+}
+#progression-questions .remplie {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1d4e89, #f0b23e);
+  transition: width 0.3s ease;
+}
+#progression-questions .etat {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--bleu-fonce);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-etoiles label, .note-etoiles .emoji-note.pop, #progression-questions .remplie { transition: none; animation: none; }
+}

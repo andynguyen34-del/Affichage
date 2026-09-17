@@ -74,23 +74,34 @@
     let corps = '';
 
     if (q.type === 'echelle4') {
-      // Une question peut porter ses propres libellés (champ « libelles »),
-      // par exemple « Pas du tout satisfait … Très satisfait » des ateliers.
+      // Échelle officielle à 4 niveaux (documents Qualiopi), présentée en
+      // 4 étoiles : le libellé du niveau choisi s'affiche sous les étoiles.
+      const libelles = Array.isArray(q.libelles) && q.libelles.length === 4 ? q.libelles : ECHELLE4;
       corps =
-        '<div class="echelle">' +
-        (Array.isArray(q.libelles) && q.libelles.length === 4 ? q.libelles : ECHELLE4).map(
-          (lib, i) =>
-            `<label><input type="radio" name="${nom}" value="${i + 1}">${echapper(lib)}</label>`,
-        ).join('') +
-        '</div>';
-    } else if (q.type === 'note5') {
-      corps =
-        '<div class="note10">' +
-        Array.from({ length: 5 }, (_, i) =>
-          `<label><input type="radio" name="${nom}" value="${i + 1}">${i + 1}</label>`,
-        ).join('') +
+        '<div class="note-etoiles" data-emojis="😞😕🙂🤩">' +
+        libelles
+          .map(
+            (lib, i) =>
+              `<label title="${echapper(lib)}"><input type="radio" name="${nom}"
+                value="${i + 1}" data-libelle="${echapper(lib)}"><span>★</span></label>`,
+          )
+          .join('') +
+        '<span class="emoji-note" aria-hidden="true"></span>' +
         '</div>' +
-        '<div class="muet petit">1 = note la plus basse, 5 = la meilleure</div>';
+        '<div class="libelle-note muet petit"></div>';
+    } else if (q.type === 'note5') {
+      // Note de 1 à 5, en 5 étoiles.
+      corps =
+        '<div class="note-etoiles" data-emojis="😞😕🙂😃🤩">' +
+        Array.from(
+          { length: 5 },
+          (_, i) =>
+            `<label title="${i + 1} / 5"><input type="radio" name="${nom}"
+              value="${i + 1}" data-libelle="${i + 1} / 5"><span>★</span></label>`,
+        ).join('') +
+        '<span class="emoji-note" aria-hidden="true"></span>' +
+        '</div>' +
+        '<div class="libelle-note muet petit"></div>';
     } else if (q.type === 'note10') {
       corps =
         '<div class="note10">' +
@@ -171,6 +182,48 @@
         champ.focus();
       }),
     );
+
+    // Étoiles : émoji de réaction et libellé du niveau choisi.
+    zone.querySelectorAll('.note-etoiles').forEach((blocEtoiles) => {
+      const emojis = [...(blocEtoiles.dataset.emojis || '')];
+      blocEtoiles.querySelectorAll('input').forEach((entree, i) =>
+        entree.addEventListener('change', () => {
+          const emoji = blocEtoiles.querySelector('.emoji-note');
+          if (emoji) {
+            emoji.textContent = emojis[i] || '';
+            emoji.classList.remove('pop');
+            void emoji.offsetWidth; // relance l'animation
+            emoji.classList.add('pop');
+          }
+          const libelle = blocEtoiles.parentElement.querySelector('.libelle-note');
+          if (libelle) libelle.textContent = entree.dataset.libelle || '';
+        }),
+      );
+    });
+
+    // Barre de progression ludique : suit les réponses en temps réel.
+    const progression = document.createElement('div');
+    progression.id = 'progression-questions';
+    progression.innerHTML =
+      '<div class="jauge"><div class="remplie"></div></div><span class="etat"></span>';
+    zone.prepend(progression);
+    const blocsQuestions = [...zone.querySelectorAll('.question')];
+    function majProgression() {
+      const repondu = blocsQuestions.filter((bloc) => {
+        const champTexte = bloc.dataset.type === 'texte' ? bloc.querySelector('textarea') : null;
+        if (champTexte) return champTexte.value.trim() !== '';
+        return !!bloc.querySelector('input:checked');
+      }).length;
+      const total = blocsQuestions.length;
+      progression.querySelector('.remplie').style.width =
+        (total ? Math.round((repondu / total) * 100) : 0) + '%';
+      progression.querySelector('.etat').textContent =
+        repondu === total && total ? `🎉 ${repondu}/${total}` : `🌟 ${repondu}/${total}`;
+    }
+    zone.addEventListener('change', majProgression);
+    zone.addEventListener('input', majProgression);
+    majProgression();
+
     montrer('formulaire');
   }
 
@@ -288,7 +341,18 @@
       // Questionnaire d'atelier : réservé aux personnes RETENUES pour un
       // atelier dont le nom contient le motif — inutile de questionner les
       // autres.
-      if (donnees.reserveAtelier) {
+      // Phase de test : l'administration peut ouvrir tous les
+      // questionnaires à tout le monde (interrupteur sur le portail).
+      let pourTous = false;
+      try {
+        if (donnees.journeeId) {
+          const p = await db.collection('portails').doc(donnees.journeeId).get();
+          pourTous = !!(p.exists && p.data().questionnairesPourTous);
+        }
+      } catch (_) {
+        pourTous = false;
+      }
+      if (donnees.reserveAtelier && !pourTous) {
         let retenu = false;
         try {
           const snapA = await db
