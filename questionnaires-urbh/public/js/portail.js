@@ -2016,6 +2016,11 @@
         .where('statut', '==', 'ouvert')
         .get();
       questionnaires = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // « Administrateurs uniquement » : réservé aux comptes de l'équipe
+      // d'organisation (ceux du sélecteur de vision 🧪), même pendant la
+      // phase de test « visibles par tous ».
+      const pourAdmins = questionnaires.filter((q) => q.audience === 'admin');
+      questionnaires = questionnaires.filter((q) => q.audience !== 'admin');
       // Phase de test (interrupteur de l'administration) : tous les
       // questionnaires ouverts sont visibles par tout le monde. Sinon,
       // chacun ne voit que son public et ses ateliers.
@@ -2025,6 +2030,7 @@
         );
         questionnaires = await filtrerQuestionnairesConcernes(questionnaires);
       }
+      if (peutTesterVision()) questionnaires = [...pourAdmins, ...questionnaires];
     } catch (_) {
       questionnaires = [];
     }

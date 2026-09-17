@@ -338,6 +338,26 @@
         return;
       }
       const donnees = doc.data();
+      // Questionnaire « Administrateurs uniquement » : réservé aux comptes
+      // de l'équipe d'organisation (mêmes comptes que le sélecteur de
+      // vision 🧪 du portail), même pendant la phase de test.
+      if (donnees.audience === 'admin') {
+        const nom = String(profil.nom || '').trim().toUpperCase();
+        const prenom = String(profil.prenom || '').trim().toUpperCase();
+        const equipe =
+          ['NGUYEN', 'GIMBRE', 'TROUVAIN', 'JOURDAN', 'DIALLO'].includes(nom) ||
+          prenom === 'YVES';
+        if (!equipe) {
+          const zone = $('indisponible');
+          if (zone) {
+            zone.innerHTML =
+              '<h2>Questionnaire réservé</h2><p>Ce questionnaire est en cours de ' +
+              "préparation par l'équipe d'organisation.</p>";
+          }
+          montrer('indisponible');
+          return;
+        }
+      }
       // Questionnaire d'atelier : réservé aux personnes RETENUES pour un
       // atelier dont le nom contient le motif — inutile de questionner les
       // autres.

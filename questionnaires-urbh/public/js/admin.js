@@ -118,6 +118,16 @@
     atelier_rabc: 'RABC',
   };
 
+  // Visibilité d'un questionnaire sur le portail participants. « admin » :
+  // seuls les comptes de l'équipe d'organisation (sélecteur de vision 🧪)
+  // le voient — pratique pour tester un questionnaire avant de l'exposer.
+  const LIBELLES_AUDIENCE = {
+    tous: 'Tous les inscrits',
+    visiteur: 'Visiteurs blanchisseurs uniquement',
+    exposant: 'Exposants fournisseurs uniquement',
+    admin: 'Administrateurs uniquement (test)',
+  };
+
   // Moments de pointage (émargement) : ils conditionnent la participation à
   // la tombola de clôture — mêmes clés que sur le portail participants.
   const MOMENTS_POINTAGE = [
@@ -1716,12 +1726,21 @@
                   <div>
                     <a class="titre-item" href="#/questionnaire/${q.id}">${echapper(q.titre)}</a>
                     ${badgeStatut(q.statut)}
-                    <div class="muet">${(q.questions || []).length} questions —
-                      ${q.audience === 'visiteur' ? 'visiteurs' : q.audience === 'exposant' ? 'exposants' : 'tous les inscrits'}${
-                        q.reserveAtelier
-                          ? ' — <strong>réservé aux retenus de l\'atelier</strong> (« ' + echapper(q.reserveAtelier) + ' »)'
-                          : ''
-                      }</div>
+                    <div class="muet">${(q.questions || []).length} questions${
+                      q.reserveAtelier
+                        ? ' — <strong>réservé aux retenus de l\'atelier</strong> (« ' + echapper(q.reserveAtelier) + ' »)'
+                        : ''
+                    }</div>
+                    <label class="muet petit">Visible par
+                      <select class="sel-audience" data-id="${q.id}">
+                        ${Object.entries(LIBELLES_AUDIENCE)
+                          .map(
+                            ([val, lib]) =>
+                              `<option value="${val}" ${(q.audience || 'tous') === val ? 'selected' : ''}>${lib}</option>`,
+                          )
+                          .join('')}
+                      </select>
+                    </label>
                   </div>
                   <div class="pousse">
                     <a class="btn secondaire" href="#/questionnaire/${q.id}">Ouvrir</a>
@@ -1742,9 +1761,9 @@
           </label>
           <label class="champ">Proposé à
             <select id="q-audience">
-              <option value="tous">Tous les inscrits</option>
-              <option value="visiteur">Visiteurs blanchisseurs uniquement</option>
-              <option value="exposant">Exposants fournisseurs uniquement</option>
+              ${Object.entries(LIBELLES_AUDIENCE)
+                .map(([val, lib]) => `<option value="${val}">${lib}</option>`)
+                .join('')}
             </select>
           </label>
           <div class="ligne-boutons">
@@ -1765,7 +1784,9 @@
         questionnaires <strong>ouverts</strong> visibles par <strong>tous les
         inscrits</strong>, sans filtre visiteur/exposant ni réservation aux
         retenus des ateliers. À désactiver avant le début des journées pour
-        retrouver le ciblage normal.</p>
+        retrouver le ciblage normal. Un questionnaire « Administrateurs
+        uniquement » reste dans tous les cas réservé à l'équipe
+        d'organisation (comptes disposant du sélecteur de vision 🧪).</p>
         <div class="ligne-boutons">
           <button type="button" id="bouton-questionnaires-pour-tous"
             class="${portail.questionnairesPourTous ? '' : 'secondaire'}">
@@ -3092,6 +3113,13 @@
       router();
     });
 
+    document.querySelectorAll('.sel-audience').forEach((sel) =>
+      sel.addEventListener('change', async () => {
+        await db.collection('questionnaires').doc(sel.dataset.id).update({ audience: sel.value });
+        router();
+      }),
+    );
+
     document
       .getElementById('bouton-questionnaires-pour-tous')
       .addEventListener('click', async () => {
@@ -3428,7 +3456,9 @@
               ? 'aux visiteurs blanchisseurs'
               : questionnaire.audience === 'exposant'
                 ? 'aux exposants fournisseurs'
-                : 'à tous les inscrits'
+                : questionnaire.audience === 'admin'
+                  ? 'aux administrateurs uniquement (test)'
+                  : 'à tous les inscrits'
           }</p>
         <p class="muet petit">Bilan édité le ${new Date().toLocaleDateString('fr-FR')} —
           document conservé au titre de la démarche qualité (Qualiopi, indicateur 30).</p>
