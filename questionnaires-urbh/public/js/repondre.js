@@ -352,7 +352,8 @@
           if (zone) {
             zone.innerHTML =
               '<h2>Questionnaire réservé</h2><p>Ce questionnaire est en cours de ' +
-              "préparation par l'équipe d'organisation.</p>";
+              "préparation par l'équipe d'organisation.</p>" +
+              '<p><a class="btn" href="portail.html">Retour au menu</a></p>';
           }
           montrer('indisponible');
           return;
@@ -395,7 +396,8 @@
           if (zone) {
             zone.innerHTML =
               '<h2>Questionnaire réservé</h2><p>Ce questionnaire concerne uniquement ' +
-              "les participants retenus pour l'atelier correspondant.</p>";
+              "les participants retenus pour l'atelier correspondant.</p>" +
+              '<p><a class="btn" href="portail.html">Retour au menu</a></p>';
           }
           montrer('indisponible');
           return;

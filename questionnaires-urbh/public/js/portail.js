@@ -913,88 +913,140 @@
   async function chargerEvaluationDirecte() {
     const zone = document.getElementById('carte-evaluation');
     if (!zone) return;
+    // Seuls les événements DÉJÀ PASSÉS sont proposés : les flèches ne
+    // peuvent donc jamais dépasser le présent.
     const attendues = await evaluationsAttendues();
     if (!attendues.length) {
       zone.innerHTML = '';
       return;
     }
     const connues = evaluationsRepondues();
-    let courante = null;
-    let restantes = 0;
+    const repondues = new Set();
     for (const e of attendues) {
-      if (connues.has(e.id)) continue;
-      let repondu = false;
-      try {
-        const doc = await db.collection('evaluationsDirect').doc(e.id + '_' + uid).get();
-        repondu = doc.exists;
-      } catch (_) {
-        repondu = false;
-      }
-      if (repondu) {
-        marquerEvaluationRepondue(e.id);
+      if (connues.has(e.id)) {
+        repondues.add(e.id);
         continue;
       }
-      if (!courante) courante = e;
-      restantes += 1;
-    }
-    if (!courante) {
-      zone.innerHTML = `<div class="carte carte-evaluation-ok muet petit" style="text-align:center">
-        ✅ Merci, vous êtes à jour de vos avis en direct !</div>`;
-      return;
-    }
-    zone.innerHTML = `<div class="carte carte-evaluation">
-        <h2>⭐ Votre avis en direct</h2>
-        <p style="margin:0.2rem 0"><strong>${echapper(courante.titre)}</strong>
-          <span class="muet petit">— ${echapper(fmtHeureCourte(courante.debut))}${
-            restantes > 1 ? ` · encore ${restantes} avis en attente` : ''
-          }</span></p>
-        <div class="etoiles" id="eval-etoiles">
-          ${[1, 2, 3, 4, 5]
-            .map((n) => `<button type="button" class="etoile" data-note="${n}" aria-label="${n} étoile${n > 1 ? 's' : ''}">★</button>`)
-            .join('')}
-        </div>
-        <textarea id="eval-commentaire" maxlength="1000" rows="2"
-          placeholder="Commentaire (facultatif) — astuce : dictez-le avec le micro 🎤 du clavier."></textarea>
-        <div class="ligne-boutons">
-          <button id="eval-envoyer" disabled>Envoyer mon avis</button>
-        </div>
-        <div id="eval-erreur" class="erreur" hidden></div>
-      </div>`;
-
-    let note = 0;
-    const etoiles = zone.querySelectorAll('.etoile');
-    const boutonEnvoyer = document.getElementById('eval-envoyer');
-    etoiles.forEach((b) =>
-      b.addEventListener('click', () => {
-        note = Number(b.dataset.note);
-        etoiles.forEach((x) => x.classList.toggle('active', Number(x.dataset.note) <= note));
-        boutonEnvoyer.disabled = false;
-      }),
-    );
-    boutonEnvoyer.addEventListener('click', async () => {
-      if (!note) return;
-      boutonEnvoyer.disabled = true;
       try {
-        await db
-          .collection('evaluationsDirect')
-          .doc(courante.id + '_' + uid)
-          .set({
-            questionId: courante.id,
-            journeeId,
-            participantId: uid,
-            etoiles: note,
-            commentaire: document.getElementById('eval-commentaire').value.trim().slice(0, 1000),
-            creeLe: new Date().toISOString(),
-          });
-        marquerEvaluationRepondue(courante.id);
-        chargerEvaluationDirecte(); // question suivante, s'il y en a une
-      } catch (e2) {
-        const zoneErreur = document.getElementById('eval-erreur');
-        zoneErreur.textContent = "L'avis n'a pas pu être enregistré. Réessayez." + detailErreur(e2);
-        zoneErreur.hidden = false;
-        boutonEnvoyer.disabled = false;
+        const doc = await db.collection('evaluationsDirect').doc(e.id + '_' + uid).get();
+        if (doc.exists) {
+          repondues.add(e.id);
+          marquerEvaluationRepondue(e.id);
+        }
+      } catch (_) {
+        /* réseau : la question restera proposée */
       }
-    });
+    }
+
+    // Position de départ : le premier avis encore attendu, sinon le dernier
+    // événement passé.
+    let index = attendues.findIndex((e) => !repondues.has(e.id));
+    if (index < 0) index = attendues.length - 1;
+
+    function rendre() {
+      const courante = attendues[index];
+      const dejaFait = repondues.has(courante.id);
+      const restantes = attendues.filter((e) => !repondues.has(e.id)).length;
+      zone.innerHTML = `<div class="carte carte-evaluation">
+          <h2>⭐ Votre avis en direct</h2>
+          <div class="ligne-boutons" style="align-items:center;justify-content:space-between;flex-wrap:nowrap">
+            <button type="button" id="eval-precedent" class="secondaire" ${index > 0 ? '' : 'disabled'}
+              aria-label="Événement précédent">◀</button>
+            <span class="muet petit">${index + 1} / ${attendues.length}${
+              restantes ? ` · ${restantes} avis en attente` : ''
+            }</span>
+            <button type="button" id="eval-suivant" class="secondaire" ${index < attendues.length - 1 ? '' : 'disabled'}
+              aria-label="Événement suivant">▶</button>
+          </div>
+          <p style="margin:0.2rem 0"><strong>${echapper(courante.titre)}</strong>
+            <span class="muet petit">— ${echapper(fmtHeureCourte(courante.debut))}</span></p>
+          ${
+            dejaFait
+              ? `<p class="muet" style="text-align:center">✅ Avis envoyé — merci !</p>`
+              : `<div class="etoiles" id="eval-etoiles">
+                  ${[1, 2, 3, 4, 5]
+                    .map((n) => `<button type="button" class="etoile" data-note="${n}" aria-label="${n} étoile${n > 1 ? 's' : ''}">★</button>`)
+                    .join('')}
+                </div>
+                <textarea id="eval-commentaire" maxlength="1000" rows="2"
+                  placeholder="Commentaire (facultatif) — astuce : dictez-le avec le micro 🎤 du clavier."></textarea>
+                <div class="ligne-boutons">
+                  <button id="eval-envoyer" disabled>Envoyer mon avis</button>
+                  <button id="eval-non-concerne" class="secondaire" type="button">Non concerné</button>
+                </div>
+                <div id="eval-erreur" class="erreur" hidden></div>`
+          }
+        </div>`;
+
+      const precedent = document.getElementById('eval-precedent');
+      const suivant = document.getElementById('eval-suivant');
+      precedent.addEventListener('click', () => {
+        if (index > 0) {
+          index -= 1;
+          rendre();
+        }
+      });
+      suivant.addEventListener('click', () => {
+        if (index < attendues.length - 1) {
+          index += 1;
+          rendre();
+        }
+      });
+      if (dejaFait) return;
+
+      let note = 0;
+      const etoiles = zone.querySelectorAll('.etoile');
+      const boutonEnvoyer = document.getElementById('eval-envoyer');
+      etoiles.forEach((b) =>
+        b.addEventListener('click', () => {
+          note = Number(b.dataset.note);
+          etoiles.forEach((x) => x.classList.toggle('active', Number(x.dataset.note) <= note));
+          boutonEnvoyer.disabled = false;
+        }),
+      );
+      // etoiles = 0 : « non concerné » par cet événement (exclu des moyennes).
+      async function envoyer(valeur) {
+        try {
+          await db
+            .collection('evaluationsDirect')
+            .doc(courante.id + '_' + uid)
+            .set({
+              questionId: courante.id,
+              journeeId,
+              participantId: uid,
+              etoiles: valeur,
+              commentaire: valeur
+                ? document.getElementById('eval-commentaire').value.trim().slice(0, 1000)
+                : '',
+              creeLe: new Date().toISOString(),
+            });
+          marquerEvaluationRepondue(courante.id);
+          repondues.add(courante.id);
+          const prochain = attendues.findIndex((e) => !repondues.has(e.id));
+          if (prochain >= 0) index = prochain;
+          rendre();
+        } catch (e2) {
+          const zoneErreur = document.getElementById('eval-erreur');
+          if (zoneErreur) {
+            zoneErreur.textContent =
+              "L'avis n'a pas pu être enregistré. Réessayez." + detailErreur(e2);
+            zoneErreur.hidden = false;
+          }
+          boutonEnvoyer.disabled = !note;
+        }
+      }
+      boutonEnvoyer.addEventListener('click', () => {
+        if (!note) return;
+        boutonEnvoyer.disabled = true;
+        envoyer(note);
+      });
+      document.getElementById('eval-non-concerne').addEventListener('click', (evt) => {
+        evt.target.disabled = true;
+        envoyer(0);
+      });
+    }
+
+    rendre();
   }
   const fmtJour = (d) => {
     const t = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -1480,24 +1532,22 @@
     } catch (_) {
       ateliers = [];
     }
-    const mesVoeux = {};
+    // Vœux de la personne, avec leur CLASSEMENT (choix 1, 2, 3) — v66 : on
+    // ne coche plus des ateliers, on les classe par ordre de préférence.
+    const mesVoeux = {}; // atelierId → { rang } (null : pas de vœu)
     await Promise.all(
       ateliers.map(async (a) => {
         try {
           const d = await db.collection('voeux').doc(a.id + '_' + uid).get();
-          mesVoeux[a.id] = d.exists;
+          mesVoeux[a.id] = d.exists ? { rang: Number(d.data().rang) || 0 } : null;
         } catch (_) {
-          mesVoeux[a.id] = false;
+          mesVoeux[a.id] = null;
         }
       }),
     );
-    // Créneau de chevauchement : deux ateliers du même créneau (ex. « Jeudi
-    // 15h ») ne peuvent pas être suivis en même temps — une seule
-    // inscription par créneau. Repli sur l'horaire pour les anciens ateliers.
-    const creneauDe = (a) => a.creneau || a.horaire || '';
-    const creneauxInscrits = new Set(
-      ateliers.filter((a) => mesVoeux[a.id]).map(creneauDe),
-    );
+    const voeuxFaits = Object.values(mesVoeux).filter(Boolean);
+    const rangsPris = new Set(voeuxFaits.map((v) => v.rang).filter(Boolean));
+    const prochainRang = [1, 2, 3].find((r) => !rangsPris.has(r)) || 0;
 
     // Les inscriptions s'ouvrent et se ferment ATELIER PAR ATELIER par
     // l'administrateur (statut « ouvert ») : tant qu'elles le sont, chacun
@@ -1508,7 +1558,8 @@
       d.toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
 
     function htmlAtelier(a) {
-      const inscrit = mesVoeux[a.id];
+      const voeu = mesVoeux[a.id];
+      const inscrit = !!voeu;
       let etat = '';
       let action = '';
 
@@ -1521,7 +1572,8 @@
             aussitôt proposée à la personne suivante de la liste d'attente.</span></div>`;
           action = `<button class="secondaire bouton-liberer-place" data-id="${attr(a.id)}">Je libère ma place</button>`;
         } else if (posAttente >= 0) {
-          etat = `<div class="info">Vous êtes en liste d'attente (position ${posAttente + 1}) : présentez-vous à la salle, une place peut se libérer.</div>`;
+          etat = `<div class="info">Vous êtes en liste d'attente (position ${posAttente + 1}) : présentez-vous à la salle, une place peut se libérer
+            — vous seriez prévenu par la notification de l'application.</div>`;
         } else if (inscrit) {
           etat = `<div class="muet petit">Le tirage au sort n'a pas pu vous retenir cette fois-ci.</div>`;
         } else {
@@ -1529,18 +1581,33 @@
         }
       } else if (a.statut === 'ouvert') {
         if (inscrit) {
-          etat = `<div class="info">✅ Inscription enregistrée — un tirage au sort départagera
-            les inscrits. Vous pouvez vous désinscrire jusqu'au tirage.</div>`;
-          action = `<button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Me désinscrire</button>`;
-        } else if (creneauxInscrits.has(creneauDe(a))) {
-          etat = `<div class="muet petit">Vous êtes déjà inscrit à un autre atelier sur ce
-            créneau horaire — les ateliers d'un même créneau se déroulent en même temps.
-            Désinscrivez-vous de l'autre atelier pour changer.</div>`;
+          etat = `<div class="info">✅ Vœu enregistré${
+            voeu.rang ? ` — votre <strong>choix n° ${voeu.rang}</strong>` : ''
+          }. Le tirage au sort attribue à chacun son vœu le mieux classé
+            possible ; vous pouvez reclasser ou retirer vos vœux jusqu'au tirage.</div>`;
+          action = `<label class="muet petit" style="display:inline-flex;align-items:center;gap:0.4rem">Mon classement
+              <select class="sel-rang-voeu" data-id="${attr(a.id)}">
+                ${[1, 2, 3]
+                  .map(
+                    (r) =>
+                      `<option value="${r}" ${voeu.rang === r ? 'selected' : ''}>Choix ${r}</option>`,
+                  )
+                  .join('')}
+              </select>
+            </label>
+            <button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Retirer ce vœu</button>`;
+        } else if (voeuxFaits.length >= 3) {
+          etat = `<div class="muet petit">Vous avez déjà classé 3 vœux — retirez-en un
+            pour pouvoir choisir cet atelier.</div>`;
         } else {
-          action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je m'inscris à cet atelier</button>`;
+          action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je choisis cet atelier${
+            prochainRang ? ` (vœu n° ${prochainRang})` : ''
+          }</button>`;
         }
       } else if (inscrit) {
-        etat = `<div class="info">✅ Inscription enregistrée — inscriptions closes,
+        etat = `<div class="info">✅ Vœu enregistré${
+          voeu.rang ? ` (choix n° ${voeu.rang})` : ''
+        } — inscriptions closes,
           le tirage au sort aura lieu prochainement.</div>`;
       } else {
         etat = `<div class="muet petit">Inscriptions pas encore ouvertes${
@@ -1581,16 +1648,18 @@
                   ? `, en principe pendant l'Assemblée Générale
                     (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})`
                   : ''
-              }, et chacun peut <strong>s'inscrire ou se désinscrire librement
-              jusqu'au tirage au sort</strong>. Les places étant limitées, elles
-              sont départagées par tirage au sort. <strong>La préférence est
-              donnée à la répartition des participants d'une même
-              blanchisserie sur plusieurs ateliers</strong> (avec une marge de
-              deux par atelier si des collègues souhaitent pouvoir débattre
-              entre eux) ; on ne peut être retenu dans plusieurs ateliers que
-              s'il reste des places. Une seule inscription par créneau
-              horaire : les ateliers d'un même créneau se déroulent en même
-              temps.</p>
+              }. <strong>Classez jusqu'à trois vœux</strong> (choix 1, 2, 3)
+              par ordre de préférence — reclassement et retrait libres
+              jusqu'au tirage au sort. Les places étant limitées, un
+              <strong>tirage au sort</strong> attribue à chacun
+              <strong>une</strong> place, sur son vœu le mieux classé encore
+              disponible, avec la préférence à la répartition des
+              participants d'une même blanchisserie sur plusieurs ateliers ;
+              on ne peut être retenu sur un second atelier que s'il reste des
+              places, et jamais sur deux ateliers du même créneau horaire.
+              Pour vos vœux non satisfaits, vous êtes placé en <strong>liste
+              d'attente</strong> (les choix 1 d'abord) et promu
+              automatiquement en cas de désistement.</p>
               ${
                 'Notification' in window && Notification.permission === 'default'
                   ? `<div class="ligne-boutons">
@@ -1635,6 +1704,7 @@
 
     document.querySelectorAll('.bouton-voeu-atelier').forEach((b) =>
       b.addEventListener('click', async () => {
+        if (!prochainRang) return; // déjà 3 vœux classés
         b.disabled = true;
         try {
           await db
@@ -1650,6 +1720,7 @@
               organisme: profil.organisme || '',
               mobile: profil.mobile || '',
               numeroInscription: profil.numeroInscription || '',
+              rang: prochainRang,
               creeLe: new Date().toISOString(),
             });
           vueMenu();
@@ -1663,6 +1734,34 @@
       }),
     );
 
+    // Reclassement d'un vœu : si le rang choisi est déjà porté par un autre
+    // vœu, les deux ateliers échangent leur classement.
+    document.querySelectorAll('.sel-rang-voeu').forEach((sel) =>
+      sel.addEventListener('change', async () => {
+        const id = sel.dataset.id;
+        const nouveau = Number(sel.value);
+        sel.disabled = true;
+        try {
+          const ancien = mesVoeux[id] ? mesVoeux[id].rang : 0;
+          const autreId = Object.keys(mesVoeux).find(
+            (k) => k !== id && mesVoeux[k] && mesVoeux[k].rang === nouveau,
+          );
+          if (autreId && ancien >= 1 && ancien <= 3) {
+            try {
+              await db.collection('voeux').doc(autreId + '_' + uid).update({ rang: ancien });
+            } catch (_) {
+              /* l'autre atelier n'est plus ouvert : son rang reste tel quel */
+            }
+          }
+          await db.collection('voeux').doc(id + '_' + uid).update({ rang: nouveau });
+          vueMenu();
+        } catch (e) {
+          erreurAtelier('Le reclassement a échoué (inscriptions closes ?).' + detailErreur(e));
+          sel.disabled = false;
+        }
+      }),
+    );
+
     document.querySelectorAll('.bouton-retrait-atelier').forEach((b) =>
       b.addEventListener('click', async () => {
         b.disabled = true;
@@ -1670,7 +1769,7 @@
           await db.collection('voeux').doc(b.dataset.id + '_' + uid).delete();
           vueMenu();
         } catch (_) {
-          erreurAtelier('La désinscription a échoué (inscriptions closes ?).');
+          erreurAtelier('Le retrait du vœu a échoué (inscriptions closes ?).');
           b.disabled = false;
         }
       }),
@@ -1702,8 +1801,34 @@
             return;
           }
           const nouveauxRetenus = retenusActuels.filter((r) => r.participantId !== uid);
-          const attente = [...(a.listeAttente || [])];
-          const promu = attente.shift() || null;
+          // Promotion : le premier de la liste d'attente (déjà ordonnée par
+          // rang de vœu puis ordre de tirage) qui n'est pas déjà retenu sur
+          // un autre atelier du même créneau horaire.
+          let tousAteliers = [];
+          try {
+            const snapTousA = await db
+              .collection('ateliers')
+              .where('journeeId', '==', journeeId)
+              .get();
+            tousAteliers = snapTousA.docs.map((d2) => ({ id: d2.id, ...d2.data() }));
+          } catch (_) {
+            tousAteliers = [];
+          }
+          const creneauDe = (x) => x.creneau || x.horaire || '';
+          const conflit = (pid) =>
+            !!creneauDe(a) &&
+            tousAteliers.some(
+              (x) =>
+                x.id !== b.dataset.id &&
+                creneauDe(x) === creneauDe(a) &&
+                (x.retenus || []).some((r) => r.participantId === pid),
+            );
+          const attente = [];
+          let promu = null;
+          (a.listeAttente || []).forEach((cand) => {
+            if (!promu && !conflit(cand.participantId)) promu = cand;
+            else attente.push(cand);
+          });
           if (promu) nouveauxRetenus.push(promu);
           await ref.update({ retenus: nouveauxRetenus, listeAttente: attente });
           try {

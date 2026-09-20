@@ -839,6 +839,15 @@
       portailDoc = await refPortail.get();
     }
     const portail = portailDoc.data();
+    // Numéros des référents handicap (SMS automatique à chaque demande
+    // d'accompagnement cochée sur un profil — fonction serveur).
+    let referentsHandicap = [];
+    try {
+      const rh = await db.collection('config').doc('referentsHandicap').get();
+      referentsHandicap = (rh.exists && rh.data().numeros) || [];
+    } catch (_) {
+      referentsHandicap = [];
+    }
     const tirageInfo = portail.tirage || { ouvert: false, gagnants: [] };
     const gagnants = tirageInfo.gagnants || [];
     const tombolaInfo = portail.tombola || { lots: [], gagnants: [] };
@@ -1190,12 +1199,14 @@
         <h2>⭐ Évaluations en direct (au fil du programme)</h2>
         <p class="muet petit">Chaque événement du programme devient évaluable
         sur l'accueil des participants <strong>dès qu'il est terminé</strong> :
-        5 étoiles obligatoires + commentaire facultatif, une question à la
-        fois — il faut répondre pour passer à la suivante. Les
-        <strong>ateliers sont évalués individuellement, uniquement par leurs
-        retenus</strong>, 45 minutes après le début de la séance. Excluez ici
-        les événements à ne pas évaluer (pauses, repas…). Le questionnaire de
-        satisfaction reste en place pour les questions générales.</p>
+        5 étoiles + commentaire facultatif, ou <strong>« Non concerné »</strong>
+        pour passer sans noter (exclu des moyennes). Les flèches ◀ ▶
+        permettent de naviguer entre les événements déjà passés — jamais
+        au-delà du présent. Les <strong>ateliers sont évalués
+        individuellement, uniquement par leurs retenus</strong>, 45 minutes
+        après le début de la séance. Excluez ici les événements à ne pas
+        évaluer (pauses, repas…). Le questionnaire de satisfaction reste en
+        place pour les questions générales.</p>
         ${
           evenementsEval.length
             ? `<ul class="liste">${evenementsEval
@@ -1225,7 +1236,11 @@
                           e.reserveRetenus !== undefined
                             ? `réservé aux retenus de l'atelier (${e.reserveRetenus}) — `
                             : ''
-                        }${reponses.length} avis${
+                        }${notes.length} avis${
+                          reponses.length > notes.length
+                            ? ` · ${reponses.length - notes.length} non concerné(s)`
+                            : ''
+                        }${
                           moyenne !== null ? ` — moyenne <strong>${moyenne.toFixed(1)} ★</strong>` : ''
                         }</div>
                       ${
@@ -1247,6 +1262,26 @@
             : `<p class="muet">Le programme est vide : créez-le ci-dessus, les
                 évaluations en direct suivront automatiquement.</p>`
         }
+      </div>
+
+      <div class="carte">
+        <h2>♿ Référents handicap</h2>
+        <p class="muet petit">Jusqu'à trois numéros de mobile. Dès qu'une
+        personne coche « Je souhaite être accompagné(e) par le référent
+        handicap URBH » sur son profil, chacun de ces numéros reçoit
+        automatiquement un <strong>SMS</strong> avec ses coordonnées
+        (fonction serveur — nécessite le déploiement des fonctions
+        DEPLOYER-FONCTIONS et la clé Brevo, comme les SMS de désistement).</p>
+        <form id="form-referents-handicap" class="ligne-boutons" style="align-items:flex-end">
+          ${[1, 2, 3]
+            .map(
+              (n) => `<label class="champ petit" style="margin:0">Référent ${n}
+                <input id="rh-${n}" type="tel" placeholder="06 12 34 56 78"
+                  value="${attr(referentsHandicap[n - 1] || '')}"></label>`,
+            )
+            .join('')}
+          <button type="submit" class="secondaire">Enregistrer les référents</button>
+        </form>
       </div>
 
       <div class="carte">
@@ -1525,7 +1560,14 @@
                     </div>
                     <div><strong>${echapper(a.nom)}</strong></div>
                     ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
-                    <div class="muet petit">${voeux.length} inscrit(s), ${organismes.size} établissement(s) distinct(s)</div>
+                    <div class="muet petit">${voeux.length} inscrit(s), ${organismes.size} établissement(s) distinct(s)${(() => {
+                      const parRang = [1, 2, 3].map(
+                        (r) => voeux.filter((v) => Number(v.rang) === r).length,
+                      );
+                      return parRang.some(Boolean)
+                        ? ` — vœu 1 : ${parRang[0]} · vœu 2 : ${parRang[1]} · vœu 3 : ${parRang[2]}`
+                        : '';
+                    })()}</div>
                     <div class="ligne-boutons">
                       ${
                         a.statut !== 'tire'
@@ -1568,7 +1610,7 @@
                                   ${(a.listeAttente || [])
                                     .map(
                                       (r, i) =>
-                                        `${i + 1}. ${echapper(r.prenom)} ${echapper(r.nom)}${r.organisme ? ' (' + echapper(r.organisme) + ')' : ''}`,
+                                        `${i + 1}. ${echapper(r.prenom)} ${echapper(r.nom)}${r.organisme ? ' (' + echapper(r.organisme) + ')' : ''}${Number(r.rang) ? ` <span class="muet">— vœu ${Number(r.rang)}</span>` : ''}`,
                                     )
                                     .join(' · ')}
                                 </div>`
@@ -1600,18 +1642,25 @@
             ? `<div class="ligne-boutons">
                 <button id="bouton-ouvrir-tous-ateliers" class="secondaire">✅ Ouvrir les inscriptions de tous les ateliers</button>
                 <button id="bouton-fermer-tous-ateliers" class="secondaire">⛔ Fermer toutes les inscriptions</button>
+                <button id="bouton-tirer-tous-ateliers">🎲 Tirage général des ateliers restants</button>
                 <button id="bouton-programmer-tous-tirages" class="secondaire"
                   ${finAGparDefaut ? '' : 'disabled title="Paramétrez la période de l’AG ou la date de la journée"'}>
                   🕗 Programmer tous les tirages à la fin de l'AG${finAGparDefaut ? ` (${fmtHorodatage(finAGparDefaut)})` : ''}
                 </button>
               </div>
-              <p class="muet petit">Les participants s'inscrivent et se
-              désinscrivent librement tant que les inscriptions d'un atelier
-              sont ouvertes — le tirage au sort les fige. Chaque atelier
-              s'ouvre ou se ferme aussi individuellement ci-dessus, et son
-              tirage peut être <strong>programmé à une heure précise</strong> :
-              il se déclenche alors tout seul sur le serveur (à la minute
-              près), même si l'administration est fermée. Nécessite le
+              <p class="muet petit">Les participants classent leurs
+              <strong>vœux (choix 1, 2, 3)</strong> tant que les inscriptions
+              d'un atelier sont ouvertes — le tirage au sort les fige. Le
+              tirage arbitre tous les ateliers <strong>ensemble</strong> : un
+              seul ordre aléatoire, chacun reçoit d'abord UNE place sur son
+              meilleur vœu disponible (répartition des blanchisseries
+              conservée), puis les places restantes sont offertes en seconde
+              place aux moins servis, sans jamais deux ateliers sur le même
+              créneau ; les listes d'attente suivent le rang de vœu. Préférez
+              donc le <strong>tirage général</strong> (ou la programmation
+              d'une même heure) au tirage atelier par atelier. Le tirage
+              programmé se déclenche tout seul sur le serveur (à la minute
+              près), même si l'administration est fermée — nécessite le
               déploiement des fonctions (DEPLOYER-FONCTIONS).</p>`
             : ''
         }
@@ -1940,6 +1989,23 @@
       }),
     );
 
+    document.getElementById('form-referents-handicap').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const numeros = [1, 2, 3]
+        .map((n) => document.getElementById('rh-' + n).value.trim())
+        .filter(Boolean);
+      await db.collection('config').doc('referentsHandicap').set({
+        numeros,
+        majLe: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      alert(
+        numeros.length
+          ? `${numeros.length} référent(s) handicap enregistré(s) — ils recevront un SMS à chaque nouvelle demande.`
+          : 'Aucun numéro enregistré : les demandes ne déclencheront plus de SMS.',
+      );
+      router();
+    });
+
     const boutonSeedProgramme = document.getElementById('bouton-seed-programme');
     if (boutonSeedProgramme) {
       boutonSeedProgramme.addEventListener('click', async () => {
@@ -1951,7 +2017,9 @@
           ['2026-10-07', '14:00', '18:00', 'Accueil des participants', 'Entrée du palais des congrès'],
           ['2026-10-07', '16:30', '18:00', 'Réunion des présidents des comités régionaux', ''],
           ['2026-10-07', '18:00', '18:30', 'Accueil des nouveaux adhérents', ''],
-          ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture", HALL],
+          // La nocturne des stands du mercredi soir couvre l'apéritif ET le
+          // dîner, tous deux dans le hall des stands.
+          ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture — nocturne des stands", HALL],
           ['2026-10-07', '20:30', '23:00', 'Dîner — nocturne des stands', HALL],
           ['2026-10-08', '07:45', '08:00', 'Accueil café — ouverture des stands', AMPHI],
           ['2026-10-08', '08:00', '08:45', 'Assemblée Générale', AMPHI],
@@ -2530,51 +2598,132 @@
       router();
     });
 
-    // Tirage au sort équitable, atelier par atelier, dans l'ordre aléatoire :
-    //  1. priorité aux personnes non retenues dans un AUTRE atelier de la
-    //     journée ET dont l'établissement n'est pas encore représenté ici ;
-    //  2. puis, s'il reste des places, aux autres personnes non retenues
-    //     ailleurs (même si leur établissement est déjà représenté) ;
-    //  3. enfin, s'il reste encore des places, aux personnes déjà retenues
-    //     dans un autre atelier (une personne ne cumule donc plusieurs
-    //     ateliers que sur des places restantes).
-    // La liste d'attente reprend le même ordre de priorité.
-    function tirerEquitable(voeux, capacite, retenusAilleurs) {
-      const melange = [...voeux];
-      for (let i = melange.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [melange[i], melange[j]] = [melange[j], melange[i]];
-      }
-      const retenus = [];
-      const pris = new Set();
-      const nbParEtab = new Map(); // retenus de cet atelier, par blanchisserie
-      const cleEtab = (v) =>
-        (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
+    // Tirage au sort GLOBAL par vœux classés (choix 1, 2, 3) — v66.
+    //
+    // UN SEUL ordre de tirage aléatoire sert à tous les tours, puis les
+    // tours se renouvellent « en serpentin » (l'ordre s'inverse à chaque
+    // tour : la malchance ne se cumule pas) jusqu'à remplir si possible
+    // les ateliers :
+    //  - phase 1 : UNE place par personne, sur son vœu le mieux classé qui
+    //    a encore de la place, avec la préférence à la répartition des
+    //    blanchisseries (1 par établissement, puis marge de 2, puis sans
+    //    limite) et jamais deux ateliers sur le même créneau ;
+    //  - phase 2 : les places encore vides sont offertes en SECONDE place
+    //    aux moins servis d'abord, toujours sans conflit de créneau ;
+    //  - listes d'attente : les inscrits non retenus de chaque atelier, par
+    //    rang de vœu puis ordre de tirage (promotion sur désistement).
+    // MÊME algorithme que la régie des kiosques et que le tirage
+    // automatique serveur (functions/index.js).
+    function tirageParVoeux(cibles, tousAteliers, voeuxParAtelierLocal) {
+      const creneauDe = (a) => a.creneau || a.horaire || '';
+      const cibleIds = new Set(cibles.map((a) => a.id));
+      const parAtelier = {};
+      cibles.forEach((a) => {
+        parAtelier[a.id] = { retenus: [], attente: [] };
+      });
 
-      function passe(condition) {
-        melange.forEach((v) => {
-          if (retenus.length >= capacite || pris.has(v.participantId)) return;
-          if (!condition(v)) return;
-          retenus.push(v);
-          pris.add(v.participantId);
-          nbParEtab.set(cleEtab(v), (nbParEtab.get(cleEtab(v)) || 0) + 1);
+      // Une personne = un numéro de carte (déduplication des sessions).
+      const clePersonne = (v) => normaliserNumero(v.numeroInscription) || '~' + v.participantId;
+      const personnes = new Map();
+      cibles.forEach((a) => {
+        dedupeParNumero(voeuxParAtelierLocal[a.id] || []).forEach((v) => {
+          const cle = clePersonne(v);
+          if (!personnes.has(cle)) {
+            personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), nbPlaces: 0 });
+          }
+          const p = personnes.get(cle);
+          if (!p.voeux.some((x) => x.atelier.id === a.id)) {
+            p.voeux.push({ atelier: a, voeu: v, rang: Number(v.rang) || 9 });
+          }
         });
-      }
-      // Préférence à la RÉPARTITION d'une même blanchisserie sur plusieurs
-      // ateliers : d'abord une personne par établissement, puis une marge de
-      // DEUX par atelier (pour permettre à deux collègues de débattre entre
-      // eux), avant d'ouvrir plus largement.
-      passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 1));
-      passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 2));
-      passe((v) => !retenusAilleurs.has(v.participantId));
-      passe(() => true);
+      });
+      personnes.forEach((p) =>
+        p.voeux.sort(
+          (x, y) =>
+            x.rang - y.rang || String(x.voeu.creeLe || '').localeCompare(String(y.voeu.creeLe || '')),
+        ),
+      );
 
-      const restants = melange.filter((v) => !pris.has(v.participantId));
-      const attente = [
-        ...restants.filter((v) => !retenusAilleurs.has(v.participantId)),
-        ...restants.filter((v) => retenusAilleurs.has(v.participantId)),
-      ];
-      return { retenus, attente };
+      // Places déjà acquises lors de tirages précédents : la personne ne
+      // repasse ici qu'en phase 2, et ses créneaux sont occupés.
+      tousAteliers.forEach((a) => {
+        if (cibleIds.has(a.id)) return;
+        (a.retenus || []).forEach((r) => {
+          const p = personnes.get(clePersonne(r));
+          if (p) {
+            p.nbPlaces += 1;
+            if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+          }
+        });
+      });
+
+      // L'ordre de tirage, tiré une seule fois.
+      const ordre = [...personnes.values()];
+      for (let i = ordre.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
+      }
+      const position = new Map();
+      ordre.forEach((p, i) => position.set(p, i));
+
+      const nbParEtab = new Map(); // « atelier|établissement » → retenus
+      const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
+      const placesRestantes = (a) => (a.capacite || 20) - parAtelier[a.id].retenus.length;
+
+      function essayer(p, plafondEtab) {
+        for (const chx of p.voeux) {
+          const a = chx.atelier;
+          if (p.obtenus.has(a.id) || placesRestantes(a) <= 0) continue;
+          if (creneauDe(a) && p.creneauxPris.has(creneauDe(a))) continue;
+          const kEtab = a.id + '|' + cleEtab(chx.voeu);
+          if (plafondEtab && (nbParEtab.get(kEtab) || 0) >= plafondEtab) continue;
+          parAtelier[a.id].retenus.push(chx.voeu);
+          p.obtenus.add(a.id);
+          p.nbPlaces += 1;
+          if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+          nbParEtab.set(kEtab, (nbParEtab.get(kEtab) || 0) + 1);
+          return true;
+        }
+        return false;
+      }
+
+      // Phase 1 — une place par personne, en serpentin, la contrainte
+      // d'établissement se relâchant à chaque tour (1, puis 2, puis libre).
+      let sens = ordre;
+      [1, 2, 0].forEach((plafond) => {
+        sens.forEach((p) => {
+          if (p.nbPlaces === 0) essayer(p, plafond);
+        });
+        sens = [...sens].reverse();
+      });
+
+      // Phase 2 — remplir les places restantes : tours supplémentaires,
+      // une place de plus par tour et par personne, les moins servis d'abord.
+      let attribue = true;
+      while (attribue) {
+        attribue = false;
+        const parNbPlaces = [...ordre].sort(
+          (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
+        );
+        for (const p of parNbPlaces) {
+          if (essayer(p, 0)) attribue = true;
+        }
+      }
+
+      // Listes d'attente : par rang de vœu, puis ordre de tirage.
+      cibles.forEach((a) => {
+        const candidats = [];
+        personnes.forEach((p) => {
+          const chx = p.voeux.find((x) => x.atelier.id === a.id);
+          if (chx && !p.obtenus.has(a.id)) candidats.push({ p, chx });
+        });
+        candidats.sort(
+          (x, y) => x.chx.rang - y.chx.rang || position.get(x.p) - position.get(y.p),
+        );
+        parAtelier[a.id].attente = candidats.map((c) => c.chx.voeu);
+      });
+
+      return parAtelier;
     }
 
     function versPublic(v) {
@@ -2585,32 +2734,29 @@
         organisme: v.organisme || '',
         numeroInscription: v.numeroInscription || '',
         type: v.type || '',
+        rang: Number(v.rang) || 0,
       };
     }
 
-    async function lancerTirageAtelier(atelierId) {
-      const atelier = ateliers.find((x) => x.id === atelierId);
-      const voeux = voeuxParAtelier[atelierId] || [];
-      if (!atelier || !voeux.length) return;
-      // Personnes déjà retenues dans un autre atelier de la journée : elles
-      // ne repassent ici que sur des places restantes.
-      const retenusAilleurs = new Set();
-      ateliers.forEach((x) => {
-        if (x.id !== atelierId) {
-          (x.retenus || []).forEach((r) => retenusAilleurs.add(r.participantId));
-        }
-      });
-      const { retenus, attente } = tirerEquitable(
-        dedupeParNumero(voeux),
-        atelier.capacite || 20,
-        retenusAilleurs,
+    async function lancerTirage(atelierIds) {
+      const cibles = ateliers.filter(
+        (a) => atelierIds.includes(a.id) && (voeuxParAtelier[a.id] || []).length,
       );
-      await db.collection('ateliers').doc(atelierId).update({
-        statut: 'tire',
-        retenus: retenus.map(versPublic),
-        listeAttente: attente.map(versPublic),
-        tireLe: firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      if (!cibles.length) {
+        alert('Aucun inscrit sur les ateliers à tirer.');
+        return;
+      }
+      const resultat = tirageParVoeux(cibles, ateliers, voeuxParAtelier);
+      for (const a of cibles) {
+        const r = resultat[a.id];
+        await db.collection('ateliers').doc(a.id).update({
+          statut: 'tire',
+          retenus: r.retenus.map(versPublic),
+          listeAttente: r.attente.map(versPublic),
+          tireLe: firebase.firestore.FieldValue.serverTimestamp(),
+          tirageAutoLe: null,
+        });
+      }
       router();
     }
 
@@ -2679,15 +2825,30 @@
     }
 
     document.querySelectorAll('.bouton-tirer-atelier').forEach((b) =>
-      b.addEventListener('click', () => lancerTirageAtelier(b.dataset.id)),
+      b.addEventListener('click', () => lancerTirage([b.dataset.id])),
     );
     document.querySelectorAll('.bouton-refaire-atelier').forEach((b) =>
       b.addEventListener('click', () => {
         if (confirm('Refaire le tirage de cet atelier ? Le résultat actuel sera remplacé.')) {
-          lancerTirageAtelier(b.dataset.id);
+          lancerTirage([b.dataset.id]);
         }
       }),
     );
+    const boutonTirerTous = document.getElementById('bouton-tirer-tous-ateliers');
+    if (boutonTirerTous) {
+      boutonTirerTous.addEventListener('click', () => {
+        const restants = ateliers.filter((a) => a.statut !== 'tire').map((a) => a.id);
+        if (!restants.length) return;
+        if (
+          confirm(
+            `Tirer au sort maintenant les ${restants.length} atelier(s) non encore tirés ? ` +
+              'Les vœux classés (choix 1, 2, 3) de tous ces ateliers sont arbitrés ensemble.',
+          )
+        ) {
+          lancerTirage(restants);
+        }
+      });
+    }
 
     document.querySelectorAll('.bouton-csv-atelier').forEach((b) =>
       b.addEventListener('click', () => {

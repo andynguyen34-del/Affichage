@@ -43,6 +43,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Référents handicap de l'association (jusqu'à 3 numéros de mobile),
+    // saisis dans l'administration : la fonction serveur les prévient par
+    // SMS dès qu'une demande d'accompagnement est cochée sur un profil.
+    match /config/referentsHandicap {
+      allow read, write: if isAdmin();
+    }
+
     match /journees/{journeeId} {
       allow read, write: if isAdmin();
     }
@@ -199,7 +206,12 @@ service cloud.firestore {
         && request.resource.data.participantId == request.auth.uid
         && request.resource.data.keys().hasOnly(
              ['atelierId', 'journeeId', 'participantId', 'type', 'nom',
-              'prenom', 'organisme', 'mobile', 'numeroInscription', 'creeLe'])
+              'prenom', 'organisme', 'mobile', 'numeroInscription', 'rang',
+              'creeLe'])
+        && (!request.resource.data.keys().hasAny(['rang'])
+            || (request.resource.data.rang is int
+                && request.resource.data.rang >= 1
+                && request.resource.data.rang <= 3))
         && get(/databases/$(database)/documents/ateliers/$(request.resource.data.atelierId))
              .data.statut == 'ouvert';
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
@@ -209,7 +221,18 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
                  .data.statut == 'ouvert');
       allow list: if isAdmin();
-      allow update: if isAdmin(); // anonymisation
+      // Le participant peut reclasser son vœu (choix 1, 2, 3) tant que les
+      // inscriptions de l'atelier sont ouvertes ; l'administrateur, toujours
+      // (anonymisation).
+      allow update: if isAdmin()
+        || (connecte()
+            && resource.data.participantId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rang'])
+            && request.resource.data.rang is int
+            && request.resource.data.rang >= 1
+            && request.resource.data.rang <= 3
+            && get(/databases/$(database)/documents/ateliers/$(resource.data.atelierId))
+                 .data.statut == 'ouvert');
     }
 
     // Pointage de présence à un moment clé de la journée (émargement) :
@@ -271,8 +294,9 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(
              ['questionId', 'journeeId', 'participantId', 'etoiles',
               'commentaire', 'creeLe'])
+        // 0 étoile = « non concerné » par cet événement (exclu des moyennes).
         && request.resource.data.etoiles is int
-        && request.resource.data.etoiles >= 1
+        && request.resource.data.etoiles >= 0
         && request.resource.data.etoiles <= 5;
       allow get: if isAdmin() || (connecte() && resource.data.participantId == request.auth.uid);
       allow list, delete: if isAdmin();

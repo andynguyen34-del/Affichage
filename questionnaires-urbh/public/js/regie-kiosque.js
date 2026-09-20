@@ -449,40 +449,115 @@
 
   // ------------------------------------------------- panneau « ateliers »
 
-  // Tirage équitable — même algorithme que la console d'administration :
-  // priorité aux personnes non retenues ailleurs et aux établissements non
-  // encore représentés, puis non retenues ailleurs, puis les autres.
-  function tirerEquitable(voeux, capacite, retenusAilleurs) {
-    const melange = [...voeux];
-    for (let i = melange.length - 1; i > 0; i -= 1) {
+  // Tirage au sort GLOBAL par vœux classés (choix 1, 2, 3) — MÊME
+  // algorithme que la console d'administration et que le tirage automatique
+  // serveur (functions/index.js) : un seul ordre de tirage aléatoire, tours
+  // en serpentin, une place par personne d'abord (répartition des
+  // blanchisseries : 1 par établissement, puis marge de 2, puis libre, et
+  // jamais deux ateliers sur le même créneau), puis les places restantes en
+  // seconde place aux moins servis ; listes d'attente par rang de vœu puis
+  // ordre de tirage.
+  function tirageParVoeux(cibles, tousAteliers, voeuxParAtelier) {
+    const creneauDe = (a) => a.creneau || a.horaire || '';
+    const cibleIds = new Set(cibles.map((a) => a.id));
+    const parAtelier = {};
+    cibles.forEach((a) => {
+      parAtelier[a.id] = { retenus: [], attente: [] };
+    });
+
+    const clePersonne = (v) => normaliserNumero(v.numeroInscription) || '~' + v.participantId;
+    const personnes = new Map();
+    cibles.forEach((a) => {
+      dedupeParNumero(voeuxParAtelier[a.id] || []).forEach((v) => {
+        const cle = clePersonne(v);
+        if (!personnes.has(cle)) {
+          personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), nbPlaces: 0 });
+        }
+        const p = personnes.get(cle);
+        if (!p.voeux.some((x) => x.atelier.id === a.id)) {
+          p.voeux.push({ atelier: a, voeu: v, rang: Number(v.rang) || 9 });
+        }
+      });
+    });
+    personnes.forEach((p) =>
+      p.voeux.sort(
+        (x, y) =>
+          x.rang - y.rang || String(x.voeu.creeLe || '').localeCompare(String(y.voeu.creeLe || '')),
+      ),
+    );
+
+    tousAteliers.forEach((a) => {
+      if (cibleIds.has(a.id)) return;
+      (a.retenus || []).forEach((r) => {
+        const p = personnes.get(clePersonne(r));
+        if (p) {
+          p.nbPlaces += 1;
+          if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+        }
+      });
+    });
+
+    const ordre = [...personnes.values()];
+    for (let i = ordre.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
-      [melange[i], melange[j]] = [melange[j], melange[i]];
+      [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
     }
-    const retenus = [];
-    const pris = new Set();
+    const position = new Map();
+    ordre.forEach((p, i) => position.set(p, i));
+
     const nbParEtab = new Map();
     const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
-    function passe(condition) {
-      melange.forEach((v) => {
-        if (retenus.length >= capacite || pris.has(v.participantId)) return;
-        if (!condition(v)) return;
-        retenus.push(v);
-        pris.add(v.participantId);
-        nbParEtab.set(cleEtab(v), (nbParEtab.get(cleEtab(v)) || 0) + 1);
-      });
+    const placesRestantes = (a) => (a.capacite || 20) - parAtelier[a.id].retenus.length;
+
+    function essayer(p, plafondEtab) {
+      for (const chx of p.voeux) {
+        const a = chx.atelier;
+        if (p.obtenus.has(a.id) || placesRestantes(a) <= 0) continue;
+        if (creneauDe(a) && p.creneauxPris.has(creneauDe(a))) continue;
+        const kEtab = a.id + '|' + cleEtab(chx.voeu);
+        if (plafondEtab && (nbParEtab.get(kEtab) || 0) >= plafondEtab) continue;
+        parAtelier[a.id].retenus.push(chx.voeu);
+        p.obtenus.add(a.id);
+        p.nbPlaces += 1;
+        if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+        nbParEtab.set(kEtab, (nbParEtab.get(kEtab) || 0) + 1);
+        return true;
+      }
+      return false;
     }
-    // Répartition d'une même blanchisserie sur plusieurs ateliers, avec une
-    // marge de deux personnes par atelier — même règle que l'administration.
-    passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 1));
-    passe((v) => !retenusAilleurs.has(v.participantId) && !(nbParEtab.get(cleEtab(v)) >= 2));
-    passe((v) => !retenusAilleurs.has(v.participantId));
-    passe(() => true);
-    const restants = melange.filter((v) => !pris.has(v.participantId));
-    const attente = [
-      ...restants.filter((v) => !retenusAilleurs.has(v.participantId)),
-      ...restants.filter((v) => retenusAilleurs.has(v.participantId)),
-    ];
-    return { retenus, attente };
+
+    let sens = ordre;
+    [1, 2, 0].forEach((plafond) => {
+      sens.forEach((p) => {
+        if (p.nbPlaces === 0) essayer(p, plafond);
+      });
+      sens = [...sens].reverse();
+    });
+
+    let attribue = true;
+    while (attribue) {
+      attribue = false;
+      const parNbPlaces = [...ordre].sort(
+        (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
+      );
+      for (const p of parNbPlaces) {
+        if (essayer(p, 0)) attribue = true;
+      }
+    }
+
+    cibles.forEach((a) => {
+      const candidats = [];
+      personnes.forEach((p) => {
+        const chx = p.voeux.find((x) => x.atelier.id === a.id);
+        if (chx && !p.obtenus.has(a.id)) candidats.push({ p, chx });
+      });
+      candidats.sort(
+        (x, y) => x.chx.rang - y.chx.rang || position.get(x.p) - position.get(y.p),
+      );
+      parAtelier[a.id].attente = candidats.map((c) => c.chx.voeu);
+    });
+
+    return parAtelier;
   }
 
   function versPublic(v) {
@@ -493,35 +568,37 @@
       organisme: v.organisme || '',
       numeroInscription: v.numeroInscription || '',
       type: v.type || '',
+      rang: Number(v.rang) || 0,
     };
   }
 
-  async function lancerTirageAtelier(journeeId, atelierId) {
+  async function lancerTirageAteliers(journeeId, atelierIds) {
     const snapA = await db.collection('ateliers').where('journeeId', '==', journeeId).get();
     const ateliers = snapA.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const atelier = ateliers.find((x) => x.id === atelierId);
-    if (!atelier) return;
-    const snapV = await db.collection('voeux').where('atelierId', '==', atelierId).get();
-    const voeux = snapV.docs.map((d) => d.data());
-    if (!voeux.length) {
-      alert('Aucun inscrit à cet atelier.');
+    const snapV = await db.collection('voeux').where('journeeId', '==', journeeId).get();
+    const voeuxParAtelier = {};
+    snapV.docs.forEach((d) => {
+      const v = d.data();
+      (voeuxParAtelier[v.atelierId] = voeuxParAtelier[v.atelierId] || []).push(v);
+    });
+    const cibles = ateliers.filter(
+      (a) => atelierIds.includes(a.id) && (voeuxParAtelier[a.id] || []).length,
+    );
+    if (!cibles.length) {
+      alert('Aucun inscrit sur les ateliers à tirer.');
       return;
     }
-    const retenusAilleurs = new Set();
-    ateliers.forEach((x) => {
-      if (x.id !== atelierId) (x.retenus || []).forEach((r) => retenusAilleurs.add(r.participantId));
-    });
-    const { retenus, attente } = tirerEquitable(
-      dedupeParNumero(voeux),
-      atelier.capacite || 20,
-      retenusAilleurs,
-    );
-    await db.collection('ateliers').doc(atelierId).update({
-      statut: 'tire',
-      retenus: retenus.map(versPublic),
-      listeAttente: attente.map(versPublic),
-      tireLe: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    const resultat = tirageParVoeux(cibles, ateliers, voeuxParAtelier);
+    for (const a of cibles) {
+      const r = resultat[a.id];
+      await db.collection('ateliers').doc(a.id).update({
+        statut: 'tire',
+        retenus: r.retenus.map(versPublic),
+        listeAttente: r.attente.map(versPublic),
+        tireLe: firebase.firestore.FieldValue.serverTimestamp(),
+        tirageAutoLe: null,
+      });
+    }
   }
 
   async function vueAteliers(journeeId) {
@@ -547,6 +624,28 @@
     panneau.innerHTML = '';
     panneau.append(titreSection('🎲 Tirages des ateliers'));
     if (!ateliers.length) panneau.append(muet('Aucun atelier pour cette journée.'));
+    const idsRestants = ateliers.filter((a) => a.statut !== 'tire').map((a) => a.id);
+    if (idsRestants.length) {
+      panneau.append(
+        ligne(
+          'Tirage général (vœux classés)',
+          `les ${idsRestants.length} atelier(s) non tirés, arbitrés ensemble — recommandé`,
+          [
+            bouton('🎲 Tirer tous les ateliers restants', 'or', async () => {
+              if (
+                !confirm(
+                  `Tirer au sort maintenant les ${idsRestants.length} atelier(s) restants ? ` +
+                    'Les vœux classés (choix 1, 2, 3) sont arbitrés ensemble.',
+                )
+              ) {
+                return;
+              }
+              await lancerTirageAteliers(journeeId, idsRestants);
+            }),
+          ],
+        ),
+      );
+    }
     ateliers.forEach((a) => {
       const inscrits = nbVoeux[a.id] || 0;
       const boutons = [];
@@ -554,7 +653,7 @@
         boutons.push(
           bouton('🔁 Refaire', 'contour', async () => {
             if (!confirm(`Refaire le tirage de « ${a.nom} » ? Le résultat actuel sera remplacé.`)) return;
-            await lancerTirageAtelier(journeeId, a.id);
+            await lancerTirageAteliers(journeeId, [a.id]);
           }),
         );
       } else {
@@ -568,7 +667,7 @@
               .update({ statut: a.statut === 'ouvert' ? 'ferme' : 'ouvert' });
           }),
         );
-        const b = bouton('🎲 Tirer', 'or', () => lancerTirageAtelier(journeeId, a.id));
+        const b = bouton('🎲 Tirer', 'or', () => lancerTirageAteliers(journeeId, [a.id]));
         if (!inscrits) {
           b.disabled = true;
           b.title = 'Aucun inscrit';
