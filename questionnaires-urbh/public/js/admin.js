@@ -530,19 +530,89 @@
               </div>`
             : ''
         }
+      </div>
+
+      <div class="carte">
+        <h2>🔎 Visiteurs attendus (${annuaire.length})</h2>
+        <p class="muet petit">Recherche dans l'annuaire des inscrits attendus,
+        par nom, prénom, n° de carte ou établissement — pratique à l'accueil.
+        L'hôtel de résidence et son adresse s'affichent quand ils figurent
+        dans le fichier importé, avec un lien 🗺️ qui ouvre la carte de
+        géolocalisation du téléphone.</p>
+        <label class="champ">Rechercher
+          <input id="rv-recherche" type="search" autocomplete="off"
+            placeholder="Nom, prénom, n° de carte, établissement…"></label>
+        <div id="rv-resultats"></div>
       </div>`;
+
+    // --- recherche dans l'annuaire (visiteurs attendus)
+
+    const champRechercheVisiteur = document.getElementById('rv-recherche');
+    const zoneResultatsVisiteurs = document.getElementById('rv-resultats');
+    const sansAccents = (t) =>
+      String(t || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase();
+
+    function htmlFicheAttendue(f) {
+      const requete = [f.hotel, f.hotelAdresse].filter(Boolean).join(', ');
+      const lienCarte = requete
+        ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(requete)}"
+            target="_blank" rel="noopener">🗺️ Ouvrir la carte</a>`
+        : '';
+      return `<li>
+          <div>
+            <span class="titre-item">${echapper(f.prenom || '')} ${echapper(f.nom || '')}</span>
+            ${f.type === 'exposant' ? '<span class="badge brouillon">exposant</span>' : '<span class="badge ouvert">visiteur</span>'}
+            <div class="muet petit">Carte n° ${echapper(f.numero || '')}${f.organisme ? ' — ' + echapper(f.organisme) : ''}</div>
+            ${
+              f.hotel || f.hotelAdresse
+                ? `<div class="muet petit">🏨 ${echapper(f.hotel || 'Hôtel')}${
+                    f.hotelAdresse ? ' — ' + echapper(f.hotelAdresse) : ''
+                  } ${lienCarte}</div>`
+                : ''
+            }
+          </div>
+        </li>`;
+    }
+
+    function rendreRechercheVisiteurs() {
+      const q = sansAccents(champRechercheVisiteur.value.trim());
+      let liste = [...annuaire].sort(
+        (a, b) =>
+          String(a.nom || '').localeCompare(String(b.nom || ''), 'fr') ||
+          String(a.prenom || '').localeCompare(String(b.prenom || ''), 'fr'),
+      );
+      if (q) {
+        liste = liste.filter((f) =>
+          sansAccents(`${f.prenom} ${f.nom} ${f.numero} ${f.organisme} ${f.hotel}`).includes(q),
+        );
+      }
+      const LIMITE = 50;
+      zoneResultatsVisiteurs.innerHTML = liste.length
+        ? `<ul class="liste">${liste.slice(0, LIMITE).map(htmlFicheAttendue).join('')}</ul>${
+            liste.length > LIMITE
+              ? `<p class="muet petit">${liste.length - LIMITE} autre(s) fiche(s) — précisez la recherche pour les voir.</p>`
+              : ''
+          }`
+        : `<p class="muet">${annuaire.length ? 'Aucune fiche ne correspond à cette recherche.' : "L'annuaire est vide : importez le fichier des inscrits ci-dessus."}</p>`;
+    }
+    champRechercheVisiteur.addEventListener('input', rendreRechercheVisiteurs);
+    rendreRechercheVisiteurs();
 
     document.getElementById('form-annuaire-ajout').addEventListener('submit', async (evt) => {
       evt.preventDefault();
       const numero = normaliserNumero(document.getElementById('aj-numero').value);
       if (!numero) return;
+      // merge : ne pas effacer l'hôtel de résidence d'une fiche déjà importée.
       await db.collection('annuaire').doc(numero).set({
         numero,
         prenom: document.getElementById('aj-prenom').value.trim(),
         nom: document.getElementById('aj-nom').value.trim(),
         organisme: document.getElementById('aj-organisme').value.trim(),
         type: document.getElementById('aj-type').value,
-      });
+      }, { merge: true });
       alert(`Carte ${numero} ajoutée à l'annuaire : la personne peut maintenant s'inscrire.`);
       router();
     });
@@ -658,12 +728,19 @@
           s.emails < 0.3 &&
           s.longueurMoy >= 2,
       );
+      // Colonnes de l'hôtel : repérées par leur EN-TÊTE (première ligne du
+      // fichier) — « hôtel », et « adresse » pour son adresse.
+      const entetes = (lignes[0] || []).map((v) => String(v || '').toLowerCase());
+      const colHotel = entetes.findIndex((t) => /h[oô]tel/.test(t) && !/adresse/.test(t));
+      const colHotelAdresse = entetes.findIndex((t) => /adresse/.test(t));
       return {
         nbCols,
         numero: colNumero,
         nom: textuelles[0] ? textuelles[0].index : -1,
         prenom: textuelles[1] ? textuelles[1].index : -1,
         organisme: textuelles[2] ? textuelles[2].index : -1,
+        hotel: colHotel,
+        hotelAdresse: colHotelAdresse,
       };
     }
 
@@ -688,6 +765,10 @@
           <select id="anc-prenom">${optionsColonnes(d.nbCols, d.prenom)}</select></label>
         <label class="champ">Établissement / société
           <select id="anc-organisme">${optionsColonnes(d.nbCols, d.organisme)}</select></label>
+        <label class="champ">Hôtel de résidence (facultatif)
+          <select id="anc-hotel">${optionsColonnes(d.nbCols, d.hotel)}</select></label>
+        <label class="champ">Adresse de l'hôtel (facultatif)
+          <select id="anc-hotel-adresse">${optionsColonnes(d.nbCols, d.hotelAdresse)}</select></label>
         <div id="an-apercu" class="muet petit"></div>
         <div class="ligne-boutons">
           <button id="an-importer">Importer dans l'annuaire</button>
@@ -700,6 +781,8 @@
           nom: Number(document.getElementById('anc-nom').value),
           prenom: Number(document.getElementById('anc-prenom').value),
           organisme: Number(document.getElementById('anc-organisme').value),
+          hotel: Number(document.getElementById('anc-hotel').value),
+          hotelAdresse: Number(document.getElementById('anc-hotel-adresse').value),
         };
         const fiches = [];
         lignesFichier.forEach((l) => {
@@ -710,6 +793,8 @@
             nom: String(cols.nom >= 0 ? l[cols.nom] || '' : '').trim(),
             prenom: String(cols.prenom >= 0 ? l[cols.prenom] || '' : '').trim(),
             organisme: String(cols.organisme >= 0 ? l[cols.organisme] || '' : '').trim(),
+            hotel: String(cols.hotel >= 0 ? l[cols.hotel] || '' : '').trim(),
+            hotelAdresse: String(cols.hotelAdresse >= 0 ? l[cols.hotelAdresse] || '' : '').trim(),
           });
         });
         return fiches;
@@ -721,11 +806,11 @@
           ? `${fiches.length} fiches prêtes — ex. : ` +
             fiches
               .slice(0, 3)
-              .map((f) => `${f.numero} ${f.prenom} ${f.nom} (${f.organisme})`)
+              .map((f) => `${f.numero} ${f.prenom} ${f.nom} (${f.organisme})${f.hotel ? ' 🏨 ' + f.hotel : ''}`)
               .join(' · ')
           : 'Aucune fiche exploitable avec cette correspondance.';
       }
-      ['anc-numero', 'anc-nom', 'anc-prenom', 'anc-organisme'].forEach((id) =>
+      ['anc-numero', 'anc-nom', 'anc-prenom', 'anc-organisme', 'anc-hotel', 'anc-hotel-adresse'].forEach((id) =>
         document.getElementById(id).addEventListener('change', apercu),
       );
       apercu();
