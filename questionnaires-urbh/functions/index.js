@@ -245,6 +245,30 @@ exports.verifierCodeMobile = onCall(async (req) => {
 });
 
 // ------------------------------------------------------------------------
+// Compteur d'inscrits par atelier, affiché en temps réel sur les kiosques.
+//
+// À chaque vœu posé ou retiré, le nombre de vœux de l'atelier est recompté
+// et écrit sur sa fiche (champ nbInscrits) : les kiosques, déjà branchés en
+// direct sur les ateliers, l'affichent aussitôt — sans jamais avoir accès
+// aux vœux nominatifs (réservés à l'administration).
+
+exports.compteurInscritsAtelier = onDocumentWritten('voeux/{voeuId}', async (event) => {
+  const avant = event.data && event.data.before.exists ? event.data.before.data() : null;
+  const apres = event.data && event.data.after.exists ? event.data.after.data() : null;
+  // Seuls un vœu posé ou retiré changent le compte — pas un reclassement.
+  if (avant && apres) return;
+  const atelierId = (apres || avant || {}).atelierId;
+  if (!atelierId) return;
+  const db = admin.firestore();
+  const compte = await db.collection('voeux').where('atelierId', '==', atelierId).count().get();
+  try {
+    await db.collection('ateliers').doc(atelierId).update({ nbInscrits: compte.data().count });
+  } catch (_) {
+    /* atelier supprimé entre-temps : rien à mettre à jour */
+  }
+});
+
+// ------------------------------------------------------------------------
 // Tirage au sort automatique des ateliers à l'heure programmée.
 //
 // Mêmes règles que le tirage manuel (administration / régie) : tirage

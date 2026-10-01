@@ -93,6 +93,18 @@
     .atelier.vient-d-etre-tire { animation: surgir 0.8s ease; border-color: var(--or); }
     @keyframes surgir { 0% { transform: scale(0.94); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
     .atelier .haut { display: flex; align-items: center; gap: 0.7rem; }
+    /* Nombre d'inscrits en temps réel, tenu par le serveur à chaque vœu. */
+    .compteur-inscrits {
+      margin-left: auto;
+      align-self: flex-start;
+      white-space: nowrap;
+      background: var(--or, #f0b23e);
+      color: #3a2c08;
+      font-weight: 700;
+      font-size: clamp(0.8rem, 1.4vw, 1.05rem);
+      padding: 0.15rem 0.6rem;
+      border-radius: 999px;
+    }
     .salle {
       font-family: 'Archivo Black', 'Archivo', sans-serif;
       font-size: clamp(1.4rem, 3vw, 2.4rem);

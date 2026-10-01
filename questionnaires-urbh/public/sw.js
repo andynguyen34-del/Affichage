@@ -11,7 +11,7 @@
 // Le numéro de version doit suivre APP_BUILD (firebase-config.js) : le
 // changer invalide l'ancien cache au déploiement suivant.
 
-const CACHE = 'urbh-v73';
+const CACHE = 'urbh-v74';
 
 const COQUILLE = [
   '/portail.html',

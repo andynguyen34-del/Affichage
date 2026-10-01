@@ -75,6 +75,15 @@
     nom.textContent = a.nom || '';
     bloc.append(nom);
     haut.append(salle, bloc);
+    // Nombre d'inscrits en temps réel (champ nbInscrits, tenu par le
+    // serveur à chaque vœu posé ou retiré) — tant que le tirage n'a pas
+    // figé la liste.
+    if (a.statut !== 'tire' && typeof a.nbInscrits === 'number') {
+      const compteur = document.createElement('span');
+      compteur.className = 'compteur-inscrits';
+      compteur.textContent = `👥 ${a.nbInscrits} inscrit${a.nbInscrits > 1 ? 's' : ''}`;
+      haut.append(compteur);
+    }
     carte.append(haut);
 
     if (a.statut === 'tire') {
@@ -161,13 +170,17 @@
           td.append(nom);
           const detail = document.createElement('div');
           detail.className = 'detail-cellule';
+          const inscrits =
+            a.statut !== 'tire' && typeof a.nbInscrits === 'number'
+              ? ` · 👥 ${a.nbInscrits} inscrit${a.nbInscrits > 1 ? 's' : ''}`
+              : '';
           detail.textContent =
             (a.horaire || '') +
             (a.statut === 'tire'
               ? ' · tirage effectué'
               : a.statut === 'ouvert'
-                ? ' · inscriptions ouvertes'
-                : '');
+                ? inscrits + ' · inscriptions ouvertes'
+                : inscrits);
           td.append(detail);
         }
         tr.append(td);
