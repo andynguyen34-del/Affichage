@@ -1371,6 +1371,40 @@
       </div>
 
       <div class="carte">
+        <h2>🧭 Lieux du bouton « S'y rendre »</h2>
+        <p class="muet petit">Affichés sur l'accueil des participants : chaque
+        bouton ouvre la carte de géolocalisation du téléphone. L'<strong>hôtel
+        de chacun</strong> vient de l'annuaire importé (colonnes « hôtel » et
+        « adresse » du fichier des inscrits). Laissez la soirée de gala vide
+        pour masquer son bouton.</p>
+        <form id="form-lieux">
+          <div class="ligne-boutons" style="align-items:flex-end">
+            <label class="champ petit" style="margin:0;flex:1;min-width:180px">🏛️ Palais des congrès — nom
+              <input id="lx-congres-nom" value="${attr(
+                ((portail.lieux || {}).congres || {}).nom || 'La Cité — Centre des Congrès de Nantes',
+              )}"></label>
+            <label class="champ petit" style="margin:0;flex:1;min-width:180px">Adresse
+              <input id="lx-congres-adresse" value="${attr(
+                ((portail.lieux || {}).congres || {}).adresse || '5 rue de Valmy, 44000 Nantes',
+              )}"></label>
+          </div>
+          <div class="ligne-boutons" style="align-items:flex-end">
+            <label class="champ petit" style="margin:0;flex:1;min-width:180px">🥂 Soirée de gala — nom
+              <input id="lx-gala-nom" placeholder="Ex. : Château de la Poterie" value="${attr(
+                ((portail.lieux || {}).gala || {}).nom || '',
+              )}"></label>
+            <label class="champ petit" style="margin:0;flex:1;min-width:180px">Adresse
+              <input id="lx-gala-adresse" placeholder="Rue, code postal, ville" value="${attr(
+                ((portail.lieux || {}).gala || {}).adresse || '',
+              )}"></label>
+          </div>
+          <div class="ligne-boutons">
+            <button type="submit" class="secondaire">Enregistrer les lieux</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="carte">
         <h2>♿ Référents handicap</h2>
         <p class="muet petit">Jusqu'à trois numéros de mobile. Dès qu'une
         personne coche « Je souhaite être accompagné(e) par le référent
@@ -2101,6 +2135,19 @@
         router();
       }),
     );
+
+    document.getElementById('form-lieux').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const champ = (id) => document.getElementById(id).value.trim();
+      await refPortail.update({
+        lieux: {
+          congres: { nom: champ('lx-congres-nom'), adresse: champ('lx-congres-adresse') },
+          gala: { nom: champ('lx-gala-nom'), adresse: champ('lx-gala-adresse') },
+        },
+      });
+      alert('Lieux enregistrés — les boutons « S\'y rendre » des participants sont à jour.');
+      router();
+    });
 
     document.getElementById('form-referents-handicap').addEventListener('submit', async (evt) => {
       evt.preventDefault();

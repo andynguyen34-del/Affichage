@@ -92,6 +92,7 @@
   let journeeId = null;
   let portail = null;
   let profil = null;
+  let ficheAnnuaire = null; // fiche de l'annuaire (hôtel de résidence…)
   let verifMobile = null; // verificationsMobile/<uid> (mobile vérifié par SMS)
   let standDemande = null; // arrivée par le QR d'un stand (?stand=<id>)
 
@@ -102,6 +103,21 @@
     if (chiffres.startsWith('00')) return '+' + chiffres.slice(2);
     if (/^0\d{9}$/.test(chiffres)) return '+33' + chiffres.slice(1);
     return chiffres ? '+' + chiffres : '';
+  }
+
+  // Lieux géolocalisables du bouton « S'y rendre » (accueil). Le palais des
+  // congrès a une valeur par défaut ; l'administration peut la remplacer et
+  // renseigner la soirée de gala (portails/<journee>.lieux).
+  const LIEU_CONGRES_DEFAUT = {
+    nom: 'La Cité — Centre des Congrès de Nantes',
+    adresse: '5 rue de Valmy, 44000 Nantes',
+  };
+
+  function lienGeo(nom, adresse) {
+    return (
+      'https://www.google.com/maps/search/?api=1&query=' +
+      encodeURIComponent([nom, adresse].filter(Boolean).join(', '))
+    );
   }
 
   async function chargerVerifMobile() {
@@ -1342,6 +1358,21 @@
           { vue: 'questionnaires', icone: '📝', libelle: 'Questionnaires' },
         ];
 
+    // Bouton « S'y rendre » : palais des congrès (défaut remplaçable par
+    // l'administration), hôtel de la personne (annuaire importé) et soirée
+    // de gala (affichée quand l'administration l'a renseignée). Chaque
+    // bouton ouvre l'application de cartographie du téléphone.
+    const lieux = portail.lieux || {};
+    const congres =
+      lieux.congres && (lieux.congres.nom || lieux.congres.adresse)
+        ? lieux.congres
+        : LIEU_CONGRES_DEFAUT;
+    const gala = lieux.gala && (lieux.gala.nom || lieux.gala.adresse) ? lieux.gala : null;
+    const hotel =
+      ficheAnnuaire && (ficheAnnuaire.hotel || ficheAnnuaire.hotelAdresse)
+        ? { nom: ficheAnnuaire.hotel || 'Mon hôtel', adresse: ficheAnnuaire.hotelAdresse || '' }
+        : null;
+
     $app.innerHTML = `
       ${enTeteBonjour()}
       <div class="grille-outils">
@@ -1354,6 +1385,32 @@
         ).join('')}
       </div>
       <div id="carte-evaluation"></div>
+      <div class="carte">
+        <h2>🧭 S'y rendre</h2>
+        <div class="ligne-boutons">
+          <a class="btn secondaire" target="_blank" rel="noopener"
+            href="${attr(lienGeo(congres.nom, congres.adresse))}">🏛️ Palais des congrès</a>
+          ${
+            hotel
+              ? `<a class="btn secondaire" target="_blank" rel="noopener"
+                  href="${attr(lienGeo(hotel.nom, hotel.adresse))}">🏨 Mon hôtel</a>`
+              : ''
+          }
+          ${
+            gala
+              ? `<a class="btn secondaire" target="_blank" rel="noopener"
+                  href="${attr(lienGeo(gala.nom, gala.adresse))}">🥂 Soirée de gala</a>`
+              : ''
+          }
+        </div>
+        <p class="muet petit" style="margin:0.4rem 0 0">Chaque bouton ouvre
+        l'itinéraire dans l'application Plans / Google Maps de votre
+        téléphone.${
+          hotel
+            ? ` Votre hôtel : ${echapper(hotel.nom)}${hotel.adresse ? ' — ' + echapper(hotel.adresse) : ''}.`
+            : " Votre hôtel apparaîtra ici s'il est renseigné dans la liste des inscrits."
+        }</p>
+      </div>
       <div id="carte-installation"></div>
       <div class="ligne-boutons" style="justify-content:center;margin-bottom:0.5rem">
         <button id="bouton-quitter" class="secondaire">🚪 Quitter l'application</button>
@@ -2384,6 +2441,7 @@
         );
         return;
       }
+      ficheAnnuaire = fiche.data(); // hôtel de résidence pour « S'y rendre »
     } catch (_) {
       /* vérification impossible (réseau) : on continue, les règles serveur veillent */
     }
