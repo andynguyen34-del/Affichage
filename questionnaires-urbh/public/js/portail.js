@@ -325,9 +325,11 @@
           <p class="muet petit">✔️ En validant, vous confirmez l'exactitude de
           ces informations : elles serviront à <strong>mettre à jour l'annuaire
           de l'association</strong> — corrigez-les si besoin avant de valider.
-          Votre mobile sert à vous prévenir si vous gagnez au tirage au sort et
-          à vous envoyer certains résultats par SMS. Hors consentement
-          ci-dessus, ces informations restent internes à l'URBH.</p>
+          Votre mobile, vérifié par SMS, sert à vous prévenir si vous gagnez au
+          tirage au sort et à vous envoyer certains résultats par SMS. Hors
+          consentement ci-dessus, ces informations restent internes à l'URBH ;
+          elles sont conservées pendant les journées d'études et supprimées en
+          cas de demande d'anonymisation (bouton « Mes données »).</p>
         </form>
       </div>
       <div id="zone-mes-donnees"></div>`;
@@ -462,8 +464,9 @@
       zoneVerif.innerHTML = `<div style="margin:-0.5rem 0 0.8rem">
           <button type="button" id="verif-envoyer" class="secondaire">📲 Vérifier mon mobile (code par SMS)</button>
           <div class="muet petit">Vous recevrez un code à <strong>4 chiffres</strong>
-          à saisir ici : il garantit que les SMS du tirage au sort et des
-          ateliers vous parviendront bien.</div>
+          à saisir ici. Cette vérification est <strong>obligatoire pour valider
+          l'inscription</strong> : elle garantit que les SMS du tirage au sort
+          et des ateliers vous parviendront bien.</div>
           <div id="verif-erreur" class="erreur" hidden></div>
         </div>`;
       document.getElementById('verif-envoyer').addEventListener('click', envoyerCode);
@@ -499,6 +502,19 @@
         majLe: new Date().toISOString(),
       };
       const bouton = document.getElementById('p-valider');
+      // La vérification du mobile par code SMS est OBLIGATOIRE pour valider
+      // l'inscription (décision URBH) : conservée pendant les JE, supprimée
+      // en cas de demande d'anonymisation après l'événement. (Si la
+      // bibliothèque des fonctions n'a pas pu se charger, on n'enferme pas
+      // la personne dehors : les SMS seraient de toute façon indisponibles.)
+      if (fonctions && !mobileEstVerifie(nouveau.mobile)) {
+        erreurVerif(
+          '⚠️ Pour valider votre inscription, vérifiez d\'abord votre mobile : ' +
+            'appuyez sur « 📲 Vérifier mon mobile » ci-dessus et saisissez le code reçu par SMS.',
+        );
+        if (zoneVerif) zoneVerif.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
       bouton.disabled = true;
       // Le numéro de carte doit exister dans l'annuaire des inscrits : sans
       // cela, pas de fiche (les règles serveur le vérifient aussi).
@@ -1280,7 +1296,8 @@
         ${
           fonctions && profil.mobile && !mobileEstVerifie(profil.mobile)
             ? `<div class="muet petit">📵 Mobile non vérifié — appuyez sur
-                « modifier » pour recevoir votre code SMS à 4 chiffres.</div>`
+                « modifier » pour recevoir votre code SMS à 4 chiffres
+                (obligatoire pour valider votre inscription).</div>`
             : ''
         }
         ${info ? `<div id="info-reunion" class="info-reunion">${info}</div>` : ''}

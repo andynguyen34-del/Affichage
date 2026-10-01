@@ -239,6 +239,9 @@
       snap.docs.forEach((d) => aSupprimer.push(d.ref));
     }
     aSupprimer.push(db.collection('participants').doc(uidCible));
+    // Vérification du mobile par SMS et code en attente (identifiant = uid).
+    aSupprimer.push(db.collection('verificationsMobile').doc(uidCible));
+    aSupprimer.push(db.collection('codesVerification').doc(uidCible));
     for (let i = 0; i < aSupprimer.length; i += 400) {
       const lot = db.batch();
       aSupprimer.slice(i, i + 400).forEach((ref) => lot.delete(ref));
@@ -339,6 +342,14 @@
       } catch (_) {
         /* fiche déjà absente */
       }
+    }
+    // La vérification du mobile (numéro vérifié par SMS) est supprimée :
+    // conservée pendant les JE, elle ne survit pas à l'anonymisation.
+    try {
+      await db.collection('verificationsMobile').doc(uidCible).delete();
+      await db.collection('codesVerification').doc(uidCible).delete();
+    } catch (_) {
+      /* déjà absents */
     }
     // La demande elle-même est anonymisée : le nom n'était nécessaire que
     // pour la traiter — une fois l'effacement fait, il ne doit pas subsister.
