@@ -114,10 +114,13 @@
   };
 
   function lienGeo(nom, adresse) {
-    return (
-      'https://www.google.com/maps/search/?api=1&query=' +
-      encodeURIComponent([nom, adresse].filter(Boolean).join(', '))
-    );
+    const cible = encodeURIComponent([nom, adresse].filter(Boolean).join(', '));
+    // Ouvre directement l'ITINÉRAIRE depuis la position actuelle (plus
+    // qu'à appuyer sur « Démarrer ») : Plans sur iPhone/iPad, Google Maps
+    // ailleurs.
+    return estIOSApple()
+      ? 'https://maps.apple.com/?daddr=' + cible + '&dirflg=d'
+      : 'https://www.google.com/maps/dir/?api=1&destination=' + cible;
   }
 
   async function chargerVerifMobile() {
