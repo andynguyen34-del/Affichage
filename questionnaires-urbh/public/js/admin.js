@@ -964,6 +964,16 @@
       .get();
     let inscriptions = snapI.docs.map((d) => ({ id: d.id, ...d.data() }));
 
+    // Mobiles vérifiés par code SMS (fonction serveur verifierCodeMobile).
+    let mobilesVerifies = new Set();
+    try {
+      const snapVM = await db.collection('verificationsMobile').get();
+      mobilesVerifies = new Set(snapVM.docs.map((d) => d.data().participantId || d.id));
+    } catch (_) {
+      mobilesVerifies = new Set();
+    }
+    const mobileVerifie = (i) => mobilesVerifies.has(i.participantId);
+
     // Correction automatique des doublons : les anciennes versions du portail
     // créaient une fiche PAR SESSION de navigateur (même personne inscrite
     // plusieurs fois). À chaque ouverture de cette page, les fiches d'un même
@@ -1393,6 +1403,13 @@
                       i.type === 'exposant' ? 'Exposant' : 'Visiteur'
                     }</span>
                     ${i.accompagnementHandicap ? '<span class="badge ferme" title="Souhaite être accompagné(e) par le référent handicap URBH">♿ référent handicap</span>' : ''}
+                    ${
+                      i.mobile
+                        ? mobileVerifie(i)
+                          ? '<span class="badge ouvert" title="Mobile vérifié par code SMS">📱 vérifié</span>'
+                          : '<span class="badge brouillon" title="Mobile non vérifié par code SMS">📵 non vérifié</span>'
+                        : ''
+                    }
                     <div class="muet petit">${i.numeroInscription ? 'Carte n° ' + echapper(i.numeroInscription) + ' — ' : ''}${echapper(i.organisme || '')}
                       ${i.mobile ? ' — 📱 ' + echapper(i.mobile) : ''}
                       ${i.dernierAccesLe ? ' — dernier accès ' + new Date(i.dernierAccesLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
@@ -2154,7 +2171,7 @@
         const sep = ';';
         const cellule = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
         const lignes = [
-          ['N° inscription', 'Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'E-mail', 'Accompagnement handicap', 'Première connexion', 'Dernier accès', 'Nb connexions']
+          ['N° inscription', 'Type', 'Prénom', 'Nom', 'Organisme', 'Mobile', 'Mobile vérifié', 'E-mail', 'Accompagnement handicap', 'Première connexion', 'Dernier accès', 'Nb connexions']
             .map(cellule)
             .join(sep),
         ];
@@ -2167,6 +2184,7 @@
               i.nom,
               i.organisme || '',
               i.mobile || '',
+              i.mobile ? (mobileVerifie(i) ? 'Oui' : 'Non') : '',
               i.email || '',
               i.accompagnementHandicap ? 'Oui' : '',
               i.creeLe ? new Date(i.creeLe).toLocaleString('fr-FR') : '',

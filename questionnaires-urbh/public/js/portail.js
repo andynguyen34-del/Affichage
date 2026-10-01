@@ -76,6 +76,15 @@
   }
   const auth = firebase.auth();
   const db = firebase.firestore();
+  // Fonctions serveur (région europe-west1) — vérification du mobile par SMS.
+  // Si la bibliothèque n'a pas pu se charger, la vérification est simplement
+  // masquée : l'inscription reste possible.
+  let fonctions = null;
+  try {
+    fonctions = firebase.app().functions('europe-west1');
+  } catch (_) {
+    fonctions = null;
+  }
 
   document.body.classList.add('page-portail');
 
@@ -83,7 +92,35 @@
   let journeeId = null;
   let portail = null;
   let profil = null;
+  let verifMobile = null; // verificationsMobile/<uid> (mobile vérifié par SMS)
   let standDemande = null; // arrivée par le QR d'un stand (?stand=<id>)
+
+  // « 06 12 34 56 78 » → « +33612345678 » (même règle que le serveur).
+  function mobileInternational(brut) {
+    const chiffres = String(brut || '').replace(/[^\d+]/g, '');
+    if (chiffres.startsWith('+')) return chiffres;
+    if (chiffres.startsWith('00')) return '+' + chiffres.slice(2);
+    if (/^0\d{9}$/.test(chiffres)) return '+33' + chiffres.slice(1);
+    return chiffres ? '+' + chiffres : '';
+  }
+
+  async function chargerVerifMobile() {
+    if (!uid) return;
+    try {
+      const d = await db.collection('verificationsMobile').doc(uid).get();
+      verifMobile = d.exists ? d.data() : null;
+    } catch (_) {
+      verifMobile = null;
+    }
+  }
+
+  function mobileEstVerifie(mobileSaisi) {
+    return !!(
+      verifMobile &&
+      verifMobile.mobile &&
+      verifMobile.mobile === mobileInternational(mobileSaisi)
+    );
+  }
 
   // Moments de pointage (émargement) de la journée : ils conditionnent la
   // participation à la tombola de clôture.
@@ -269,6 +306,7 @@
             <input id="p-mobile" type="tel" required autocomplete="tel"
               placeholder="06 12 34 56 78"
               pattern="[0-9+][0-9 .-]{8,16}"></label>
+          <div id="zone-verif-mobile"></div>
           <label class="champ">E-mail (facultatif)
             <input id="p-email" type="email" autocomplete="email"></label>
           <label class="champ" style="font-weight:normal">
@@ -332,6 +370,113 @@
       } catch (_) {
         etat.textContent = '';
       }
+    });
+
+    // Vérification du mobile par code SMS à 4 chiffres : le code est envoyé
+    // et contrôlé par les fonctions serveur (crédits SMS protégés — 3 envois
+    // par heure maximum). Facultative pour valider le formulaire : si le SMS
+    // tarde, l'inscription n'est pas bloquée, et le badge « non vérifié »
+    // reste visible sur l'accueil et dans l'administration.
+    const zoneVerif = document.getElementById('zone-verif-mobile');
+    const champMobile = document.getElementById('p-mobile');
+    let verifEtat = 'repos'; // repos | envoye
+
+    function erreurVerif(texte) {
+      const z = document.getElementById('verif-erreur');
+      if (z) {
+        z.textContent = texte;
+        z.hidden = false;
+      }
+    }
+
+    async function envoyerCode(evt) {
+      const mobile = champMobile.value.trim();
+      if (mobileInternational(mobile).length < 11) {
+        erreurVerif("Saisissez d'abord votre numéro de mobile ci-dessus.");
+        return;
+      }
+      evt.target.disabled = true;
+      evt.target.textContent = 'Envoi du SMS…';
+      try {
+        await fonctions.httpsCallable('envoyerCodeMobile')({ mobile });
+        verifEtat = 'envoye';
+        rendreVerifMobile();
+      } catch (e) {
+        evt.target.disabled = false;
+        evt.target.textContent = '📲 Vérifier mon mobile (code par SMS)';
+        erreurVerif(e && e.message ? e.message : "L'envoi du SMS a échoué. Réessayez.");
+      }
+    }
+
+    async function validerCode() {
+      const code = (document.getElementById('verif-code').value || '').trim();
+      if (!/^\d{4}$/.test(code)) {
+        erreurVerif('Le code comporte 4 chiffres.');
+        return;
+      }
+      const bouton = document.getElementById('verif-valider');
+      bouton.disabled = true;
+      try {
+        await fonctions.httpsCallable('verifierCodeMobile')({ code });
+        await chargerVerifMobile();
+        verifEtat = 'repos';
+        rendreVerifMobile();
+      } catch (e) {
+        bouton.disabled = false;
+        erreurVerif(e && e.message ? e.message : 'Code incorrect.');
+      }
+    }
+
+    function rendreVerifMobile() {
+      if (!fonctions || !zoneVerif) return;
+      const saisi = champMobile.value.trim();
+      if (mobileEstVerifie(saisi)) {
+        zoneVerif.innerHTML = `<div class="info" style="margin:-0.5rem 0 0.8rem">📱 Mobile vérifié ✔</div>`;
+        return;
+      }
+      if (verifEtat === 'envoye') {
+        zoneVerif.innerHTML = `<div class="info" style="margin:-0.5rem 0 0.8rem">
+            Un code à 4 chiffres vient d'être envoyé par SMS au
+            <strong>${echapper(saisi)}</strong>.
+            <div class="ligne-boutons" style="align-items:center;margin-top:0.4rem">
+              <input id="verif-code" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                autocomplete="one-time-code" placeholder="····"
+                style="max-width:6.5rem;text-align:center;font-size:1.4rem;letter-spacing:0.4rem">
+              <button type="button" id="verif-valider">Valider</button>
+              <button type="button" id="verif-renvoyer" class="discret">renvoyer un code</button>
+            </div>
+            <div id="verif-erreur" class="erreur" hidden></div>
+          </div>`;
+        document.getElementById('verif-valider').addEventListener('click', validerCode);
+        document.getElementById('verif-renvoyer').addEventListener('click', envoyerCode);
+        const champCode = document.getElementById('verif-code');
+        champCode.focus();
+        champCode.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            validerCode();
+          }
+        });
+        return;
+      }
+      zoneVerif.innerHTML = `<div style="margin:-0.5rem 0 0.8rem">
+          <button type="button" id="verif-envoyer" class="secondaire">📲 Vérifier mon mobile (code par SMS)</button>
+          <div class="muet petit">Vous recevrez un code à <strong>4 chiffres</strong>
+          à saisir ici : il garantit que les SMS du tirage au sort et des
+          ateliers vous parviendront bien.</div>
+          <div id="verif-erreur" class="erreur" hidden></div>
+        </div>`;
+      document.getElementById('verif-envoyer').addEventListener('click', envoyerCode);
+    }
+
+    champMobile.addEventListener('input', () => {
+      if (verifEtat !== 'envoye') rendreVerifMobile();
+    });
+    rendreVerifMobile();
+    // Un code déjà validé lors d'un passage précédent (préinscription
+    // interrompue, par exemple) est retrouvé au chargement.
+    chargerVerifMobile().then(() => {
+      if (verifEtat !== 'envoye') rendreVerifMobile();
     });
 
     document.getElementById('form-profil').addEventListener('submit', async (evt) => {
@@ -810,6 +955,8 @@
         document.getElementById('p-email').value = profil.email || '';
         document.getElementById('p-handicap').checked = !!profil.accompagnementHandicap;
         document.getElementById('p-consentement').checked = !!profil.consentementPartage;
+        // Réaffiche l'état de vérification pour le mobile pré-rempli.
+        document.getElementById('p-mobile').dispatchEvent(new Event('input'));
       });
     }
   }
@@ -1130,6 +1277,12 @@
                 }</button>`
               : ''
           }</p>
+        ${
+          fonctions && profil.mobile && !mobileEstVerifie(profil.mobile)
+            ? `<div class="muet petit">📵 Mobile non vérifié — appuyez sur
+                « modifier » pour recevoir votre code SMS à 4 chiffres.</div>`
+            : ''
+        }
         ${info ? `<div id="info-reunion" class="info-reunion">${info}</div>` : ''}
       </div>`;
   }
@@ -2222,6 +2375,7 @@
     } catch (_) {
       /* refusée par les règles (numéro retiré de l'annuaire) : sans blocage */
     }
+    await chargerVerifMobile();
     surveillerAteliers();
     if (standDemande) vueStand(standDemande);
     else vueMenu();

@@ -20,9 +20,11 @@
 
 const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 5 });
@@ -148,6 +150,99 @@ exports.smsReferentHandicap = onDocumentWritten(
     }
   },
 );
+
+// ------------------------------------------------------------------------
+// Vérification du mobile par code à 4 chiffres (SMS Brevo).
+//
+// Le participant demande un code depuis le formulaire d'inscription : un
+// code à 4 chiffres lui est envoyé par SMS (valable 10 minutes, 3 essais,
+// au plus 3 envois par heure et 10 par jour — personne ne peut vider les
+// crédits SMS). La saisie du bon code enregistre la vérification dans
+// « verificationsMobile/<uid> », visible du participant et de
+// l'administration.
+
+function hacherCode(code, uid) {
+  return crypto.createHash('sha256').update(`${code}|${uid}|urbh-je`).digest('hex');
+}
+
+exports.envoyerCodeMobile = onCall({ secrets: [BREVO_API_KEY] }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  const uid = req.auth.uid;
+  const mobile = numeroInternational(req.data && req.data.mobile);
+  if (!/^\+\d{10,14}$/.test(mobile)) {
+    throw new HttpsError('invalid-argument', 'Numéro de mobile invalide.');
+  }
+  const db = admin.firestore();
+  const ref = db.collection('codesVerification').doc(uid);
+  const doc = await ref.get();
+  const maintenant = Date.now();
+  const envois = ((doc.exists && doc.data().envois) || []).filter(
+    (t) => maintenant - t < 86400000,
+  );
+  if (envois.filter((t) => maintenant - t < 3600000).length >= 3 || envois.length >= 10) {
+    throw new HttpsError(
+      'resource-exhausted',
+      'Trop de codes demandés pour ce téléphone — réessayez dans une heure.',
+    );
+  }
+  const code = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+  await ref.set({
+    codeHash: hacherCode(code, uid),
+    mobile,
+    creeLe: maintenant,
+    essais: 0,
+    envois: [...envois, maintenant],
+  });
+  const resultat = await envoyerSMS(
+    mobile,
+    `URBH : votre code de verification est ${code}. Il expire dans 10 minutes.`,
+  );
+  if (resultat !== 'envoye') {
+    throw new HttpsError('unavailable', `Le SMS n'a pas pu etre envoye (${resultat}).`);
+  }
+  return { ok: true };
+});
+
+exports.verifierCodeMobile = onCall(async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  const uid = req.auth.uid;
+  const code = String((req.data && req.data.code) || '').trim();
+  if (!/^\d{4}$/.test(code)) {
+    throw new HttpsError('invalid-argument', 'Le code comporte 4 chiffres.');
+  }
+  const db = admin.firestore();
+  const ref = db.collection('codesVerification').doc(uid);
+  const doc = await ref.get();
+  if (!doc.exists || !doc.data().codeHash) {
+    throw new HttpsError('not-found', "Demandez d'abord un code.");
+  }
+  const d = doc.data();
+  if (Date.now() - d.creeLe > 600000) {
+    throw new HttpsError('deadline-exceeded', 'Code expiré — demandez-en un nouveau.');
+  }
+  if ((d.essais || 0) >= 3) {
+    throw new HttpsError('resource-exhausted', 'Trop de tentatives — demandez un nouveau code.');
+  }
+  if (hacherCode(code, uid) !== d.codeHash) {
+    await ref.update({ essais: (d.essais || 0) + 1 });
+    throw new HttpsError('permission-denied', 'Code incorrect.');
+  }
+  await ref.update({ codeHash: '', essais: 0 }); // code à usage unique
+  let numeroInscription = '';
+  try {
+    const p = await db.collection('participants').doc(uid).get();
+    numeroInscription = (p.exists && p.data().numeroInscription) || '';
+  } catch (_) {
+    /* profil pas encore enregistré : le numéro restera vide */
+  }
+  await db.collection('verificationsMobile').doc(uid).set({
+    participantId: uid,
+    mobile: d.mobile,
+    numeroInscription,
+    verifieLe: new Date().toISOString(),
+  });
+  return { ok: true, mobile: d.mobile };
+});
 
 // ------------------------------------------------------------------------
 // Tirage au sort automatique des ateliers à l'heure programmée.
@@ -419,6 +514,8 @@ exports.repriseIdentite = onDocumentWritten('inscriptions/{inscriptionId}', asyn
     ['visites', (d) => `${d.fournisseurId}_`],
     ['evaluationsDirect', (d) => `${d.questionId}_`],
     ['desistements', (d) => `${d.atelierId}_`],
+    // Identifiant = uid seul : la vérification du mobile suit la personne.
+    ['verificationsMobile', () => ''],
   ];
   for (const [collection, prefixe] of COMPOSES) {
     const snap = await db.collection(collection).where('participantId', '==', ancienUid).get();

@@ -50,6 +50,20 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Vérification du mobile par code SMS à 4 chiffres : le document est
+    // écrit UNIQUEMENT par la fonction serveur (verifierCodeMobile) ; le
+    // participant lit sa propre vérification, l'administration les liste.
+    match /verificationsMobile/{uid} {
+      allow get: if isAdmin() || (connecte() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // Codes en attente (hachés) : réservés aux fonctions serveur.
+    match /codesVerification/{uid} {
+      allow read, write: if false;
+    }
+
     match /journees/{journeeId} {
       allow read, write: if isAdmin();
     }
