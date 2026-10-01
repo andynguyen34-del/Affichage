@@ -135,7 +135,8 @@
   // créneau : les stagiaires visualisent les ateliers simultanés).
   function rendreTableau() {
     $grille.innerHTML = '';
-    $bandeau.textContent = 'Ateliers du jeudi après-midi — une inscription par créneau horaire';
+    $bandeau.textContent =
+      'Ateliers du jeudi après-midi — classez vos vœux 1, 2, 3 sur l\'application';
     const creneauDe = (a) => a.creneau || a.horaire || '';
     const creneaux = [...new Set(tousAteliers.map(creneauDe))].sort((a, b) =>
       String(a).localeCompare(String(b)),

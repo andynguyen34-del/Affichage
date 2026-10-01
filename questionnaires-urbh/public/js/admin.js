@@ -1796,19 +1796,21 @@
                 </button>
               </div>
               <p class="muet petit">Les participants classent leurs
-              <strong>vœux (choix 1, 2, 3)</strong> tant que les inscriptions
-              d'un atelier sont ouvertes — le tirage au sort les fige. Le
-              tirage arbitre tous les ateliers <strong>ensemble</strong> : un
-              seul ordre aléatoire, chacun reçoit d'abord UNE place sur son
-              meilleur vœu disponible (répartition des blanchisseries
-              conservée), puis les places restantes sont offertes en seconde
-              place aux moins servis, sans jamais deux ateliers sur le même
-              créneau ; les listes d'attente suivent le rang de vœu. Préférez
-              donc le <strong>tirage général</strong> (ou la programmation
-              d'une même heure) au tirage atelier par atelier. Le tirage
-              programmé se déclenche tout seul sur le serveur (à la minute
-              près), même si l'administration est fermée — nécessite le
-              déploiement des fonctions (DEPLOYER-FONCTIONS).</p>`
+              <strong>vœux (choix 1, 2, 3)</strong> — un classement pour les
+              ateliers URBH (salles B, C, D), un autre pour les ateliers des
+              partenaires techniques — tant que les inscriptions d'un atelier
+              sont ouvertes ; le tirage au sort les fige. Le tirage arbitre
+              les deux classements sur <strong>un seul ordre
+              aléatoire</strong> : chacun reçoit d'abord UNE place par
+              classement sur son meilleur vœu disponible (répartition des
+              blanchisseries conservée), puis les places restantes sont
+              offertes aux moins servis, sans jamais deux ateliers sur le
+              même créneau ; les listes d'attente suivent le rang de vœu.
+              Préférez donc le <strong>tirage général</strong> (ou la
+              programmation d'une même heure) au tirage atelier par atelier.
+              Le tirage programmé se déclenche tout seul sur le serveur (à la
+              minute près), même si l'administration est fermée — nécessite
+              le déploiement des fonctions (DEPLOYER-FONCTIONS).</p>`
             : ''
         }
         <div class="ligne-boutons">
@@ -2777,6 +2779,12 @@
     // automatique serveur (functions/index.js).
     function tirageParVoeux(cibles, tousAteliers, voeuxParAtelierLocal) {
       const creneauDe = (a) => a.creneau || a.horaire || '';
+      // Deux classements indépendants : salles B/C/D = ateliers URBH,
+      // le reste = ateliers des partenaires techniques.
+      const groupeDe = (a) =>
+        ['B', 'C', 'D'].includes(String(a.salle || '').trim().toUpperCase())
+          ? 'urbh'
+          : 'partenaires';
       const cibleIds = new Set(cibles.map((a) => a.id));
       const parAtelier = {};
       cibles.forEach((a) => {
@@ -2790,7 +2798,7 @@
         dedupeParNumero(voeuxParAtelierLocal[a.id] || []).forEach((v) => {
           const cle = clePersonne(v);
           if (!personnes.has(cle)) {
-            personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), nbPlaces: 0 });
+            personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), servisGroupes: new Set(), nbPlaces: 0 });
           }
           const p = personnes.get(cle);
           if (!p.voeux.some((x) => x.atelier.id === a.id)) {
@@ -2814,6 +2822,7 @@
           if (p) {
             p.nbPlaces += 1;
             if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+            p.servisGroupes.add(groupeDe(a));
           }
         });
       });
@@ -2831,8 +2840,8 @@
       const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
       const placesRestantes = (a) => (a.capacite || 20) - parAtelier[a.id].retenus.length;
 
-      function essayer(p, plafondEtab) {
-        for (const chx of p.voeux) {
+      function essayer(p, liste, plafondEtab) {
+        for (const chx of liste) {
           const a = chx.atelier;
           if (p.obtenus.has(a.id) || placesRestantes(a) <= 0) continue;
           if (creneauDe(a) && p.creneauxPris.has(creneauDe(a))) continue;
@@ -2848,26 +2857,34 @@
         return false;
       }
 
-      // Phase 1 — une place par personne, en serpentin, la contrainte
-      // d'établissement se relâchant à chaque tour (1, puis 2, puis libre).
-      let sens = ordre;
-      [1, 2, 0].forEach((plafond) => {
-        sens.forEach((p) => {
-          if (p.nbPlaces === 0) essayer(p, plafond);
-        });
-        sens = [...sens].reverse();
-      });
-
-      // Phase 2 — remplir les places restantes : tours supplémentaires,
-      // une place de plus par tour et par personne, les moins servis d'abord.
-      let attribue = true;
-      while (attribue) {
-        attribue = false;
-        const parNbPlaces = [...ordre].sort(
-          (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
-        );
-        for (const p of parNbPlaces) {
-          if (essayer(p, 0)) attribue = true;
+      // Les DEUX classements sont arbitrés l'un après l'autre (ateliers URBH
+      // puis partenaires techniques), en partageant créneaux occupés et
+      // places déjà reçues.
+      for (const groupe of ['urbh', 'partenaires']) {
+        const listeDe = (p) => p.voeux.filter((x) => groupeDe(x.atelier) === groupe);
+        // Phase 1 — une place par personne DANS CE GROUPE, en serpentin, la
+        // contrainte d'établissement se relâchant (1, puis 2, puis libre).
+        const servis = new Set();
+        let sens = ordre;
+        for (const plafond of [1, 2, 0]) {
+          sens.forEach((p) => {
+            if (!servis.has(p) && !p.servisGroupes.has(groupe) && essayer(p, listeDe(p), plafond)) {
+              servis.add(p);
+            }
+          });
+          sens = [...sens].reverse();
+        }
+        // Phase 2 — remplir les places restantes : tours supplémentaires, une
+        // place de plus par tour et par personne, les moins servis d'abord.
+        let attribue = true;
+        while (attribue) {
+          attribue = false;
+          const parNbPlaces = [...ordre].sort(
+            (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
+          );
+          for (const p of parNbPlaces) {
+            if (essayer(p, listeDe(p), 0)) attribue = true;
+          }
         }
       }
 

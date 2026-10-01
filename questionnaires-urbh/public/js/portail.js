@@ -1771,9 +1771,27 @@
         }
       }),
     );
-    const voeuxFaits = Object.values(mesVoeux).filter(Boolean);
-    const rangsPris = new Set(voeuxFaits.map((v) => v.rang).filter(Boolean));
-    const prochainRang = [1, 2, 3].find((r) => !rangsPris.has(r)) || 0;
+    // Deux classements indépendants : salles B/C/D = ateliers URBH, le
+    // reste = ateliers des partenaires techniques. Chaque groupe a ses
+    // propres choix 1, 2, 3.
+    const groupeDe = (a) =>
+      ['B', 'C', 'D'].includes(String(a.salle || '').trim().toUpperCase())
+        ? 'urbh'
+        : 'partenaires';
+    const GROUPES_ATELIERS = [
+      { cle: 'urbh', titre: '🛠️ Ateliers URBH', sous: 'IA · Maintenance · RABC — salles B, C, D' },
+      { cle: 'partenaires', titre: '🤝 Ateliers des partenaires techniques', sous: 'salles E, F et auditorium' },
+    ];
+    // Rangs déjà posés dans un groupe : rang → atelierId.
+    const rangsDuGroupe = (cle) => {
+      const pris = {};
+      ateliers.forEach((a) => {
+        if (groupeDe(a) === cle && mesVoeux[a.id] && mesVoeux[a.id].rang) {
+          pris[mesVoeux[a.id].rang] = a.id;
+        }
+      });
+      return pris;
+    };
 
     // Les inscriptions s'ouvrent et se ferment ATELIER PAR ATELIER par
     // l'administrateur (statut « ouvert ») : tant qu'elles le sont, chacun
@@ -1782,6 +1800,25 @@
     const ag = periodeAG();
     const fmtHeure = (d) =>
       d.toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+
+    // Les trois boutons 1 / 2 / 3 d'un atelier : plein = mon vœu ici,
+    // pointillé = ce rang est posé sur un autre atelier du même groupe
+    // (l'appui le déplace) ; réappuyer sur le rang actif retire le vœu.
+    function htmlRangs(a, rangActif) {
+      const pris = rangsDuGroupe(groupeDe(a));
+      return `<div class="rangs">
+          <span class="legende-rang">Mon vœu :</span>
+          ${[1, 2, 3]
+            .map((r) => {
+              const ici = r === rangActif;
+              const ailleurs = !ici && pris[r];
+              return `<button class="btn-rang ${ici ? 'actif' : ''} ${ailleurs ? 'pris' : ''}"
+                data-id="${attr(a.id)}" data-rang="${r}"
+                aria-label="Choix ${r}${ici ? ' (appuyer pour retirer)' : ''}">${r}</button>`;
+            })
+            .join('')}
+        </div>`;
+    }
 
     function htmlAtelier(a) {
       const voeu = mesVoeux[a.id];
@@ -1807,29 +1844,11 @@
         }
       } else if (a.statut === 'ouvert') {
         if (inscrit) {
-          etat = `<div class="info">✅ Vœu enregistré${
-            voeu.rang ? ` — votre <strong>choix n° ${voeu.rang}</strong>` : ''
-          }. Le tirage au sort attribue à chacun son vœu le mieux classé
-            possible ; vous pouvez reclasser ou retirer vos vœux jusqu'au tirage.</div>`;
-          action = `<label class="muet petit" style="display:inline-flex;align-items:center;gap:0.4rem">Mon classement
-              <select class="sel-rang-voeu" data-id="${attr(a.id)}">
-                ${[1, 2, 3]
-                  .map(
-                    (r) =>
-                      `<option value="${r}" ${voeu.rang === r ? 'selected' : ''}>Choix ${r}</option>`,
-                  )
-                  .join('')}
-              </select>
-            </label>
-            <button class="secondaire bouton-retrait-atelier" data-id="${attr(a.id)}">Retirer ce vœu</button>`;
-        } else if (voeuxFaits.length >= 3) {
-          etat = `<div class="muet petit">Vous avez déjà classé 3 vœux — retirez-en un
-            pour pouvoir choisir cet atelier.</div>`;
-        } else {
-          action = `<button class="bouton-voeu-atelier" data-id="${attr(a.id)}">Je choisis cet atelier${
-            prochainRang ? ` (vœu n° ${prochainRang})` : ''
-          }</button>`;
+          etat = `<div class="info">✅ Votre <strong>choix n° ${voeu.rang || '—'}</strong> —
+            le tirage attribue à chacun son vœu le mieux classé possible.
+            Réappuyez sur ${voeu.rang || 'le rang'} pour retirer ce vœu.</div>`;
         }
+        action = htmlRangs(a, inscrit ? voeu.rang : 0);
       } else if (inscrit) {
         etat = `<div class="info">✅ Vœu enregistré${
           voeu.rang ? ` (choix n° ${voeu.rang})` : ''
@@ -1844,7 +1863,11 @@
       return `<div class="q-item">
         <div class="q-entete">
           <span class="q-type">Salle ${echapper(a.salle)}</span>
-          <span class="muet petit">${echapper(a.horaire || '')}</span>
+          <span class="muet petit">${echapper(a.horaire || '')}${
+            a.statut !== 'tire' && typeof a.nbInscrits === 'number'
+              ? ` · 👥 ${a.nbInscrits} inscrit${a.nbInscrits > 1 ? 's' : ''}`
+              : ''
+          }</span>
         </div>
         <div><strong>${echapper(a.nom)}</strong></div>
         ${a.intervenants ? `<div class="muet petit">${echapper(a.intervenants)}</div>` : ''}
@@ -1863,7 +1886,13 @@
       </div>`;
     }
 
-    const blocs = ateliers.map(htmlAtelier).join('');
+    const blocs = GROUPES_ATELIERS.map((g) => {
+      const siens = ateliers.filter((a) => groupeDe(a) === g.cle);
+      if (!siens.length) return '';
+      return `<h3 class="titre-groupe-ateliers">${g.titre}</h3>
+          <div class="muet petit">${echapper(g.sous)} — classez vos choix 1, 2, 3.</div>` +
+        siens.map(htmlAtelier).join('');
+    }).join('');
     $app.innerHTML = `${barreRetour('🛠️ Inscription Atelier')}
         ${
           !ateliers.length
@@ -1874,18 +1903,17 @@
                   ? `, en principe pendant l'Assemblée Générale
                     (${echapper(fmtHeure(ag.debut))} — ${echapper(fmtHeure(ag.fin))})`
                   : ''
-              }. <strong>Classez jusqu'à trois vœux</strong> (choix 1, 2, 3)
-              par ordre de préférence — reclassement et retrait libres
-              jusqu'au tirage au sort. Les places étant limitées, un
-              <strong>tirage au sort</strong> attribue à chacun
-              <strong>une</strong> place, sur son vœu le mieux classé encore
-              disponible, avec la préférence à la répartition des
-              participants d'une même blanchisserie sur plusieurs ateliers ;
-              on ne peut être retenu sur un second atelier que s'il reste des
-              places, et jamais sur deux ateliers du même créneau horaire.
-              Pour vos vœux non satisfaits, vous êtes placé en <strong>liste
-              d'attente</strong> (les choix 1 d'abord) et promu
-              automatiquement en cas de désistement.</p>
+              }. <strong>Deux classements</strong> : vos choix 1, 2, 3 parmi
+              les ateliers URBH, et vos choix 1, 2, 3 parmi les ateliers des
+              partenaires techniques. Un appui sur <strong>1</strong>,
+              <strong>2</strong> ou <strong>3</strong> pose le vœu, réappuyer
+              sur le rang le retire — tout est reclassable jusqu'au
+              <strong>tirage au sort</strong>, qui attribue à chacun son vœu
+              le mieux classé encore disponible (répartition des
+              participants d'une même blanchisserie préservée, jamais deux
+              salles du même créneau horaire). Vos vœux non satisfaits
+              passent en <strong>liste d'attente</strong> (les choix 1
+              d'abord), promus automatiquement en cas de désistement.</p>
               ${
                 'Notification' in window && Notification.permission === 'default'
                   ? `<div class="ligne-boutons">
@@ -1928,74 +1956,58 @@
       });
     }
 
-    document.querySelectorAll('.bouton-voeu-atelier').forEach((b) =>
+    // Un appui sur 1, 2 ou 3 fait tout : pose le vœu, le déplace (échange
+    // si l'atelier avait déjà un rang), ou le retire (réappui sur le rang
+    // actif). Chaque groupe (URBH / partenaires) a son propre classement.
+    document.querySelectorAll('.btn-rang').forEach((b) =>
       b.addEventListener('click', async () => {
-        if (!prochainRang) return; // déjà 3 vœux classés
+        const atelier = ateliers.find((x) => x.id === b.dataset.id);
+        if (!atelier || atelier.statut !== 'ouvert') return;
+        const r = Number(b.dataset.rang);
+        const ancien = mesVoeux[atelier.id] ? mesVoeux[atelier.id].rang : 0;
         b.disabled = true;
+        const refVoeu = (id) => db.collection('voeux').doc(id + '_' + uid);
         try {
-          await db
-            .collection('voeux')
-            .doc(b.dataset.id + '_' + uid)
-            .set({
-              atelierId: b.dataset.id,
-              journeeId,
-              participantId: uid,
-              type: profil.type,
-              nom: profil.nom,
-              prenom: profil.prenom,
-              organisme: profil.organisme || '',
-              mobile: profil.mobile || '',
-              numeroInscription: profil.numeroInscription || '',
-              rang: prochainRang,
-              creeLe: new Date().toISOString(),
-            });
+          if (ancien === r) {
+            await refVoeu(atelier.id).delete();
+          } else {
+            const pris = rangsDuGroupe(groupeDe(atelier));
+            const autreId = pris[r] && pris[r] !== atelier.id ? pris[r] : null;
+            if (autreId) {
+              try {
+                // Le rang était posé sur un autre atelier du groupe :
+                // échange si celui-ci avait déjà un rang, sinon l'autre
+                // vœu est retiré.
+                if (ancien) await refVoeu(autreId).update({ rang: ancien });
+                else await refVoeu(autreId).delete();
+              } catch (_) {
+                /* l'autre atelier n'est plus ouvert : son vœu reste tel quel */
+              }
+            }
+            if (ancien) {
+              await refVoeu(atelier.id).update({ rang: r });
+            } else {
+              await refVoeu(atelier.id).set({
+                atelierId: atelier.id,
+                journeeId,
+                participantId: uid,
+                type: profil.type,
+                nom: profil.nom,
+                prenom: profil.prenom,
+                organisme: profil.organisme || '',
+                mobile: profil.mobile || '',
+                numeroInscription: profil.numeroInscription || '',
+                rang: r,
+                creeLe: new Date().toISOString(),
+              });
+            }
+          }
           vueMenu();
         } catch (e) {
           erreurAtelier(
-            "L'inscription n'a pas pu être enregistrée (inscriptions closes ou connexion instable). Réessayez." +
+            "Le vœu n'a pas pu être enregistré (inscriptions closes ou connexion instable). Réessayez." +
               detailErreur(e),
           );
-          b.disabled = false;
-        }
-      }),
-    );
-
-    // Reclassement d'un vœu : si le rang choisi est déjà porté par un autre
-    // vœu, les deux ateliers échangent leur classement.
-    document.querySelectorAll('.sel-rang-voeu').forEach((sel) =>
-      sel.addEventListener('change', async () => {
-        const id = sel.dataset.id;
-        const nouveau = Number(sel.value);
-        sel.disabled = true;
-        try {
-          const ancien = mesVoeux[id] ? mesVoeux[id].rang : 0;
-          const autreId = Object.keys(mesVoeux).find(
-            (k) => k !== id && mesVoeux[k] && mesVoeux[k].rang === nouveau,
-          );
-          if (autreId && ancien >= 1 && ancien <= 3) {
-            try {
-              await db.collection('voeux').doc(autreId + '_' + uid).update({ rang: ancien });
-            } catch (_) {
-              /* l'autre atelier n'est plus ouvert : son rang reste tel quel */
-            }
-          }
-          await db.collection('voeux').doc(id + '_' + uid).update({ rang: nouveau });
-          vueMenu();
-        } catch (e) {
-          erreurAtelier('Le reclassement a échoué (inscriptions closes ?).' + detailErreur(e));
-          sel.disabled = false;
-        }
-      }),
-    );
-
-    document.querySelectorAll('.bouton-retrait-atelier').forEach((b) =>
-      b.addEventListener('click', async () => {
-        b.disabled = true;
-        try {
-          await db.collection('voeux').doc(b.dataset.id + '_' + uid).delete();
-          vueMenu();
-        } catch (_) {
-          erreurAtelier('Le retrait du vœu a échoué (inscriptions closes ?).');
           b.disabled = false;
         }
       }),

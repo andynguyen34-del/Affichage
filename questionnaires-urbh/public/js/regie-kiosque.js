@@ -459,6 +459,12 @@
   // ordre de tirage.
   function tirageParVoeux(cibles, tousAteliers, voeuxParAtelier) {
     const creneauDe = (a) => a.creneau || a.horaire || '';
+    // Deux classements indépendants : salles B/C/D = ateliers URBH,
+    // le reste = ateliers des partenaires techniques.
+    const groupeDe = (a) =>
+      ['B', 'C', 'D'].includes(String(a.salle || '').trim().toUpperCase())
+        ? 'urbh'
+        : 'partenaires';
     const cibleIds = new Set(cibles.map((a) => a.id));
     const parAtelier = {};
     cibles.forEach((a) => {
@@ -471,7 +477,7 @@
       dedupeParNumero(voeuxParAtelier[a.id] || []).forEach((v) => {
         const cle = clePersonne(v);
         if (!personnes.has(cle)) {
-          personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), nbPlaces: 0 });
+          personnes.set(cle, { voeux: [], obtenus: new Set(), creneauxPris: new Set(), servisGroupes: new Set(), nbPlaces: 0 });
         }
         const p = personnes.get(cle);
         if (!p.voeux.some((x) => x.atelier.id === a.id)) {
@@ -493,6 +499,7 @@
         if (p) {
           p.nbPlaces += 1;
           if (creneauDe(a)) p.creneauxPris.add(creneauDe(a));
+          p.servisGroupes.add(groupeDe(a));
         }
       });
     });
@@ -509,8 +516,8 @@
     const cleEtab = (v) => (v.organisme || '').trim().toLowerCase() || '~' + v.participantId;
     const placesRestantes = (a) => (a.capacite || 20) - parAtelier[a.id].retenus.length;
 
-    function essayer(p, plafondEtab) {
-      for (const chx of p.voeux) {
+    function essayer(p, liste, plafondEtab) {
+      for (const chx of liste) {
         const a = chx.atelier;
         if (p.obtenus.has(a.id) || placesRestantes(a) <= 0) continue;
         if (creneauDe(a) && p.creneauxPris.has(creneauDe(a))) continue;
@@ -526,22 +533,34 @@
       return false;
     }
 
-    let sens = ordre;
-    [1, 2, 0].forEach((plafond) => {
-      sens.forEach((p) => {
-        if (p.nbPlaces === 0) essayer(p, plafond);
-      });
-      sens = [...sens].reverse();
-    });
-
-    let attribue = true;
-    while (attribue) {
-      attribue = false;
-      const parNbPlaces = [...ordre].sort(
-        (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
-      );
-      for (const p of parNbPlaces) {
-        if (essayer(p, 0)) attribue = true;
+    // Les DEUX classements sont arbitrés l'un après l'autre (ateliers URBH
+    // puis partenaires techniques), en partageant créneaux occupés et
+    // places déjà reçues.
+    for (const groupe of ['urbh', 'partenaires']) {
+      const listeDe = (p) => p.voeux.filter((x) => groupeDe(x.atelier) === groupe);
+      // Phase 1 — une place par personne DANS CE GROUPE, en serpentin, la
+      // contrainte d'établissement se relâchant (1, puis 2, puis libre).
+      const servis = new Set();
+      let sens = ordre;
+      for (const plafond of [1, 2, 0]) {
+        sens.forEach((p) => {
+          if (!servis.has(p) && !p.servisGroupes.has(groupe) && essayer(p, listeDe(p), plafond)) {
+            servis.add(p);
+          }
+        });
+        sens = [...sens].reverse();
+      }
+      // Phase 2 — remplir les places restantes : tours supplémentaires, une
+      // place de plus par tour et par personne, les moins servis d'abord.
+      let attribue = true;
+      while (attribue) {
+        attribue = false;
+        const parNbPlaces = [...ordre].sort(
+          (a, b) => a.nbPlaces - b.nbPlaces || position.get(a) - position.get(b),
+        );
+        for (const p of parNbPlaces) {
+          if (essayer(p, listeDe(p), 0)) attribue = true;
+        }
       }
     }
 
