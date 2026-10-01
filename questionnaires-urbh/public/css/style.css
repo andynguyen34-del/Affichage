@@ -416,6 +416,40 @@ ul.liste a.btn.secondaire { color: var(--bleu); }
 }
 .outil-icone { font-size: 1.9rem; line-height: 1; }
 .outil-libelle { font-size: 0.92rem; line-height: 1.2; }
+
+/* Itinéraires « Se rendre… » : rangée ultra-compacte sous les boutons
+   principaux, pour que l'accueil tienne sur l'écran sans défilement. */
+.grille-rendre {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+.bouton-rendre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: 3rem;
+  padding: 0.3rem 0.25rem;
+  font-weight: 600;
+  color: var(--bleu-fonce);
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(20, 58, 104, 0.08);
+  text-align: center;
+  text-decoration: none;
+}
+.bouton-rendre:hover,
+.bouton-rendre:focus,
+.bouton-rendre:active {
+  background: var(--bleu-clair);
+  color: var(--bleu-fonce);
+}
+.rendre-icone { font-size: 1.15rem; line-height: 1; }
+.rendre-libelle { font-size: 0.68rem; line-height: 1.15; }
+
 .carte-outil .retour-accueil {
   display: inline-block;
   margin-bottom: 0.4rem;
@@ -456,6 +490,8 @@ body.page-portail main { padding: 0.7rem 0.8rem; }
 .bouton-outil { min-height: 4.3rem; padding: 0.45rem 0.4rem; gap: 0.25rem; border-radius: 12px; }
 .outil-icone { font-size: 1.4rem; }
 .outil-libelle { font-size: 0.82rem; }
+.grille-rendre { gap: 0.45rem; margin-bottom: 0.5rem; }
+.bouton-rendre { min-height: 2.7rem; }
 /* Nombre impair de boutons : le dernier occupe toute la largeur. */
 .bouton-outil:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 3.2rem; flex-direction: row; }
 #carte-installation .carte { padding: 0.55rem 0.9rem; margin-bottom: 0.6rem; }

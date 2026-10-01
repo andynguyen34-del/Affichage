@@ -1376,6 +1376,18 @@
         ? { nom: ficheAnnuaire.hotel || 'Mon hôtel', adresse: ficheAnnuaire.hotelAdresse || '' }
         : null;
 
+    // Itinéraires en une rangée compacte sous les boutons principaux :
+    // l'accueil doit tenir sur l'écran sans défilement.
+    const boutonsRendre = [
+      { href: lienGeo(congres.nom, congres.adresse), icone: '🏛️', libelle: 'Se rendre aux JE' },
+      hotel
+        ? { href: lienGeo(hotel.nom, hotel.adresse), icone: '🏨', libelle: 'Se rendre à mon hôtel' }
+        : null,
+      gala
+        ? { href: lienGeo(gala.nom, gala.adresse), icone: '🥂', libelle: 'Se rendre à la soirée de Gala' }
+        : null,
+    ].filter(Boolean);
+
     $app.innerHTML = `
       ${enTeteBonjour()}
       <div class="grille-outils">
@@ -1387,25 +1399,17 @@
           </button>`,
         ).join('')}
       </div>
-      <div id="carte-evaluation"></div>
-      <div class="carte" style="padding:0.7rem 0.9rem">
-        <div class="ligne-boutons">
-          <a class="btn secondaire" target="_blank" rel="noopener"
-            href="${attr(lienGeo(congres.nom, congres.adresse))}">🏛️ Se rendre aux JE</a>
-          ${
-            hotel
-              ? `<a class="btn secondaire" target="_blank" rel="noopener"
-                  href="${attr(lienGeo(hotel.nom, hotel.adresse))}">🏨 Se rendre à mon hôtel</a>`
-              : ''
-          }
-          ${
-            gala
-              ? `<a class="btn secondaire" target="_blank" rel="noopener"
-                  href="${attr(lienGeo(gala.nom, gala.adresse))}">🥂 Se rendre à la soirée de Gala</a>`
-              : ''
-          }
-        </div>
+      <div class="grille-rendre" style="grid-template-columns:repeat(${boutonsRendre.length},1fr)">
+        ${boutonsRendre
+          .map(
+            (b) => `<a class="bouton-rendre" target="_blank" rel="noopener" href="${attr(b.href)}">
+              <span class="rendre-icone">${b.icone}</span>
+              <span class="rendre-libelle">${echapper(b.libelle)}</span>
+            </a>`,
+          )
+          .join('')}
       </div>
+      <div id="carte-evaluation"></div>
       <div id="carte-installation"></div>
       <div class="ligne-boutons" style="justify-content:center;margin-bottom:0.5rem">
         <button id="bouton-quitter" class="secondaire">🚪 Quitter l'application</button>
