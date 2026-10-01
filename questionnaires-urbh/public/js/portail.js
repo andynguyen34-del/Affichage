@@ -1388,31 +1388,23 @@
         ).join('')}
       </div>
       <div id="carte-evaluation"></div>
-      <div class="carte">
-        <h2>🧭 S'y rendre</h2>
+      <div class="carte" style="padding:0.7rem 0.9rem">
         <div class="ligne-boutons">
           <a class="btn secondaire" target="_blank" rel="noopener"
-            href="${attr(lienGeo(congres.nom, congres.adresse))}">🏛️ Palais des congrès</a>
+            href="${attr(lienGeo(congres.nom, congres.adresse))}">🏛️ Se rendre aux JE</a>
           ${
             hotel
               ? `<a class="btn secondaire" target="_blank" rel="noopener"
-                  href="${attr(lienGeo(hotel.nom, hotel.adresse))}">🏨 Mon hôtel</a>`
+                  href="${attr(lienGeo(hotel.nom, hotel.adresse))}">🏨 Se rendre à mon hôtel</a>`
               : ''
           }
           ${
             gala
               ? `<a class="btn secondaire" target="_blank" rel="noopener"
-                  href="${attr(lienGeo(gala.nom, gala.adresse))}">🥂 Soirée de gala</a>`
+                  href="${attr(lienGeo(gala.nom, gala.adresse))}">🥂 Se rendre à la soirée de Gala</a>`
               : ''
           }
         </div>
-        <p class="muet petit" style="margin:0.4rem 0 0">Chaque bouton ouvre
-        l'itinéraire dans l'application Plans / Google Maps de votre
-        téléphone.${
-          hotel
-            ? ` Votre hôtel : ${echapper(hotel.nom)}${hotel.adresse ? ' — ' + echapper(hotel.adresse) : ''}.`
-            : " Votre hôtel apparaîtra ici s'il est renseigné dans la liste des inscrits."
-        }</p>
       </div>
       <div id="carte-installation"></div>
       <div class="ligne-boutons" style="justify-content:center;margin-bottom:0.5rem">
