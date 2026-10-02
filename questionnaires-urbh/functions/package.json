@@ -1,7 +1,7 @@
 {
   "name": "questionnaires-urbh-functions",
   "description": "Fonctions serveur des Questionnaires URBH (SMS automatiques)",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^12.6.0",
