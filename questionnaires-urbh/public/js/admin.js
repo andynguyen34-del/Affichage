@@ -549,7 +549,9 @@
         par nom, prénom, n° de carte ou établissement — pratique à l'accueil.
         L'hôtel de résidence et son adresse s'affichent quand ils figurent
         dans le fichier importé, avec un lien 🗺️ qui ouvre la carte de
-        géolocalisation du téléphone.</p>
+        géolocalisation du téléphone. Le bouton ✏️ de chaque fiche permet de
+        saisir ou corriger l'hôtel à la main — la personne retrouve aussitôt
+        le bon itinéraire sur son bouton « Se rendre à mon hôtel ».</p>
         <label class="champ">Rechercher
           <input id="rv-recherche" type="search" autocomplete="off"
             placeholder="Nom, prénom, n° de carte, établissement…"></label>
@@ -572,7 +574,7 @@
         ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(requete)}"
             target="_blank" rel="noopener">🗺️ Ouvrir la carte</a>`
         : '';
-      return `<li>
+      return `<li data-numero="${attr(f.numero || '')}">
           <div>
             <span class="titre-item">${echapper(f.prenom || '')} ${echapper(f.nom || '')}</span>
             ${f.type === 'exposant' ? '<span class="badge brouillon">exposant</span>' : '<span class="badge ouvert">visiteur</span>'}
@@ -584,6 +586,18 @@
                   } ${lienCarte}</div>`
                 : ''
             }
+            <button type="button" class="secondaire petit rv-hotel-modifier">✏️ ${
+              f.hotel || f.hotelAdresse ? "Modifier l'hôtel" : 'Renseigner son hôtel'
+            }</button>
+            <div class="rv-hotel-edition ligne-boutons" hidden style="align-items:flex-end;margin-top:.4rem">
+              <label class="champ petit" style="margin:0">Hôtel
+                <input class="rv-hotel-nom" placeholder="Nom de l'hôtel"
+                  value="${attr(f.hotel || '')}"></label>
+              <label class="champ petit" style="margin:0;flex:1;min-width:180px">Adresse
+                <input class="rv-hotel-adresse" placeholder="N°, rue, ville"
+                  value="${attr(f.hotelAdresse || '')}"></label>
+              <button type="button" class="rv-hotel-enregistrer">Enregistrer</button>
+            </div>
           </div>
         </li>`;
     }
@@ -611,6 +625,37 @@
     }
     champRechercheVisiteur.addEventListener('input', rendreRechercheVisiteurs);
     rendreRechercheVisiteurs();
+
+    // Saisie manuelle de l'hôtel d'un visiteur (nom + adresse) : enregistrée
+    // dans sa fiche annuaire, elle alimente aussitôt le bouton « Se rendre à
+    // mon hôtel » de la personne sur le portail.
+    zoneResultatsVisiteurs.addEventListener('click', async (evt) => {
+      const ligne = evt.target.closest('li[data-numero]');
+      if (!ligne) return;
+      if (evt.target.closest('.rv-hotel-modifier')) {
+        const zone = ligne.querySelector('.rv-hotel-edition');
+        zone.hidden = !zone.hidden;
+        if (!zone.hidden) zone.querySelector('.rv-hotel-nom').focus();
+        return;
+      }
+      if (evt.target.closest('.rv-hotel-enregistrer')) {
+        const numero = ligne.dataset.numero;
+        const hotel = ligne.querySelector('.rv-hotel-nom').value.trim();
+        const hotelAdresse = ligne.querySelector('.rv-hotel-adresse').value.trim();
+        try {
+          await db.collection('annuaire').doc(numero).set({ hotel, hotelAdresse }, { merge: true });
+        } catch (e) {
+          alert("Impossible d'enregistrer l'hôtel : " + (e.message || e));
+          return;
+        }
+        const fiche = annuaire.find((f) => f.numero === numero);
+        if (fiche) {
+          fiche.hotel = hotel;
+          fiche.hotelAdresse = hotelAdresse;
+        }
+        rendreRechercheVisiteurs();
+      }
+    });
 
     document.getElementById('form-annuaire-ajout').addEventListener('submit', async (evt) => {
       evt.preventDefault();
