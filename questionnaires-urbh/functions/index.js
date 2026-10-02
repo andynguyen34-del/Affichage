@@ -110,10 +110,10 @@ exports.smsDesistement = onDocumentCreated(
 //
 // Dès qu'une personne coche « Je souhaite être accompagné(e) par le
 // référent handicap URBH » sur son profil (fiche d'inscription), les
-// référents handicap de l'association — jusqu'à quatre numéros de mobile,
+// référents handicap de l'association — jusqu'à quatre, nom et mobile
 // saisis dans la console d'administration (document config/referentsHandicap,
-// champ « numeros ») — reçoivent chacun un SMS avec les coordonnées de la
-// personne à accompagner.
+// champ « referents » [{nom, mobile}], ancien champ « numeros » accepté) —
+// reçoivent chacun un SMS avec les coordonnées de la personne à accompagner.
 
 exports.smsReferentHandicap = onDocumentWritten(
   { document: 'inscriptions/{inscriptionId}', secrets: [BREVO_API_KEY] },
@@ -127,11 +127,16 @@ exports.smsReferentHandicap = onDocumentWritten(
 
     const db = admin.firestore();
     const config = await db.collection('config').doc('referentsHandicap').get();
-    const numeros = ((config.exists && config.data().numeros) || [])
-      .map(numeroInternational)
-      .filter(Boolean)
+    const donnees = (config.exists && config.data()) || {};
+    const bruts =
+      donnees.referents && donnees.referents.length
+        ? donnees.referents
+        : (donnees.numeros || []).map((mobile) => ({ nom: '', mobile }));
+    const referents = bruts
+      .map((r) => ({ nom: (r.nom || '').trim(), mobile: numeroInternational(r.mobile) }))
+      .filter((r) => r.mobile)
       .slice(0, 4);
-    if (!numeros.length) {
+    if (!referents.length) {
       console.log('Demande référent handicap reçue, mais aucun numéro de référent configuré.');
       return;
     }
@@ -144,9 +149,11 @@ exports.smsReferentHandicap = onDocumentWritten(
       ` souhaite etre accompagne(e) pendant les JE.` +
       `${apres.mobile ? ' Mobile : ' + apres.mobile + '.' : ''}`;
 
-    for (const mobile of numeros) {
-      const resultat = await envoyerSMS(mobile, contenu);
-      console.log(`SMS référent handicap vers ${mobile} : ${resultat}.`);
+    for (const referent of referents) {
+      const resultat = await envoyerSMS(referent.mobile, contenu);
+      console.log(
+        `SMS référent handicap vers ${referent.nom || 'référent'} (${referent.mobile}) : ${resultat}.`,
+      );
     }
   },
 );

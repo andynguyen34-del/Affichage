@@ -935,15 +935,33 @@
       portailDoc = await refPortail.get();
     }
     const portail = portailDoc.data();
-    // Numéros des référents handicap (SMS automatique à chaque demande
-    // d'accompagnement cochée sur un profil — fonction serveur).
+    // Référents handicap : nom + mobile (SMS automatique à chaque demande
+    // d'accompagnement cochée sur un profil — fonction serveur). Tant que
+    // rien n'a été enregistré, le formulaire est prérempli avec les
+    // coordonnées du CA URBH (CR du CA de juin 2026) — un clic sur
+    // « Enregistrer » suffit pour les activer.
+    const REFERENTS_HANDICAP_DEFAUT = [
+      { nom: 'Evelyne THIERRY', mobile: '06 09 69 47 68' },
+      { nom: 'Agnès SOUVIGNET', mobile: '06 10 23 09 22' },
+      { nom: 'Catherine DIALLO', mobile: '06 35 36 86 39' },
+      { nom: 'Andy NGUYEN', mobile: '06 70 85 72 29' },
+    ];
     let referentsHandicap = [];
+    let referentsEnregistres = false;
     try {
       const rh = await db.collection('config').doc('referentsHandicap').get();
-      referentsHandicap = (rh.exists && rh.data().numeros) || [];
+      if (rh.exists) {
+        referentsEnregistres = true;
+        const d = rh.data();
+        referentsHandicap =
+          d.referents && d.referents.length
+            ? d.referents
+            : (d.numeros || []).map((mobile) => ({ nom: '', mobile }));
+      }
     } catch (_) {
       referentsHandicap = [];
     }
+    if (!referentsEnregistres) referentsHandicap = REFERENTS_HANDICAP_DEFAUT;
     const tirageInfo = portail.tirage || { ouvert: false, gagnants: [] };
     const gagnants = tirageInfo.gagnants || [];
     const tombolaInfo = portail.tombola || { lots: [], gagnants: [] };
@@ -1406,21 +1424,35 @@
 
       <div class="carte">
         <h2>♿ Référents handicap</h2>
-        <p class="muet petit">Jusqu'à quatre numéros de mobile. Dès qu'une
-        personne coche « Je souhaite être accompagné(e) par le référent
-        handicap URBH » sur son profil, chacun de ces numéros reçoit
+        <p class="muet petit">Jusqu'à quatre référents (prénom, nom et mobile).
+        Dès qu'une personne coche « Je souhaite être accompagné(e) par le
+        référent handicap URBH » sur son profil, chacun de ces numéros reçoit
         automatiquement un <strong>SMS</strong> avec ses coordonnées
         (fonction serveur — nécessite le déploiement des fonctions
-        DEPLOYER-FONCTIONS et la clé Brevo, comme les SMS de désistement).</p>
-        <form id="form-referents-handicap" class="ligne-boutons" style="align-items:flex-end">
+        DEPLOYER-FONCTIONS et la clé Brevo, comme les SMS de désistement).${
+          referentsEnregistres
+            ? ''
+            : ' <strong>Coordonnées préremplies (CR du CA de juin 2026) : vérifiez puis cliquez sur « Enregistrer » pour les activer.</strong>'
+        }</p>
+        <form id="form-referents-handicap">
+          <div class="ligne-boutons" style="align-items:flex-end">
           ${[1, 2, 3, 4]
-            .map(
-              (n) => `<label class="champ petit" style="margin:0">Référent ${n}
-                <input id="rh-${n}" type="tel" placeholder="06 12 34 56 78"
-                  value="${attr(referentsHandicap[n - 1] || '')}"></label>`,
-            )
+            .map((n) => {
+              const r = referentsHandicap[n - 1] || {};
+              return `<div class="champ petit" style="margin:0">
+                <label style="margin:0">Référent ${n} — prénom et nom
+                  <input id="rh-nom-${n}" type="text" placeholder="Prénom NOM"
+                    value="${attr(r.nom || '')}"></label>
+                <label style="margin:0">Mobile
+                  <input id="rh-${n}" type="tel" placeholder="06 12 34 56 78"
+                    value="${attr(r.mobile || '')}"></label>
+              </div>`;
+            })
             .join('')}
-          <button type="submit" class="secondaire">Enregistrer les référents</button>
+          </div>
+          <div class="ligne-boutons">
+            <button type="submit" class="secondaire">Enregistrer les référents</button>
+          </div>
         </form>
       </div>
 
@@ -2153,16 +2185,24 @@
 
     document.getElementById('form-referents-handicap').addEventListener('submit', async (evt) => {
       evt.preventDefault();
-      const numeros = [1, 2, 3, 4]
-        .map((n) => document.getElementById('rh-' + n).value.trim())
-        .filter(Boolean);
+      const referents = [1, 2, 3, 4]
+        .map((n) => ({
+          nom: document.getElementById('rh-nom-' + n).value.trim(),
+          mobile: document.getElementById('rh-' + n).value.trim(),
+        }))
+        .filter((r) => r.mobile);
       await db.collection('config').doc('referentsHandicap').set({
-        numeros,
+        referents,
+        // « numeros » est conservé pour la fonction serveur déjà déployée :
+        // les SMS partent même si les fonctions n'ont pas été redéployées.
+        numeros: referents.map((r) => r.mobile),
         majLe: firebase.firestore.FieldValue.serverTimestamp(),
       });
       alert(
-        numeros.length
-          ? `${numeros.length} référent(s) handicap enregistré(s) — ils recevront un SMS à chaque nouvelle demande.`
+        referents.length
+          ? `${referents.length} référent(s) handicap enregistré(s) : ${referents
+              .map((r) => r.nom || r.mobile)
+              .join(', ')} — ils recevront un SMS à chaque nouvelle demande.`
           : 'Aucun numéro enregistré : les demandes ne déclencheront plus de SMS.',
       );
       router();
