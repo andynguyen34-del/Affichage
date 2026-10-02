@@ -18,7 +18,9 @@ if errorlevel 1 (
 )
 where npm >nul 2>nul
 if errorlevel 1 (
-  echo [ERREUR] npm introuvable : installez Node.js (nodejs.org, version LTS).
+  REM Pas de parentheses dans un echo a l'interieur d'un bloc : elles
+  REM cassent le bloc et font sortir le script sans deployer.
+  echo [ERREUR] npm introuvable : installez Node.js depuis nodejs.org - version LTS.
   pause
   exit /b 1
 )
