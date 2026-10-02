@@ -43,7 +43,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Référents handicap de l'association (jusqu'à 3 numéros de mobile),
+    // Référents handicap de l'association (jusqu'à 4 numéros de mobile),
     // saisis dans l'administration : la fonction serveur les prévient par
     // SMS dès qu'une demande d'accompagnement est cochée sur un profil.
     match /config/referentsHandicap {

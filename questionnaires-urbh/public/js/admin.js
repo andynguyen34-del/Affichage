@@ -1406,14 +1406,14 @@
 
       <div class="carte">
         <h2>♿ Référents handicap</h2>
-        <p class="muet petit">Jusqu'à trois numéros de mobile. Dès qu'une
+        <p class="muet petit">Jusqu'à quatre numéros de mobile. Dès qu'une
         personne coche « Je souhaite être accompagné(e) par le référent
         handicap URBH » sur son profil, chacun de ces numéros reçoit
         automatiquement un <strong>SMS</strong> avec ses coordonnées
         (fonction serveur — nécessite le déploiement des fonctions
         DEPLOYER-FONCTIONS et la clé Brevo, comme les SMS de désistement).</p>
         <form id="form-referents-handicap" class="ligne-boutons" style="align-items:flex-end">
-          ${[1, 2, 3]
+          ${[1, 2, 3, 4]
             .map(
               (n) => `<label class="champ petit" style="margin:0">Référent ${n}
                 <input id="rh-${n}" type="tel" placeholder="06 12 34 56 78"
@@ -2153,7 +2153,7 @@
 
     document.getElementById('form-referents-handicap').addEventListener('submit', async (evt) => {
       evt.preventDefault();
-      const numeros = [1, 2, 3]
+      const numeros = [1, 2, 3, 4]
         .map((n) => document.getElementById('rh-' + n).value.trim())
         .filter(Boolean);
       await db.collection('config').doc('referentsHandicap').set({

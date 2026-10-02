@@ -110,7 +110,7 @@ exports.smsDesistement = onDocumentCreated(
 //
 // Dès qu'une personne coche « Je souhaite être accompagné(e) par le
 // référent handicap URBH » sur son profil (fiche d'inscription), les
-// référents handicap de l'association — jusqu'à trois numéros de mobile,
+// référents handicap de l'association — jusqu'à quatre numéros de mobile,
 // saisis dans la console d'administration (document config/referentsHandicap,
 // champ « numeros ») — reçoivent chacun un SMS avec les coordonnées de la
 // personne à accompagner.
@@ -130,7 +130,7 @@ exports.smsReferentHandicap = onDocumentWritten(
     const numeros = ((config.exists && config.data().numeros) || [])
       .map(numeroInternational)
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 4);
     if (!numeros.length) {
       console.log('Demande référent handicap reçue, mais aucun numéro de référent configuré.');
       return;
