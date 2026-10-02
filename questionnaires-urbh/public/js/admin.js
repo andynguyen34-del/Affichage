@@ -2171,9 +2171,9 @@
     const boutonSeedProgramme = document.getElementById('bouton-seed-programme');
     if (boutonSeedProgramme) {
       boutonSeedProgramme.addEventListener('click', async () => {
-        // Programme officiel des 41es JE (Nantes, 7-9 octobre 2026), repris
-        // du fichier d'organisation. Format : [jour, début, fin, titre, lieu].
-        const AMPHI = 'Amphithéâtre';
+        // Programme officiel FINALISÉ des 41es JE (Nantes, 7-9 octobre 2026),
+        // conforme au dépliant définitif. Format : [jour, début, fin, titre, lieu].
+        const AUDI = 'Auditorium';
         const HALL = 'Hall des stands';
         const SEED = [
           ['2026-10-07', '14:00', '18:00', 'Accueil des participants', 'Entrée du palais des congrès'],
@@ -2183,34 +2183,33 @@
           // dîner, tous deux dans le hall des stands.
           ['2026-10-07', '19:30', '20:30', "Apéritif d'ouverture — nocturne des stands", HALL],
           ['2026-10-07', '20:30', '23:00', 'Dîner — nocturne des stands', HALL],
-          ['2026-10-08', '07:45', '08:00', 'Accueil café — ouverture des stands', AMPHI],
-          ['2026-10-08', '08:00', '08:45', 'Assemblée Générale', AMPHI],
-          ['2026-10-08', '08:45', '09:00', "Discours d'ouverture", AMPHI],
-          ['2026-10-08', '09:00', '09:35', 'Présentation des nouveaux partenaires techniques', AMPHI],
-          ['2026-10-08', '09:35', '10:50', 'Conférence — Les rénovations en blanchisserie hospitalière', AMPHI],
+          ['2026-10-08', '07:45', '08:00', 'Accueil café — ouverture des stands', HALL],
+          ['2026-10-08', '08:00', '08:45', 'Assemblée Générale — élections', AUDI],
+          ['2026-10-08', '08:45', '09:00', "Ouverture des journées d'étude — discours d'accueil", AUDI],
+          ['2026-10-08', '09:00', '09:35', 'Présentation des dix nouveaux partenaires', AUDI],
+          ['2026-10-08', '09:35', '10:50', 'Conférence — Les rénovations en blanchisserie hospitalière', AUDI],
           ['2026-10-08', '10:50', '11:15', 'Pause / Visite des stands', HALL],
-          ['2026-10-08', '11:15', '12:00', 'Conférence — Maintenance industrielle : anticiper, maîtriser', AMPHI],
+          ['2026-10-08', '11:15', '12:00', 'Conférence — Maintenance industrielle : anticiper, maîtriser, performer', AUDI],
           ['2026-10-08', '12:00', '13:30', 'Repas', HALL],
-          ['2026-10-08', '13:30', '14:00', "Conférence — L'intelligence artificielle et retours d'expérience", AMPHI],
-          ['2026-10-08', '14:00', '14:30', 'Conférence — La chaleur dans les blanchisseries', AMPHI],
-          ['2026-10-08', '14:30', '15:00', "Conférence — Les économies d'eau (retour d'expérience de Colmar)", AMPHI],
-          ['2026-10-08', '15:00', '16:00', 'Ateliers URBH — 1er créneau (IA · Maintenance · RABC)', 'Salles B, C, D'],
-          ['2026-10-08', '15:15', '15:45', 'Ateliers partenaires techniques', 'Salles E, F et amphithéâtre'],
-          ['2026-10-08', '16:00', '17:00', 'Ateliers URBH — 2e créneau (IA · Maintenance · RABC)', 'Salles B, C, D'],
-          ['2026-10-08', '16:15', '16:45', 'Ateliers partenaires techniques', 'Salles B, E, F'],
-          ['2026-10-08', '17:00', '17:30', 'Ateliers partenaires techniques', 'Salles C, D, E et amphithéâtre'],
+          ['2026-10-08', '13:30', '14:00', "Conférence — L'intelligence artificielle : retours d'expérience en blanchisserie industrielle", AUDI],
+          ['2026-10-08', '14:00', '14:30', 'Conférence — La chaleur dans les blanchisseries', AUDI],
+          ['2026-10-08', '14:30', '15:00', "Conférence — Colmar : les économies d'eau", AUDI],
+          ['2026-10-08', '15:00', '16:00', 'Ateliers URBH — 1re session (IA · Maintenance · RABC)', 'Salles B, C, D'],
+          ['2026-10-08', '15:15', '15:45', 'Ateliers partenaires techniques', 'Salles E, F et auditorium'],
+          ['2026-10-08', '16:00', '17:00', 'Ateliers URBH — 2e session (IA · Maintenance · RABC)', 'Salles B, C, D'],
+          ['2026-10-08', '16:15', '16:45', 'Ateliers partenaires techniques', 'Salles E et F'],
+          ['2026-10-08', '17:00', '17:30', 'Ateliers partenaires techniques', 'Salles B, C, D, E et auditorium'],
           ['2026-10-08', '17:30', '18:00', 'Pause / Visite des stands', HALL],
-          ['2026-10-08', '18:00', '18:15', 'Fermeture des stands', HALL],
-          ['2026-10-09', '08:30', '10:00', 'Accueil café — ouverture des stands', HALL],
-          ['2026-10-09', '10:00', '10:20', 'Restitution des ateliers URBH', AMPHI],
-          ['2026-10-09', '10:20', '10:40', 'La parole aux comités de région', AMPHI],
-          ['2026-10-09', '10:40', '11:10', 'Conférence — Six Sigma : améliorer durablement', AMPHI],
-          ['2026-10-09', '11:10', '11:30', 'Boîte à astuces — la table miroir de tri', AMPHI],
-          ['2026-10-09', '11:30', '11:50', 'Remise des trophées certifications RABC', AMPHI],
-          ['2026-10-09', '11:50', '12:00', "Remise du don à l'association Make-A-Wish", AMPHI],
-          ['2026-10-09', '12:00', '12:15', 'Tombola', AMPHI],
-          ['2026-10-09', '12:15', '12:30', 'Discours de clôture — relais à Biarritz', AMPHI],
-          ['2026-10-09', '12:30', '14:00', 'Repas et fin des journées d’études', 'Salle R0'],
+          ['2026-10-09', '08:00', '10:00', 'Accueil café — ouverture des stands', HALL],
+          ['2026-10-09', '10:00', '10:20', 'Restitution des trois ateliers URBH', AUDI],
+          ['2026-10-09', '10:20', '10:40', 'La parole aux comités de région', AUDI],
+          ['2026-10-09', '10:40', '11:10', 'Conférence — Six Sigma : une méthode pour améliorer durablement la performance', AUDI],
+          ['2026-10-09', '11:10', '11:30', 'Boîte à astuces', AUDI],
+          ['2026-10-09', '11:30', '12:00', 'Remise des trophées certifications RABC', AUDI],
+          ['2026-10-09', '12:00', '12:05', "Remise du don à l'association Make-A-Wish", AUDI],
+          ['2026-10-09', '12:05', '12:10', 'Tombola', AUDI],
+          ['2026-10-09', '12:10', '12:15', 'Discours de clôture — relais à Biarritz', AUDI],
+          ['2026-10-09', '12:15', '14:00', "Repas et fin des journées d'étude", ''],
         ];
         await enregistrerProgramme(
           SEED.map(([jour, hDebut, hFin, titre, lieu]) => ({
@@ -2630,13 +2629,13 @@
           // Créneau 15h
           { creneau: 'Jeudi 15h', salle: 'B', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
             nom: "L'Intelligence Artificielle au service des blanchisseries (1re session)",
-            intervenants: 'Vincent Pacton, Denis Bonnet, Éric Tisserand — animatrice : Agnès Souvignet' },
+            intervenants: 'Vincent Pacton (La Rochelle), Denis Bonnet (Le Puy-en-Velay), Éric Tisserand (Toulouse) — animatrice : Agnès Souvignet' },
           { creneau: 'Jeudi 15h', salle: 'C', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
             nom: 'Des outils pour la gestion de la maintenance (1re session)',
-            intervenants: 'Jean-Pascal Testard, Lucas Monrousseau, Hervé Dumoulin — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
+            intervenants: 'Jean-Pascal Testard (Tours), Lucas Monrousseau et Hervé Dumoulin (Poitiers) — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
           { creneau: 'Jeudi 15h', salle: 'D', heure: 15, minute: 0, horaire: 'Jeudi 15h00 – 15h45',
             nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la démarche RABC ? (1re session)",
-            intervenants: 'Mikael Gilbrin, Frédéric Jourdan — animateurs : Catherine Diallo et Frédéric Jourdan' },
+            intervenants: 'Mikael Gilbrin (Rouen), Frédéric Jourdan (Pontorson), Catherine Diallo (consultante) — animateurs : Catherine Diallo et Frédéric Jourdan' },
           { creneau: 'Jeudi 15h', salle: 'Auditorium', heure: 15, minute: 15, horaire: 'Jeudi 15h15',
             nom: 'Décret tertiaire',
             intervenants: "Optim'Expertise — Hélène Ducarre" },
@@ -2649,13 +2648,13 @@
           // Créneau 16h
           { creneau: 'Jeudi 16h', salle: 'B', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
             nom: "L'Intelligence Artificielle au service des blanchisseries (2e session)",
-            intervenants: 'Vincent Pacton, Denis Bonnet, Éric Tisserand — animatrice : Agnès Souvignet' },
+            intervenants: 'Vincent Pacton (La Rochelle), Denis Bonnet (Le Puy-en-Velay), Éric Tisserand (Toulouse) — animatrice : Agnès Souvignet' },
           { creneau: 'Jeudi 16h', salle: 'C', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
             nom: 'Des outils pour la gestion de la maintenance (2e session)',
-            intervenants: 'Jean-Pascal Testard, Lucas Monrousseau, Hervé Dumoulin — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
+            intervenants: 'Jean-Pascal Testard (Tours), Lucas Monrousseau et Hervé Dumoulin (Poitiers) — animateurs : Jean-Pierre Bretagnon et Vincent Pacton' },
           { creneau: 'Jeudi 16h', salle: 'D', heure: 16, minute: 0, horaire: 'Jeudi 16h00 – 16h45',
             nom: "Comment l'IA peut-elle nous aider dans la mise en place et le pilotage de la démarche RABC ? (2e session)",
-            intervenants: 'Mikael Gilbrin, Frédéric Jourdan — animateurs : Catherine Diallo et Frédéric Jourdan' },
+            intervenants: 'Mikael Gilbrin (Rouen), Frédéric Jourdan (Pontorson), Catherine Diallo (consultante) — animateurs : Catherine Diallo et Frédéric Jourdan' },
           { creneau: 'Jeudi 16h', salle: 'E', heure: 16, minute: 15, horaire: 'Jeudi 16h15',
             nom: 'Nouvelle version du logiciel de gestion textile',
             intervenants: 'ActiPrint — Sébastien Bremec' },
@@ -2698,10 +2697,26 @@
           const h = String(texte || '').match(/(\d{1,2})\s*h/i);
           return String(salle || '').toUpperCase() + '|' + (h ? h[1] : '');
         };
-        const dejaLa = new Set(ateliers.map((a) => cleAtelier(a.salle, a.creneau || a.horaire)));
+        const dejaLa = new Map(
+          ateliers.map((a) => [cleAtelier(a.salle, a.creneau || a.horaire), a]),
+        );
         let crees = 0;
+        let maj = 0;
         for (const t of TABLE) {
-          if (dejaLa.has(cleAtelier(t.salle, t.creneau))) continue;
+          const existant = dejaLa.get(cleAtelier(t.salle, t.creneau));
+          if (existant) {
+            // L'atelier existe : on rafraîchit ses INTITULÉS d'après le
+            // programme finalisé (nom, intervenants, horaire, créneau) sans
+            // toucher au statut, aux vœux, aux retenus ni à la capacité.
+            await db.collection('ateliers').doc(existant.id).update({
+              nom: t.nom,
+              horaire: t.horaire,
+              creneau: t.creneau,
+              intervenants: t.intervenants,
+            });
+            maj += 1;
+            continue;
+          }
           let debutLe = null;
           if (jeudi) {
             const d = new Date(jeudi);
@@ -2719,7 +2734,9 @@
           });
           crees += 1;
         }
-        alert(crees ? `${crees} atelier(s) créé(s) d'après le tableau du jeudi.` : 'Tous les ateliers du tableau existent déjà.');
+        alert(
+          `${crees} atelier(s) créé(s), ${maj} mis à jour (intitulés et intervenants du programme finalisé — inscriptions et tirages intacts).`,
+        );
         router();
       });
     }
